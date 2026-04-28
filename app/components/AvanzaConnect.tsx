@@ -1,93 +1,58 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
-import QRCode from 'qrcode'
-
-type Challenge =
-  | { kind: 'redirect'; url: string; state: string; expiresAt: number }
-  | {
-      kind: 'polling'
-      state: string
-      pollEveryMs: number
-      expiresAt: number
-      instructions: string
-      hint?: { qrToken?: string; transactionId?: string; rfa?: string; hintCode?: string }
-    }
-  | { kind: 'complete'; connectionId: string }
-  | { kind: 'error'; state?: string; message: string }
+import { useState } from 'react'
 
 interface Props {
   onConnected: () => void
 }
 
-type Mode = 'bankid' | 'cookies'
+interface ExtractedCookies {
+  cookieHeader: string
+  names: string[]
+  count: number
+}
 
 export default function AvanzaConnect({ onConnected }: Props) {
-  const [mode, setMode] = useState<Mode>('bankid')
-  const [phase, setPhase] = useState<'idle' | 'polling' | 'complete' | 'error'>('idle')
+  const [phase, setPhase] = useState<'idle' | 'extracting' | 'connecting' | 'complete' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
-  const [qrSvg, setQrSvg] = useState<string | null>(null)
-  const [pastedCookies, setPastedCookies] = useState('')
-  const pollAbort = useRef<AbortController | null>(null)
+  const [cookies, setCookies] = useState('')
+  const [extracted, setExtracted] = useState<ExtractedCookies | null>(null)
+  const [copied, setCopied] = useState(false)
 
-  useEffect(() => () => pollAbort.current?.abort(), [])
-
-  async function renderQr(token: string) {
-    try {
-      const svg = await QRCode.toString(token, {
-        type: 'svg',
-        margin: 1,
-        color: { dark: '#e6e8eb', light: '#0b0d10' },
-        width: 240,
-      })
-      setQrSvg(svg)
-    } catch (e) {
-      console.error('QR render failed', e)
-    }
-  }
-
-  async function startBankid() {
-    if (phase === 'polling') return
+  async function readFromChrome() {
+    setPhase('extracting')
     setMessage(null)
-    setQrSvg(null)
-    setPhase('polling')
-
+    setExtracted(null)
     try {
-      const res = await fetch('/api/auth/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerId: 'avanza', flow: 'bankid', input: {} }),
-      })
-      const data = (await res.json()) as Challenge & { error?: string }
-      if (!res.ok || data.kind === 'error') {
-        setMessage(
-          data.kind === 'error'
-            ? data.message
-            : data.error || `HTTP ${res.status}: failed to start`,
-        )
-        setPhase('error')
-        return
-      }
-      if (data.kind !== 'polling') {
-        setMessage(`Unexpected challenge kind: ${data.kind}`)
-        setPhase('error')
-        return
-      }
-      setMessage(data.instructions)
-      if (data.hint?.qrToken) await renderQr(data.hint.qrToken)
-      await pollUntilDone(data.state, data.pollEveryMs)
+      const res = await fetch('/api/avanza/extract-cookies')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setExtracted(data as ExtractedCookies)
+      setCookies((data as ExtractedCookies).cookieHeader)
+      setPhase('idle')
     } catch (e) {
       setMessage((e as Error).message)
       setPhase('error')
     }
   }
 
-  async function startCookies() {
-    setMessage(null)
-    if (!pastedCookies.trim()) {
-      setMessage('Paste your Cookie header first')
+  async function copyToClipboard() {
+    if (!cookies) return
+    try {
+      await navigator.clipboard.writeText(cookies)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch (e) {
+      setMessage(`Copy failed: ${(e as Error).message}`)
+    }
+  }
+
+  async function connect() {
+    if (!cookies.trim()) {
+      setMessage('No cookies to connect with')
       return
     }
-    setPhase('polling')
+    setPhase('connecting')
+    setMessage(null)
     try {
       const res = await fetch('/api/auth/start', {
         method: 'POST',
@@ -95,22 +60,17 @@ export default function AvanzaConnect({ onConnected }: Props) {
         body: JSON.stringify({
           providerId: 'avanza',
           flow: 'cookies',
-          input: { cookies: pastedCookies.trim() },
+          input: { cookies: cookies.trim() },
         }),
       })
-      const data = (await res.json()) as Challenge & { error?: string }
+      const data = await res.json()
       if (!res.ok || data.kind === 'error' || data.kind !== 'complete') {
-        setMessage(
-          data.kind === 'error'
-            ? data.message
-            : data.error || `HTTP ${res.status}: failed`,
-        )
-        setPhase('error')
-        return
+        throw new Error(data.message ?? data.error ?? `HTTP ${res.status}`)
       }
-      setMessage('Connected — check sync status in Linked banks below')
+      setMessage('Connected — running initial sync…')
       setPhase('complete')
-      setPastedCookies('')
+      setCookies('')
+      setExtracted(null)
       setTimeout(() => onConnected(), 1500)
     } catch (e) {
       setMessage((e as Error).message)
@@ -118,134 +78,81 @@ export default function AvanzaConnect({ onConnected }: Props) {
     }
   }
 
-  async function pollUntilDone(state: string, intervalMs: number) {
-    pollAbort.current?.abort()
-    const ctrl = new AbortController()
-    pollAbort.current = ctrl
-
-    const deadline = Date.now() + 5 * 60 * 1000
-
-    while (!ctrl.signal.aborted && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, intervalMs))
-      if (ctrl.signal.aborted) return
-      let data: Challenge
-      try {
-        const res = await fetch(`/api/auth/poll?state=${state}`, { signal: ctrl.signal })
-        data = (await res.json()) as Challenge
-      } catch (e) {
-        if ((e as Error).name === 'AbortError') return
-        setMessage((e as Error).message)
-        setPhase('error')
-        return
-      }
-      if (data.kind === 'complete') {
-        setMessage('Connected — check sync status in Linked banks below')
-        setQrSvg(null)
-        setPhase('complete')
-        setTimeout(() => onConnected(), 1500)
-        return
-      }
-      if (data.kind === 'error') {
-        setMessage(data.message)
-        setPhase('error')
-        return
-      }
-      if (data.kind === 'polling') {
-        setMessage(data.instructions)
-        if (data.hint?.qrToken) await renderQr(data.hint.qrToken)
-      }
-    }
-    if (Date.now() >= deadline) {
-      setMessage('BankID timed out — please try again')
-      setPhase('error')
-    }
-  }
-
   function reset() {
-    pollAbort.current?.abort()
     setPhase('idle')
     setMessage(null)
-    setQrSvg(null)
   }
+
+  const busy = phase === 'extracting' || phase === 'connecting'
 
   return (
     <div className="card">
-      <div className="row between">
-        <h2 style={{ margin: 0 }}>Connect Avanza</h2>
-        {phase === 'idle' && (
-          <div className="row" style={{ gap: '0.25rem' }}>
-            <button
-              onClick={() => setMode('bankid')}
-              style={{
-                background: mode === 'bankid' ? '#2d6cdf' : '#1f242a',
-                fontSize: '0.8rem',
-              }}
-            >
-              BankID
-            </button>
-            <button
-              onClick={() => setMode('cookies')}
-              style={{
-                background: mode === 'cookies' ? '#2d6cdf' : '#1f242a',
-                fontSize: '0.8rem',
-              }}
-            >
-              Paste cookies
-            </button>
-          </div>
-        )}
-      </div>
+      <h2 style={{ margin: 0 }}>Connect Avanza</h2>
 
-      {phase === 'idle' && mode === 'bankid' && (
-        <>
-          <button onClick={startBankid} style={{ marginTop: '0.75rem' }}>
-            Connect with BankID
-          </button>
-          <p className="muted" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
-            Scan a QR with your BankID app. Session lasts ~60 min.
-          </p>
-        </>
-      )}
-
-      {phase === 'idle' && mode === 'cookies' && (
+      {phase !== 'complete' && phase !== 'error' && (
         <>
           <p className="muted" style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
-            On <code>avanza.se</code> while logged in: F12 → Network tab → click any{' '}
-            <code>/_api/...</code> request → Headers → Request Headers → right-click the{' '}
-            <code>Cookie</code> value → Copy value. Paste below.
+            Log in to <code>avanza.se</code> in Chrome, then click below. We'll read your
+            session cookies straight from the local Chrome profile (macOS Keychain may
+            prompt the first time).
           </p>
+
+          <div className="row" style={{ gap: '0.5rem' }}>
+            <button onClick={readFromChrome} disabled={busy}>
+              {phase === 'extracting' ? 'Reading…' : 'Read from Chrome'}
+            </button>
+            <button
+              onClick={connect}
+              disabled={busy || !cookies.trim()}
+              style={{ background: cookies.trim() ? '#2d6cdf' : '#1f242a' }}
+            >
+              {phase === 'connecting' ? 'Connecting…' : 'Use these cookies'}
+            </button>
+          </div>
+
+          {extracted && (
+            <div
+              className="muted"
+              style={{
+                marginTop: '0.75rem',
+                fontSize: '0.8rem',
+                display: 'flex',
+                gap: '0.5rem',
+                alignItems: 'center',
+              }}
+            >
+              <span>
+                ✓ {extracted.count} cookies extracted ({extracted.names.includes('csid') ? 'auth ✓' : 'auth ✗'})
+              </span>
+              <button
+                onClick={copyToClipboard}
+                style={{
+                  background: '#1f242a',
+                  fontSize: '0.7rem',
+                  padding: '0.2rem 0.5rem',
+                }}
+              >
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          )}
+
           <textarea
-            value={pastedCookies}
-            onChange={(e) => setPastedCookies(e.target.value)}
-            placeholder="csid=...; cstoken=...; AZAHLI=...; AZACSRF=...; ..."
+            value={cookies}
+            onChange={(e) => setCookies(e.target.value)}
+            placeholder="…or paste a Cookie header here manually (csid=...; cstoken=...; AZACSRF=...; ...)"
             style={{
               width: '100%',
-              minHeight: '5rem',
+              minHeight: '4.5rem',
               fontFamily: 'ui-monospace, monospace',
-              fontSize: '0.75rem',
+              fontSize: '0.7rem',
+              marginTop: '0.5rem',
             }}
           />
-          <button onClick={startCookies} disabled={!pastedCookies.trim()} style={{ marginTop: '0.5rem' }}>
-            Use these cookies
-          </button>
-          {message && <div className="error" style={{ marginTop: '0.5rem' }}>{message}</div>}
-        </>
-      )}
 
-      {phase === 'polling' && (
-        <>
-          <p style={{ marginTop: '0.5rem' }}>
-            <strong>{message ?? 'Awaiting BankID…'}</strong>
-          </p>
-          {qrSvg && (
-            <div
-              style={{ width: 240, marginTop: '0.5rem' }}
-              dangerouslySetInnerHTML={{ __html: qrSvg }}
-            />
+          {message && (
+            <div className="error" style={{ marginTop: '0.5rem' }}>{message}</div>
           )}
-          <button onClick={reset} className="danger" style={{ marginTop: '0.75rem' }}>
-            Cancel
-          </button>
         </>
       )}
 

@@ -5,11 +5,10 @@
 export const BASE = 'https://www.avanza.se'
 
 export const paths = {
-  // Auth (BankID v2, QR-code flow)
-  BANKID_V2_INITIATE: '/_api/authentication/v2/sessions/bankid',
-  BANKID_V2_COLLECT: '/_api/authentication/v2/sessions/bankid/{transactionId}',
-
-  // Auth (legacy username + TOTP — for headless cron once we have password)
+  // Auth (legacy username + TOTP — for headless cron once we have password).
+  // BankID was attempted server-side but the resulting session jar fails to
+  // authenticate /_api/* endpoints (likely TLS/HTTP fingerprint check).
+  // Paste-from-browser via /api/avanza/extract-cookies is the working path.
   USERCREDENTIALS: '/_api/authentication/sessions/usercredentials',
   TOTP: '/_api/authentication/sessions/totp',
 
