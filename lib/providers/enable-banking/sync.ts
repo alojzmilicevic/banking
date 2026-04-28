@@ -3,12 +3,14 @@
 import crypto from 'node:crypto'
 import { eb, type EBAccount, type EBBalance, type EBTransaction } from './api'
 import type {
+  AccountKind,
   ConnectionContext,
   NormalizedAccount,
   NormalizedBalance,
   NormalizedTransaction,
   SyncOptions,
   SyncResult,
+  TransactionKind,
 } from '../types'
 
 function signedAmount(t: EBTransaction): number {
@@ -23,8 +25,6 @@ function txDate(t: EBTransaction): string | null {
   return t.booking_date || t.value_date || t.transaction_date || null
 }
 
-// Stable dedup key. Survives pending → booked transitions when a stable id is
-// available; falls back to a deterministic content hash otherwise.
 function fingerprint(accountId: string, t: EBTransaction): string {
   if (t.transaction_id) return `id:${t.transaction_id}`
   if (t.entry_reference) return `ref:${t.entry_reference}`
@@ -36,9 +36,22 @@ function fingerprint(accountId: string, t: EBTransaction): string {
   return `h:${hash}`
 }
 
-function normalizeAccount(connectionExternalId: string, a: EBAccount): NormalizedAccount {
+// Map an EB cash_account_type code to our normalized AccountKind.
+function ebKind(_a: EBAccount): AccountKind {
+  // EB returns CACC, CARD, etc. For now everything is 'cash' (we'd handle
+  // CARD separately later for credit cards with revolving balances).
+  return 'cash'
+}
+
+function classifyTransaction(amount: number): TransactionKind {
+  if (amount >= 0) return 'cash_in'
+  return 'cash_out'
+}
+
+function normalizeAccount(a: EBAccount): NormalizedAccount {
   return {
     id: a.uid,
+    kind: ebKind(a),
     name: a.name ?? null,
     details: a.details ?? null,
     product: a.product ?? null,
@@ -65,11 +78,13 @@ function normalizeBalance(accountId: string, b: EBBalance): NormalizedBalance {
 function normalizeTransaction(accountId: string, t: EBTransaction): NormalizedTransaction | null {
   const date = txDate(t)
   if (!date) return null
+  const amount = signedAmount(t)
   return {
     accountId,
     fingerprint: fingerprint(accountId, t),
     date,
-    amount: signedAmount(t),
+    kind: classifyTransaction(amount),
+    amount,
     currency: t.transaction_amount.currency,
     status: t.status ?? null,
     description: (t.remittance_information ?? []).join(' ') || null,
@@ -82,17 +97,9 @@ export async function ebSync(
   connection: ConnectionContext,
   opts: SyncOptions,
 ): Promise<SyncResult> {
-  // Always fetch the current session from EB so we get the up-to-date account
-  // list. Account uids are stable.
-  // GET /sessions/{id} returns: accounts: string[] (uids), accounts_data: EBAccount[]
-  // POST /sessions (during auth) returns: accounts: EBAccount[]
-  // GET /sessions/{id} returns minimal accounts_data (just uids + hashes).
-  // Rich info — name, details (alias), product, iban, etc. — lives behind
-  // GET /accounts/{uid}/details. So we have to fan out an extra call per
-  // account to assemble normalized account rows.
   const session = await eb.getSession(connection.externalId)
-  // GET /sessions returns the same uids in both `accounts` (string[]) and
-  // `accounts_data` (objects). Dedupe.
+  // Both `accounts` (string[]) and `accounts_data` (sparse objects) reference
+  // the same uids — dedupe.
   const uidsFromData = (session.accounts_data ?? []).map((a) => a.uid)
   const uidsFromList = (session.accounts as Array<EBAccount | string>).map((a) =>
     typeof a === 'string' ? a : a.uid,
@@ -102,6 +109,8 @@ export async function ebSync(
   const dateFrom = opts.since.toISOString().slice(0, 10)
   const dateTo = opts.until.toISOString().slice(0, 10)
 
+  // GET /sessions returns sparse account stubs; rich fields live behind
+  // /accounts/{uid}/details. Fan out per account in parallel.
   const perAccount = await Promise.all(
     accountUids.map(async (uid) => {
       const [details, balResp, txResp] = await Promise.all([
@@ -114,10 +123,7 @@ export async function ebSync(
     }),
   )
 
-  const accounts = perAccount.map((r) =>
-    normalizeAccount(connection.externalId, r.fullAccount),
-  )
-
+  const accounts = perAccount.map((r) => normalizeAccount(r.fullAccount))
   const balances: NormalizedBalance[] = []
   const transactions: NormalizedTransaction[] = []
 
@@ -129,10 +135,5 @@ export async function ebSync(
     }
   }
 
-  return {
-    accounts,
-    balances,
-    transactions,
-    syncWindow: { from: dateFrom, to: dateTo },
-  }
+  return { accounts, balances, transactions, syncWindow: { from: dateFrom, to: dateTo } }
 }

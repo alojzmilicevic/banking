@@ -1,115 +1,66 @@
 import { NextResponse } from 'next/server'
-import { and, desc, eq, gte, ne, sql } from 'drizzle-orm'
-import { accounts, balances, connections, db, transactions, users } from '@/lib/db/client'
-
-// Order from "most authoritative current snapshot" → "best-effort fallback".
-// EB providers report either Berlin Group ISO 20022 codes (CLBD, ITBD, …)
-// or their long-form names (closingBooked, interimBooked, …). Cover both.
-const BALANCE_PREFERENCE = [
-  'closingBooked',
-  'CLBD',
-  'interimBooked',
-  'ITBD',
-  'expected',
-  'XPCD',
-  'interimAvailable',
-  'ITAV',
-  'forwardAvailable',
-  'FWAV',
-  'openingBooked',
-  'OPBD',
-]
+import { and, desc, gte, ne, sql } from 'drizzle-orm'
+import { connections, db, transactions, users } from '@/lib/db/client'
+import {
+  computeAccountTotals,
+  computeUserSnapshot,
+  getSnapshotsRange,
+} from '@/lib/sync/snapshots'
 
 const MS_DAY = 86400_000
 
-function startOfUTCDay(d: Date): Date {
-  const x = new Date(d)
-  x.setUTCHours(0, 0, 0, 0)
-  return x
-}
+// Tx kinds that move money in/out of total wealth. Buy/sell/transfer/fx
+// are *internal* to the account or netted across accounts — they don't
+// change net worth, so they're excluded from the walkback.
+const WEALTH_AFFECTING_KINDS = new Set([
+  'cash_in',
+  'cash_out',
+  'dividend',
+  'interest',
+  'fee',
+  'tax',
+])
 
-interface Tx {
+interface SeriesPoint {
   date: string
-  amount: number
+  total: number
+  source: 'snapshot' | 'reconstructed'
 }
 
-function buildSeries(currentTotal: number, txs: Tx[], lookbackDays = 365) {
-  const today = startOfUTCDay(new Date())
-  // Sort descending so we walk back in time accumulating txs after each boundary.
-  const sorted = [...txs].sort((a, b) => b.date.localeCompare(a.date))
-
-  const points: { date: string; total: number }[] = []
-  let running = currentTotal
-  let cursor = 0
-
-  for (let d = 0; d <= lookbackDays; d++) {
-    const dayStart = new Date(today.getTime() - d * MS_DAY)
-    const dayStartIso = dayStart.toISOString().slice(0, 10)
-
-    // Subtract every tx with date strictly after this snapshot day.
-    while (cursor < sorted.length && sorted[cursor].date > dayStartIso) {
-      running -= sorted[cursor].amount
-      cursor++
-    }
-    points.push({ date: dayStartIso, total: Math.round(running * 100) / 100 })
-  }
-
-  return points.reverse()
+function isoDay(d: Date): string {
+  return d.toISOString().slice(0, 10)
 }
 
 export async function GET() {
   const user = db.select().from(users).get()
   if (!user) {
-    return NextResponse.json({ series: [], currency: null, accounts: 0, errors: ['no user'] })
+    return NextResponse.json({ series: [], currency: null, accounts: 0 })
   }
 
-  // Find every account belonging to this user via their connections.
-  const userConns = db
-    .select()
-    .from(connections)
-    .where(eq(connections.userId, user.id))
-    .all()
-  const connIds = new Set(userConns.map((c) => c.id))
+  // ── Today's totals (always computed live) ─────────────────────────────
+  const totals = computeAccountTotals(user.id)
+  const todaySnap = computeUserSnapshot(user.id)
+  const currentTotal = todaySnap.totalAmount
 
-  const allAccounts = db
-    .select()
-    .from(accounts)
-    .all()
-    .filter((a) => connIds.has(a.connectionId))
+  // ── Tx-based walkback covers the cash side over the last 365 days.
+  // Investments are held flat at today's value (no historical price data
+  // to do better). Once daily_snapshots accumulate over time, those win
+  // over the walkback for the dates they cover.
+  const userConns = db.select().from(connections).where(sql`${connections.userId} = ${user.id}`).all()
+  const userAccountIds = totals.map((t) => t.accountId)
 
-  // Sum of preferred balances across accounts (skip currency mismatches).
-  let currentTotal = 0
-  let currency: string | null = null
-  const errors: string[] = []
-  const usableAccountIds: string[] = []
+  const since = isoDay(new Date(Date.now() - 365 * MS_DAY))
+  const today = isoDay(new Date())
 
-  for (const a of allAccounts) {
-    const accBalances = db.select().from(balances).where(eq(balances.accountId, a.id)).all()
-    if (accBalances.length === 0) continue
-    let picked = accBalances[0]
-    for (const t of BALANCE_PREFERENCE) {
-      const m = accBalances.find((b) => b.balanceType === t)
-      if (m) {
-        picked = m
-        break
-      }
-    }
-    if (!currency) currency = picked.currency
-    if (picked.currency !== currency) {
-      errors.push(`${a.details ?? a.id}: ${picked.currency} ≠ ${currency}`)
-      continue
-    }
-    currentTotal += picked.amount
-    usableAccountIds.push(a.id)
-  }
-
-  // Pull last 12 months of booked transactions for the usable accounts.
-  const since = new Date(Date.now() - 365 * MS_DAY).toISOString().slice(0, 10)
   const rawTxs =
-    usableAccountIds.length === 0
+    userAccountIds.length === 0
       ? []
       : db
-          .select({ date: transactions.date, amount: transactions.amount })
+          .select({
+            date: transactions.date,
+            amount: transactions.amount,
+            kind: transactions.kind,
+          })
           .from(transactions)
           .where(
             and(
@@ -117,20 +68,61 @@ export async function GET() {
               ne(transactions.status, 'PDNG'),
               ne(transactions.status, 'INFO'),
               sql`${transactions.accountId} IN (${sql.join(
-                usableAccountIds.map((id) => sql`${id}`),
+                userAccountIds.map((id) => sql`${id}`),
                 sql`, `,
               )})`,
             ),
           )
           .orderBy(desc(transactions.date))
           .all()
+          .filter((t) => !t.kind || WEALTH_AFFECTING_KINDS.has(t.kind))
 
-  const series = buildSeries(currentTotal, rawTxs)
+  // Walk back day by day, subtracting wealth-affecting txs that occurred
+  // strictly after each snapshot day.
+  const points: SeriesPoint[] = []
+  let running = currentTotal
+  let cursor = 0
+
+  for (let d = 0; d <= 365; d++) {
+    const dayStart = new Date(Date.now() - d * MS_DAY)
+    dayStart.setUTCHours(0, 0, 0, 0)
+    const dayIso = isoDay(dayStart)
+
+    while (cursor < rawTxs.length && rawTxs[cursor].date > dayIso) {
+      running -= rawTxs[cursor].amount
+      cursor++
+    }
+    points.push({
+      date: dayIso,
+      total: Math.round(running * 100) / 100,
+      source: 'reconstructed',
+    })
+  }
+
+  points.reverse()
+
+  // ── Overlay actual snapshots where we have them. They beat the
+  // reconstruction because they capture investment market drift the
+  // walkback can't see.
+  if (userConns.length > 0) {
+    const snaps = getSnapshotsRange(user.id, since, today)
+    const map = new Map(snaps.map((s) => [s.date, s.totalAmount]))
+    for (const p of points) {
+      const real = map.get(p.date)
+      if (real != null) {
+        p.total = Math.round(real * 100) / 100
+        p.source = 'snapshot'
+      }
+    }
+  }
 
   return NextResponse.json({
-    series,
-    currency,
-    accounts: allAccounts.length,
-    errors: errors.length ? errors : undefined,
+    series: points.map((p) => ({ date: p.date, total: p.total, source: p.source })),
+    currency: todaySnap.baseCurrency,
+    accounts: totals.length,
+    cashTotal: Math.round(todaySnap.cashAmount * 100) / 100,
+    investmentTotal: Math.round(todaySnap.investmentAmount * 100) / 100,
+    snapshots: points.filter((p) => p.source === 'snapshot').length,
+    errors: todaySnap.currencyMismatches.length ? todaySnap.currencyMismatches : undefined,
   })
 }

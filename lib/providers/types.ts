@@ -1,11 +1,59 @@
-// Provider-agnostic, normalized shapes used by the sync orchestrator and
-// domain layer. Each provider implementation is responsible for translating
-// its own API responses into these.
+// Provider-agnostic shapes used by the sync orchestrator and domain layer.
+// Each provider implementation translates its own API into these.
+
+export type AuthFlow = 'redirect' | 'bankid' | 'credentials' | 'apikey'
+
+// What a provider returns from startAuth / pollAuth — the front end uses
+// `kind` to decide what to render or do next.
+export type AuthChallenge =
+  | { kind: 'redirect'; url: string; state: string; expiresAt: number }
+  | {
+      kind: 'polling'
+      state: string
+      pollEveryMs: number
+      expiresAt: number
+      instructions: string
+      // Some flows surface info during polling (e.g. BankID device QR/autostart).
+      hint?: Record<string, unknown>
+    }
+  | { kind: 'pending'; state: string; instructions: string; hint?: Record<string, unknown> }
+  | { kind: 'complete'; connectionId: string }
+  | { kind: 'error'; state?: string; message: string }
+
+export interface ConnectionMaterial {
+  externalId: string // provider's session/connection id
+  validUntil?: number | null // unix ms
+  label?: string
+  raw: unknown
+}
+
+// Schema for a form field a provider asks the UI to render before startAuth.
+export interface FormField {
+  name: string
+  label: string
+  type: 'text' | 'password' | 'tel'
+  placeholder?: string
+  pattern?: string
+  required?: boolean
+}
+
+export interface AccountCapability {
+  cash?: boolean
+  investments?: boolean
+  pensions?: boolean
+  cards?: boolean
+}
+
+// ── Normalized data shapes ──────────────────────────────────────────────
+
+export type AccountKind = 'cash' | 'card' | 'investment' | 'pension'
 
 export interface NormalizedAccount {
-  id: string // canonical: provider's stable account id (e.g. EB uid)
+  id: string
+  kind: AccountKind
+  ownership?: 'sole' | 'joint'
   name?: string | null
-  details?: string | null // user's alias for the account
+  details?: string | null
   product?: string | null
   accountType?: string | null
   currency?: string | null
@@ -17,30 +65,58 @@ export interface NormalizedAccount {
 
 export interface NormalizedBalance {
   accountId: string
-  balanceType: string // closingBooked, expected, ...
-  amount: number // signed
+  balanceType: string
+  amount: number
   currency: string
-  referenceDate?: string | null // YYYY-MM-DD
+  referenceDate?: string | null
   raw: unknown
 }
 
+export type TransactionKind =
+  | 'cash_in'
+  | 'cash_out'
+  | 'transfer_in'
+  | 'transfer_out'
+  | 'buy'
+  | 'sell'
+  | 'dividend'
+  | 'interest'
+  | 'fee'
+  | 'tax'
+  | 'fx'
+  | 'other'
+
 export interface NormalizedTransaction {
   accountId: string
-  fingerprint: string // stable dedup key
-  date: string // YYYY-MM-DD (booking_date preferred)
-  amount: number // signed: +credit, -debit
+  fingerprint: string
+  date: string // YYYY-MM-DD
+  kind: TransactionKind
+  amount: number // signed, account currency
   currency: string
-  status?: string | null // BOOK | PDNG | INFO | null
+  instrumentId?: string | null
+  quantity?: number | null
+  status?: string | null
   description?: string | null
   counterparty?: string | null
+  raw: unknown
+}
+
+export interface NormalizedInstrument {
+  // Stable id: ISIN preferred, else `${providerId}:${providerInstrumentId}`.
+  id: string
+  type: string // STOCK | FUND | ETF | BOND | CERTIFICATE | CASH | ...
+  name?: string | null
+  ticker?: string | null
+  currency?: string | null
+  isin?: string | null
+  providerId?: string | null
+  providerInstrumentId?: string | null
   raw: unknown
 }
 
 export interface NormalizedPosition {
   accountId: string
   instrumentId: string
-  instrumentName?: string | null
-  instrumentType?: string | null
   quantity: number
   avgCost?: number | null
   marketValue?: number | null
@@ -52,52 +128,61 @@ export interface SyncResult {
   accounts: NormalizedAccount[]
   balances: NormalizedBalance[]
   transactions: NormalizedTransaction[]
+  instruments?: NormalizedInstrument[]
   positions?: NormalizedPosition[]
-  syncWindow: { from: string; to: string } // YYYY-MM-DD inclusive
-}
-
-export interface StartAuthInput {
-  // Provider-specific shape passed via `extra`.
-  redirectUrl: string
-  state: string
-  extra: Record<string, unknown>
-}
-
-export interface StartAuthResult {
-  url: string
-  authorizationId?: string
-}
-
-export interface CompleteAuthInput {
-  code: string
-  state: string
-}
-
-export interface CompleteAuthResult {
-  externalId: string // provider's session id, to store on the connection
-  validUntil?: number | null // unix ms
-  label?: string
-  raw: unknown
+  syncWindow: { from: string; to: string }
 }
 
 export interface ConnectionContext {
+  id: string
   externalId: string
   rawJson: string | null
+  // Decrypted credentials, if the provider stored any. Undefined for
+  // OAuth-style providers.
+  credentials?: Record<string, unknown>
 }
 
 export interface SyncOptions {
-  // ISO date inclusive. If undefined, the orchestrator passes 'initial' for
-  // the very first sync and the provider may interpret as "max history".
   since: Date
   until: Date
+}
+
+// ── Provider interface ──────────────────────────────────────────────────
+
+export interface StartAuthInput {
+  userId: string
+  flow: AuthFlow
+  redirectUrl: string // for redirect flows
+  state: string
+  input: Record<string, unknown> // form values etc.
+}
+
+export interface PollAuthInput {
+  state: string
+  payload: Record<string, unknown>
+}
+
+export interface CompleteAuthInput {
+  state: string
+  code?: string
+  payload?: Record<string, unknown>
 }
 
 export interface Provider {
   readonly id: string
   readonly name: string
+  readonly capabilities: AccountCapability
+  readonly authFlows: AuthFlow[]
+
+  // What the front end should ask the user to fill in BEFORE startAuth, per
+  // flow. e.g. BankID needs a personnummer; credentials needs username/pw/totp.
+  authFormSchema?(flow: AuthFlow): FormField[]
 
   listInstitutions?(country: string): Promise<unknown>
-  startAuth(input: StartAuthInput): Promise<StartAuthResult>
-  completeAuth(input: CompleteAuthInput): Promise<CompleteAuthResult>
+
+  startAuth(input: StartAuthInput): Promise<AuthChallenge>
+  pollAuth?(input: PollAuthInput): Promise<AuthChallenge>
+  completeAuth?(input: CompleteAuthInput): Promise<ConnectionMaterial>
+
   sync(connection: ConnectionContext, opts: SyncOptions): Promise<SyncResult>
 }

@@ -1,9 +1,11 @@
 import type { Provider } from './types'
+import { avanzaProvider } from './avanza'
 import { enableBankingProvider } from './enable-banking'
 
 const providers: Record<string, Provider> = {
   [enableBankingProvider.id]: enableBankingProvider,
-  // Future: avanza, klarna, lunar, ...
+  [avanzaProvider.id]: avanzaProvider,
+  // Future: klarna, lunar, ...
 }
 
 export function getProvider(id: string): Provider {

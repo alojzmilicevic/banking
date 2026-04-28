@@ -1,9 +1,9 @@
 import { eb } from './api'
 import type {
+  AuthChallenge,
   CompleteAuthInput,
-  CompleteAuthResult,
+  ConnectionMaterial,
   StartAuthInput,
-  StartAuthResult,
 } from '../types'
 
 export interface EBStartExtra {
@@ -12,11 +12,16 @@ export interface EBStartExtra {
   authMethod?: string
 }
 
-export async function ebStartAuth(input: StartAuthInput): Promise<StartAuthResult> {
-  const extra = input.extra as unknown as EBStartExtra
+export async function ebStartAuth(input: StartAuthInput): Promise<AuthChallenge> {
+  if (input.flow !== 'redirect') {
+    return { kind: 'error', message: `Enable Banking only supports 'redirect' flow` }
+  }
+  const extra = input.input as unknown as EBStartExtra
   const aspsps = await eb.listASPSPs(extra.aspspCountry)
   const aspsp = aspsps.find((a) => a.name === extra.aspspName)
-  if (!aspsp) throw new Error(`Unknown ASPSP ${extra.aspspName}/${extra.aspspCountry}`)
+  if (!aspsp) {
+    return { kind: 'error', message: `Unknown ASPSP ${extra.aspspName}/${extra.aspspCountry}` }
+  }
 
   const validitySeconds = Math.min(aspsp.maximum_consent_validity ?? 90 * 86400, 180 * 86400)
   const validUntil = new Date(Date.now() + validitySeconds * 1000).toISOString()
@@ -35,11 +40,18 @@ export async function ebStartAuth(input: StartAuthInput): Promise<StartAuthResul
     authMethod,
   })
 
-  return { url: auth.url, authorizationId: auth.authorization_id }
+  return {
+    kind: 'redirect',
+    url: auth.url,
+    state: input.state,
+    expiresAt: Date.now() + 30 * 60 * 1000, // 30 min
+  }
 }
 
-export async function ebCompleteAuth(input: CompleteAuthInput): Promise<CompleteAuthResult> {
+export async function ebCompleteAuth(input: CompleteAuthInput): Promise<ConnectionMaterial> {
+  if (!input.code) throw new Error('EB completeAuth: missing code')
   const session = await eb.exchangeCode(input.code)
+  if (!session.session_id) throw new Error('EB completeAuth: response missing session_id')
   return {
     externalId: session.session_id,
     validUntil: new Date(session.access.valid_until).getTime(),

@@ -10,8 +10,6 @@ export const users = sqliteTable('users', {
 })
 
 // One row per (user × provider × external auth session).
-// E.g. Alojz's Handelsbanken via Enable Banking is one connection,
-// Alma's Avanza is another, etc.
 export const connections = sqliteTable(
   'connections',
   {
@@ -20,13 +18,13 @@ export const connections = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     providerId: text('provider_id').notNull(), // 'enable-banking', 'avanza', ...
-    externalId: text('external_id').notNull(), // provider's session/connection id
-    label: text('label'), // e.g. "Handelsbanken (SE)"
-    status: text('status').notNull().default('active'), // 'active' | 'expired' | 'revoked'
-    validUntil: integer('valid_until'), // unix ms; nullable
-    initialSyncedAt: integer('initial_synced_at'), // unix ms; null until first 365d sync done
-    lastSyncedAt: integer('last_synced_at'), // unix ms
-    rawJson: text('raw_json'), // provider-specific extras (aspsp name, country, etc.)
+    externalId: text('external_id').notNull(), // provider's session id
+    label: text('label'),
+    status: text('status').notNull().default('active'),
+    validUntil: integer('valid_until'),
+    initialSyncedAt: integer('initial_synced_at'),
+    lastSyncedAt: integer('last_synced_at'),
+    rawJson: text('raw_json'),
     createdAt: integer('created_at').notNull().default(sql`(unixepoch() * 1000)`),
   },
   (t) => ({
@@ -35,28 +33,50 @@ export const connections = sqliteTable(
   }),
 )
 
-// Pending OAuth-style auth flows. Cleaned up after callback exchange.
+// Encrypted credentials for providers that need stored creds (Avanza
+// password+TOTP). Empty for OAuth-style providers like EB. AES-256-GCM with
+// a key from env var (BANKING_SECRET).
+export const connectionCredentials = sqliteTable('connection_credentials', {
+  connectionId: text('connection_id')
+    .primaryKey()
+    .references(() => connections.id, { onDelete: 'cascade' }),
+  ciphertext: text('ciphertext').notNull(),
+  iv: text('iv').notNull(),
+  authTag: text('auth_tag').notNull(),
+  createdAt: integer('created_at').notNull().default(sql`(unixepoch() * 1000)`),
+})
+
+// Pending auth flows. Polling flows (BankID) live here too, until completion.
 export const authStates = sqliteTable('auth_states', {
   state: text('state').primaryKey(),
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
   providerId: text('provider_id').notNull(),
-  payload: text('payload').notNull(), // JSON: provider-specific (aspsp name, country, ...)
+  flow: text('flow').notNull().default('redirect'), // 'redirect' | 'bankid' | 'credentials'
+  status: text('status').notNull().default('pending'), // 'pending' | 'complete' | 'error'
+  payload: text('payload').notNull(), // provider-specific JSON
+  result: text('result'), // JSON: connectionId on complete, error msg on failure
   createdAt: integer('created_at').notNull().default(sql`(unixepoch() * 1000)`),
+  expiresAt: integer('expires_at').notNull(),
 })
 
 export const accounts = sqliteTable(
   'accounts',
   {
-    id: text('id').primaryKey(), // canonical: provider's account uid
+    id: text('id').primaryKey(),
     connectionId: text('connection_id')
       .notNull()
       .references(() => connections.id, { onDelete: 'cascade' }),
-    name: text('name'), // holder name
-    details: text('details'), // user's alias for the account
+    // Logical kind drives wealth computation:
+    // 'cash' | 'card' | 'investment' | 'pension'
+    kind: text('kind'),
+    // 'sole' | 'joint'
+    ownership: text('ownership').notNull().default('sole'),
+    name: text('name'),
+    details: text('details'),
     product: text('product'),
-    accountType: text('account_type'), // CACC, CARD, INVESTMENT, etc.
+    accountType: text('account_type'), // raw provider type code (CACC, ISK, KF, …)
     currency: text('currency'),
     iban: text('iban'),
     bban: text('bban'),
@@ -70,17 +90,17 @@ export const accounts = sqliteTable(
   }),
 )
 
-// Latest balance snapshot per account+type. Replaced on each sync.
+// Latest cash balance snapshot per account+type. Replaced on each sync.
 export const balances = sqliteTable(
   'balances',
   {
     accountId: text('account_id')
       .notNull()
       .references(() => accounts.id, { onDelete: 'cascade' }),
-    balanceType: text('balance_type').notNull(), // closingBooked, expected, ...
+    balanceType: text('balance_type').notNull(),
     amount: real('amount').notNull(),
     currency: text('currency').notNull(),
-    referenceDate: text('reference_date'), // YYYY-MM-DD
+    referenceDate: text('reference_date'),
     rawJson: text('raw_json').notNull(),
     fetchedAt: integer('fetched_at').notNull().default(sql`(unixepoch() * 1000)`),
   },
@@ -89,41 +109,36 @@ export const balances = sqliteTable(
   }),
 )
 
-// Bank/card transactions and (eventually) investment cash movements.
-export const transactions = sqliteTable(
-  'transactions',
-  {
-    accountId: text('account_id')
-      .notNull()
-      .references(() => accounts.id, { onDelete: 'cascade' }),
-    fingerprint: text('fingerprint').notNull(),
-    date: text('date').notNull(), // YYYY-MM-DD (booking_date preferred)
-    amount: real('amount').notNull(), // signed: +credit, -debit
-    currency: text('currency').notNull(),
-    status: text('status'), // BOOK | PDNG | INFO | null
-    description: text('description'),
-    counterparty: text('counterparty'), // creditor/debtor name
-    rawJson: text('raw_json').notNull(),
-    createdAt: integer('created_at').notNull().default(sql`(unixepoch() * 1000)`),
-  },
-  (t) => ({
-    pk: uniqueIndex('transactions_pk').on(t.accountId, t.fingerprint),
-    byAccountDate: index('transactions_by_account_date').on(t.accountId, t.date),
-  }),
-)
+// Shared catalog of stocks / funds / ETFs / bonds. Multiple positions across
+// users/accounts reference the same instrument row.
+export const instruments = sqliteTable('instruments', {
+  // ISIN if available, else `${providerId}:${providerInstrumentId}`.
+  id: text('id').primaryKey(),
+  type: text('type').notNull(), // STOCK | FUND | ETF | BOND | CERTIFICATE | ...
+  name: text('name'),
+  ticker: text('ticker'),
+  currency: text('currency'),
+  isin: text('isin'),
+  providerId: text('provider_id'),
+  providerInstrumentId: text('provider_instrument_id'),
+  rawJson: text('raw_json'),
+  updatedAt: integer('updated_at').notNull().default(sql`(unixepoch() * 1000)`),
+})
 
-// Investment positions — for Avanza etc. Empty initially.
+// One row per (account × instrument). Replaces the earlier `positions` table
+// shape. Snapshot semantics — replaced on each sync.
 export const positions = sqliteTable(
   'positions',
   {
     accountId: text('account_id')
       .notNull()
       .references(() => accounts.id, { onDelete: 'cascade' }),
-    instrumentId: text('instrument_id').notNull(), // ISIN or provider id
-    instrumentName: text('instrument_name'),
-    instrumentType: text('instrument_type'), // STOCK | FUND | ETF | BOND | CASH
+    instrumentId: text('instrument_id')
+      .notNull()
+      .references(() => instruments.id),
     quantity: real('quantity').notNull(),
     avgCost: real('avg_cost'),
+    // Market value in the position's own currency (USD, SEK, …).
     marketValue: real('market_value'),
     currency: text('currency').notNull(),
     rawJson: text('raw_json').notNull(),
@@ -134,9 +149,64 @@ export const positions = sqliteTable(
   }),
 )
 
+// Cash flows + instrument events. `kind` is the closed enum that drives all
+// downstream computations (spending breakdowns, wealth deltas, etc.).
+export const transactions = sqliteTable(
+  'transactions',
+  {
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    fingerprint: text('fingerprint').notNull(),
+    date: text('date').notNull(), // YYYY-MM-DD
+    // 'cash_in' | 'cash_out' | 'transfer_in' | 'transfer_out' |
+    // 'buy' | 'sell' | 'dividend' | 'interest' | 'fee' | 'tax' | 'fx' | 'other'
+    kind: text('kind'),
+    amount: real('amount').notNull(), // signed, account currency
+    currency: text('currency').notNull(),
+    instrumentId: text('instrument_id').references(() => instruments.id),
+    quantity: real('quantity'), // for buy/sell
+    status: text('status'),
+    description: text('description'),
+    counterparty: text('counterparty'),
+    rawJson: text('raw_json').notNull(),
+    createdAt: integer('created_at').notNull().default(sql`(unixepoch() * 1000)`),
+  },
+  (t) => ({
+    pk: uniqueIndex('transactions_pk').on(t.accountId, t.fingerprint),
+    byAccountDate: index('transactions_by_account_date').on(t.accountId, t.date),
+    byKind: index('transactions_by_kind').on(t.kind),
+  }),
+)
+
+// One row per (user × date). Computed after every sync. The chart reads
+// this table directly. Investment values come from positions × marketValue
+// at snapshot time, so this captures market drift even on no-tx days.
+export const dailySnapshots = sqliteTable(
+  'daily_snapshots',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    date: text('date').notNull(), // YYYY-MM-DD
+    baseCurrency: text('base_currency').notNull(),
+    totalAmount: real('total_amount').notNull(),
+    cashAmount: real('cash_amount').notNull(),
+    investmentAmount: real('investment_amount').notNull(),
+    detailJson: text('detail_json').notNull(), // per-account breakdown
+    computedAt: integer('computed_at').notNull().default(sql`(unixepoch() * 1000)`),
+  },
+  (t) => ({
+    pk: uniqueIndex('snapshots_pk').on(t.userId, t.date),
+  }),
+)
+
 export type User = typeof users.$inferSelect
 export type Connection = typeof connections.$inferSelect
+export type ConnectionCredential = typeof connectionCredentials.$inferSelect
 export type Account = typeof accounts.$inferSelect
 export type Balance = typeof balances.$inferSelect
-export type Transaction = typeof transactions.$inferSelect
+export type Instrument = typeof instruments.$inferSelect
 export type Position = typeof positions.$inferSelect
+export type Transaction = typeof transactions.$inferSelect
+export type DailySnapshot = typeof dailySnapshots.$inferSelect

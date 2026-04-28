@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import AvanzaConnect from './components/AvanzaConnect'
 import Timeline from './components/Timeline'
 
 interface ASPSP {
@@ -110,11 +111,14 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           providerId: 'enable-banking',
-          extra: { aspspName: aspsp.name, aspspCountry: aspsp.country },
+          flow: 'redirect',
+          input: { aspspName: aspsp.name, aspspCountry: aspsp.country },
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || res.statusText)
+      if (data.kind === 'error') throw new Error(data.message)
+      if (data.kind !== 'redirect') throw new Error(`Unexpected challenge: ${data.kind}`)
       window.location.href = data.url
     } catch (e) {
       setError((e as Error).message)
@@ -145,6 +149,8 @@ export default function Home() {
       {error && <div className="error">{error}</div>}
 
       <Timeline />
+
+      <AvanzaConnect onConnected={loadConnections} />
 
       <div className="card">
         <h2>Connect a bank</h2>

@@ -5,8 +5,9 @@ import { authStates, connections, db } from '@/lib/db/client'
 import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/sync/orchestrator'
 
-// Provider redirects here with ?code=... &state=...
-// We exchange, persist a connection, kick off the initial sync, and bounce home.
+// OAuth-style return URL (Enable Banking, future redirect-based providers).
+// Polling-based providers (Avanza/BankID) never hit this endpoint — they
+// finalize via /api/auth/poll instead.
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
@@ -18,20 +19,26 @@ export async function GET(req: Request) {
   if (error) {
     return NextResponse.redirect(`${url.origin}/?error=${encodeURIComponent(errorDesc || error)}`)
   }
-  if (!code || !state) {
-    return NextResponse.redirect(`${url.origin}/?error=missing_code_or_state`)
+  if (!state) {
+    return NextResponse.redirect(`${url.origin}/?error=missing_state`)
   }
 
   const pending = db.select().from(authStates).where(eq(authStates.state, state)).get()
   if (!pending) {
     return NextResponse.redirect(`${url.origin}/?error=unknown_state`)
   }
+
   // Single-use; clean up regardless of outcome.
   db.delete(authStates).where(eq(authStates.state, state)).run()
 
   try {
     const provider = getProvider(pending.providerId)
-    const completed = await provider.completeAuth({ code, state })
+    if (!provider.completeAuth) {
+      return NextResponse.redirect(
+        `${url.origin}/?error=${encodeURIComponent(`${provider.name} has no callback flow`)}`,
+      )
+    }
+    const completed = await provider.completeAuth({ state, code: code ?? undefined })
 
     const connectionId = randomUUID()
     db.insert(connections)
@@ -47,8 +54,6 @@ export async function GET(req: Request) {
       })
       .run()
 
-    // Trigger the initial 365d sync immediately so the home page has data.
-    // Don't fail the redirect if this errors — user can hit Refresh.
     try {
       await syncConnection(connectionId)
     } catch (e) {
