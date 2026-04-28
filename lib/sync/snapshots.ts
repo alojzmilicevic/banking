@@ -347,3 +347,14 @@ export function getSnapshotsRange(
     .orderBy(dailySnapshots.date)
     .all()
 }
+
+// Earliest snapshot date stored for a user (or null if none yet).
+// Used by /api/timeseries to anchor the "ALL" period correctly.
+export function getEarliestSnapshotDate(userId: string): string | null {
+  const row = db
+    .select({ date: sql<string>`MIN(${dailySnapshots.date})` })
+    .from(dailySnapshots)
+    .where(eq(dailySnapshots.userId, userId))
+    .get()
+  return row?.date ?? null
+}

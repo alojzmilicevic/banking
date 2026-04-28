@@ -7,6 +7,7 @@
 // automates the paste step on macOS.
 
 import { db, connections } from '@/lib/db/client'
+import { saveCredentials } from '@/lib/sync/credentials'
 import { randomUUID } from 'node:crypto'
 import type {
   AuthChallenge,
@@ -62,9 +63,15 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
       label: 'Avanza',
       status: 'active',
       validUntil: session.expiresAt,
-      rawJson: JSON.stringify({ session }),
+      // Only non-secret metadata in rawJson. Cookies live encrypted in
+      // connection_credentials.
+      rawJson: JSON.stringify({ expiresAt: session.expiresAt }),
     })
     .run()
+
+  // Encrypt + persist the cookie jar separately so the plaintext never
+  // touches connections.raw_json.
+  saveCredentials(connectionId, { cookies })
 
   return { kind: 'complete', connectionId }
 }

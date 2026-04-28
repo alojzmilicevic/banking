@@ -14,23 +14,41 @@ import type {
   SyncResult,
 } from '../types'
 
-interface StoredAvanzaConnection {
-  session: AvanzaSession
+interface AvanzaConnectionMeta {
+  expiresAt?: number
+  // Legacy: connections created before encryption was wired in held the
+  // full session here in plaintext. Read-only fallback path.
+  session?: AvanzaSession
 }
 
 export async function avanzaSync(
   connection: ConnectionContext,
   opts: SyncOptions,
 ): Promise<SyncResult> {
-  const stored = JSON.parse(connection.rawJson || '{}') as Partial<StoredAvanzaConnection>
-  if (!stored.session) {
-    throw new Error('Avanza connection has no session — re-link via Read from Chrome / paste cookies')
+  const meta = JSON.parse(connection.rawJson || '{}') as AvanzaConnectionMeta
+
+  // Preferred path: orchestrator hands us decrypted credentials.
+  // Fallback: legacy plaintext rawJson.session (will be migrated next
+  // time the user re-links).
+  const fromCreds = connection.credentials as
+    | { cookies?: Record<string, string> }
+    | undefined
+  const cookies = fromCreds?.cookies ?? meta.session?.cookies
+  const expiresAt = meta.expiresAt ?? meta.session?.expiresAt ?? 0
+
+  if (!cookies || Object.keys(cookies).length === 0) {
+    throw new Error(
+      'Avanza connection has no cookies — re-link via Read from Chrome / paste cookies',
+    )
   }
-  if (stored.session.expiresAt < Date.now()) {
-    throw new Error('Avanza session expired — re-link via Read from Chrome / paste cookies')
+  if (expiresAt < Date.now()) {
+    throw new Error(
+      'Avanza session expired — re-link via Read from Chrome / paste cookies',
+    )
   }
 
-  const api = new AvanzaApi(stored.session)
+  const session: AvanzaSession = { cookies, expiresAt }
+  const api = new AvanzaApi(session)
 
   // Account list + current balances.
   const resp = await api.get<AvanzaCategorizedAccountsResponse>(paths.CATEGORIZED_ACCOUNTS)

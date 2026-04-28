@@ -13,7 +13,7 @@ import type {
   TransactionKind,
 } from '../types'
 
-function signedAmount(t: EBTransaction): number {
+export function signedAmount(t: EBTransaction): number {
   const raw = parseFloat(t.transaction_amount.amount)
   if (!Number.isFinite(raw)) return 0
   if (t.credit_debit_indicator === 'DBIT') return -Math.abs(raw)
@@ -43,7 +43,7 @@ function ebKind(_a: EBAccount): AccountKind {
   return 'cash'
 }
 
-function classifyTransaction(amount: number): TransactionKind {
+export function classifyTransaction(amount: number): TransactionKind {
   if (amount >= 0) return 'cash_in'
   return 'cash_out'
 }

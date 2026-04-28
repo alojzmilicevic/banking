@@ -2,13 +2,17 @@ import { NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
 import { connections, db, users } from '@/lib/db/client'
 import { syncConnection, type SyncMode } from '@/lib/sync/orchestrator'
+import { rateLimit } from '@/lib/sync/rate-limit'
 
-// POST /api/sync         → sync all active connections for the default user
-// POST /api/sync?id=...  → sync one connection
+// POST /api/sync                  → sync all active connections
+// POST /api/sync?id=<connId>      → sync one connection
 // POST /api/sync?mode=force-full  → force initial 365d backfill
 //
-// Per-connection failures don't abort the rest. The response body has
-// `outcome` for each success and `error` for each failure.
+// Rate limited per user: 10 syncs / minute. 207 Multi-Status when at
+// least one connection failed; 200 only on full success.
+
+const RATE_CAPACITY = 10
+const RATE_REFILL_MS = 60_000 / RATE_CAPACITY
 
 export async function POST(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -16,6 +20,19 @@ export async function POST(req: Request) {
   const mode = (searchParams.get('mode') ?? 'auto') as SyncMode
 
   try {
+    const user = db.select().from(users).get()
+    const rateKey = `sync:${user?.id ?? 'anon'}`
+    const r = rateLimit(rateKey, RATE_CAPACITY, RATE_REFILL_MS)
+    if (!r.allowed) {
+      return NextResponse.json(
+        {
+          error: 'Rate limited',
+          retryAfter: r.retryAfterSec,
+        },
+        { status: 429, headers: { 'Retry-After': String(r.retryAfterSec) } },
+      )
+    }
+
     if (id) {
       try {
         const outcome = await syncConnection(id, { mode })
@@ -23,15 +40,13 @@ export async function POST(req: Request) {
       } catch (e) {
         return NextResponse.json(
           { results: [{ connectionId: id, error: (e as Error).message }] },
-          { status: 200 },
+          { status: 207 },
         )
       }
     }
 
-    const user = db.select().from(users).get()
-    if (!user) {
-      return NextResponse.json({ results: [] })
-    }
+    if (!user) return NextResponse.json({ results: [] })
+
     const conns = db
       .select()
       .from(connections)
@@ -48,7 +63,8 @@ export async function POST(req: Request) {
             error: r.reason instanceof Error ? r.reason.message : String(r.reason),
           },
     )
-    return NextResponse.json({ results })
+    const anyFailed = results.some((r) => 'error' in r && r.error)
+    return NextResponse.json({ results }, { status: anyFailed ? 207 : 200 })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }

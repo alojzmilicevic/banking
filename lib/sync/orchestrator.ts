@@ -10,6 +10,7 @@ import {
   transactions,
 } from '@/lib/db/client'
 import { getProvider } from '@/lib/providers/registry'
+import { loadCredentials } from './credentials'
 import { rebuildSnapshotsForUser } from './snapshots'
 
 const INITIAL_LOOKBACK_DAYS = 365
@@ -48,10 +49,15 @@ export async function syncConnection(
   const until = new Date()
   const since = new Date(until.getTime() - lookbackDays * 86400_000)
 
+  // Decrypt any stored credentials (cookies, future password+TOTP) just
+  // long enough to hand them to the provider's sync. Plaintext never
+  // touches the orchestrator's persistence path.
+  const credentials = loadCredentials(conn.id) ?? undefined
+
   let result
   try {
     result = await provider.sync(
-      { id: conn.id, externalId: conn.externalId, rawJson: conn.rawJson },
+      { id: conn.id, externalId: conn.externalId, rawJson: conn.rawJson, credentials },
       { since, until },
     )
   } catch (e) {

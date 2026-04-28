@@ -2,13 +2,12 @@ import { NextResponse } from 'next/server'
 import { db, users } from '@/lib/db/client'
 import {
   computeTodaySnapshot,
+  getEarliestSnapshotDate,
   getSnapshotsRange,
 } from '@/lib/sync/snapshots'
 
 const MS_DAY = 86400_000
 
-// Period codes: how far back the chart looks. All snapshots already
-// live in daily_snapshots — this just slices the date range.
 const PERIODS = ['1W', '1M', '3M', '6M', 'YTD', '1Y', 'ALL'] as const
 type Period = (typeof PERIODS)[number]
 
@@ -16,7 +15,7 @@ function isoDay(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-function periodFromDate(period: Period, today: Date): string {
+function periodFromDate(period: Period, today: Date, userId: string): string {
   const t = new Date(today)
   t.setUTCHours(0, 0, 0, 0)
   switch (period) {
@@ -28,17 +27,13 @@ function periodFromDate(period: Period, today: Date): string {
       return isoDay(new Date(t.getTime() - 90 * MS_DAY))
     case '6M':
       return isoDay(new Date(t.getTime() - 180 * MS_DAY))
-    case 'YTD': {
-      const jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1))
-      return isoDay(jan1)
-    }
+    case 'YTD':
+      return isoDay(new Date(Date.UTC(t.getUTCFullYear(), 0, 1)))
     case '1Y':
       return isoDay(new Date(t.getTime() - 365 * MS_DAY))
     case 'ALL':
     default:
-      // Bounded by what we have (365 days). Future-proof: when we extend
-      // history, ALL should pick the earliest snapshot date.
-      return '0000-01-01'
+      return getEarliestSnapshotDate(userId) ?? isoDay(t)
   }
 }
 
@@ -51,11 +46,11 @@ export async function GET(req: Request) {
 
   const user = db.select().from(users).get()
   if (!user) {
-    return NextResponse.json({ series: [], currency: null, accounts: 0, period })
+    return NextResponse.json({ series: [], currency: null, points: 0, period })
   }
 
   const today = computeTodaySnapshot(user.id)
-  const fromIso = periodFromDate(period, new Date())
+  const fromIso = periodFromDate(period, new Date(), user.id)
   const snaps = getSnapshotsRange(user.id, fromIso, today.date)
 
   const series = snaps.length
@@ -77,11 +72,10 @@ export async function GET(req: Request) {
   return NextResponse.json({
     series,
     currency: today.baseCurrency,
-    accounts: snaps.length,
+    period,
+    points: series.length, // renamed from `accounts` (was misleading)
     cashTotal: today.cashAmount,
     investmentTotal: today.investmentAmount,
-    period,
-    snapshots: snaps.length,
     errors: today.currencyMismatches.length ? today.currencyMismatches : undefined,
   })
 }
