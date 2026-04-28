@@ -6,18 +6,18 @@ export const avanzaProvider: Provider = {
   id: 'avanza',
   name: 'Avanza',
   capabilities: { cash: true, investments: true, pensions: true },
-  authFlows: ['bankid'], // 'credentials' added once password + TOTP are configured
+  authFlows: ['bankid', 'cookies'], // 'credentials' added once password + TOTP are configured
 
   authFormSchema: (flow) => {
-    if (flow === 'bankid') {
+    if (flow === 'bankid') return []
+    if (flow === 'cookies') {
       return [
         {
-          name: 'personnummer',
-          label: 'Personnummer (YYYYMMDDXXXX)',
-          type: 'tel',
-          placeholder: '198001012345',
+          name: 'cookies',
+          label: 'Cookie header from your logged-in browser',
+          type: 'text',
+          placeholder: 'csid=...; cstoken=...; AZAHLI=...',
           required: true,
-          pattern: '^\\d{8}-?\\d{4}$',
         },
       ]
     }

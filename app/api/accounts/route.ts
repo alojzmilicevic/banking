@@ -26,6 +26,7 @@ export async function GET() {
       validUntil: c.validUntil,
       lastSyncedAt: c.lastSyncedAt,
       initialSyncedAt: c.initialSyncedAt,
+      lastSyncError: c.lastSyncError,
       accounts: accs.map((a) => ({
         id: a.id,
         name: a.name,
@@ -36,6 +37,8 @@ export async function GET() {
         iban: a.iban,
         bban: a.bban,
         bic: a.bic,
+        kind: a.kind,
+        excludedFromTotal: a.excludedFromTotal === 1,
       })),
     }
   })

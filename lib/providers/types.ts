@@ -1,7 +1,7 @@
 // Provider-agnostic shapes used by the sync orchestrator and domain layer.
 // Each provider implementation translates its own API into these.
 
-export type AuthFlow = 'redirect' | 'bankid' | 'credentials' | 'apikey'
+export type AuthFlow = 'redirect' | 'bankid' | 'credentials' | 'apikey' | 'cookies'
 
 // What a provider returns from startAuth / pollAuth — the front end uses
 // `kind` to decide what to render or do next.
@@ -124,12 +124,23 @@ export interface NormalizedPosition {
   raw: unknown
 }
 
+export interface NormalizedDailyValue {
+  accountId: string
+  date: string // YYYY-MM-DD
+  value: number
+  currency: string
+}
+
 export interface SyncResult {
   accounts: NormalizedAccount[]
   balances: NormalizedBalance[]
   transactions: NormalizedTransaction[]
   instruments?: NormalizedInstrument[]
   positions?: NormalizedPosition[]
+  // Per-account historical daily values (e.g. Avanza's chart series).
+  // Only present for providers that expose this; cash-only providers
+  // leave it empty and rely on tx walkback in the snapshot builder.
+  dailyValues?: NormalizedDailyValue[]
   syncWindow: { from: string; to: string }
 }
 

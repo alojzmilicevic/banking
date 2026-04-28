@@ -6,6 +6,9 @@ import { syncConnection, type SyncMode } from '@/lib/sync/orchestrator'
 // POST /api/sync         → sync all active connections for the default user
 // POST /api/sync?id=...  → sync one connection
 // POST /api/sync?mode=force-full  → force initial 365d backfill
+//
+// Per-connection failures don't abort the rest. The response body has
+// `outcome` for each success and `error` for each failure.
 
 export async function POST(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -14,8 +17,15 @@ export async function POST(req: Request) {
 
   try {
     if (id) {
-      const result = await syncConnection(id, { mode })
-      return NextResponse.json({ results: [result] })
+      try {
+        const outcome = await syncConnection(id, { mode })
+        return NextResponse.json({ results: [{ connectionId: id, outcome }] })
+      } catch (e) {
+        return NextResponse.json(
+          { results: [{ connectionId: id, error: (e as Error).message }] },
+          { status: 200 },
+        )
+      }
     }
 
     const user = db.select().from(users).get()
@@ -29,7 +39,15 @@ export async function POST(req: Request) {
       .all()
     const active = conns.filter((c) => c.status === 'active')
 
-    const results = await Promise.all(active.map((c) => syncConnection(c.id, { mode })))
+    const settled = await Promise.allSettled(active.map((c) => syncConnection(c.id, { mode })))
+    const results = settled.map((r, i) =>
+      r.status === 'fulfilled'
+        ? { connectionId: active[i].id, outcome: r.value }
+        : {
+            connectionId: active[i].id,
+            error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+          },
+    )
     return NextResponse.json({ results })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })

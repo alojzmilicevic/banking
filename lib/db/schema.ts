@@ -24,6 +24,7 @@ export const connections = sqliteTable(
     validUntil: integer('valid_until'),
     initialSyncedAt: integer('initial_synced_at'),
     lastSyncedAt: integer('last_synced_at'),
+    lastSyncError: text('last_sync_error'),
     rawJson: text('raw_json'),
     createdAt: integer('created_at').notNull().default(sql`(unixepoch() * 1000)`),
   },
@@ -73,6 +74,10 @@ export const accounts = sqliteTable(
     kind: text('kind'),
     // 'sole' | 'joint'
     ownership: text('ownership').notNull().default('sole'),
+    // When 1, this account is hidden from the user's total wealth chart
+    // (e.g. accounts owned by family members synced for visibility only,
+    // or empty/inactive accounts cluttering the list).
+    excludedFromTotal: integer('excluded_from_total').notNull().default(0),
     name: text('name'),
     details: text('details'),
     product: text('product'),
@@ -201,7 +206,29 @@ export const dailySnapshots = sqliteTable(
   }),
 )
 
+// Daily total value per account (one row per (account, date)). Currently
+// populated from Avanza's chart/timeperiod endpoint — gives us the actual
+// historical value of an investment account on each calendar day,
+// including market drift between transactions. Empty for cash-only
+// providers; the snapshot builder falls back to tx walkback for those.
+export const accountValueHistory = sqliteTable(
+  'account_value_history',
+  {
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    date: text('date').notNull(), // YYYY-MM-DD
+    value: real('value').notNull(),
+    currency: text('currency').notNull(),
+    fetchedAt: integer('fetched_at').notNull().default(sql`(unixepoch() * 1000)`),
+  },
+  (t) => ({
+    pk: uniqueIndex('account_value_history_pk').on(t.accountId, t.date),
+  }),
+)
+
 export type User = typeof users.$inferSelect
+export type AccountValueHistory = typeof accountValueHistory.$inferSelect
 export type Connection = typeof connections.$inferSelect
 export type ConnectionCredential = typeof connectionCredentials.$inferSelect
 export type Account = typeof accounts.$inferSelect

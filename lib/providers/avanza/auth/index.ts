@@ -15,28 +15,32 @@ import type { AvanzaSession } from '../api'
 
 interface BankIdStateBlob {
   flow: 'bankid'
-  personnummer: string
   transactionId: string
   expiresIso: string
-  autostartToken: string
+  qrToken: string
+  // Accumulated cookies across initiate/collect/finalize steps. Avanza
+  // requires the full set on /_api/* endpoints; carrying them between
+  // requests in the auth state row preserves the chain.
+  cookies: Record<string, string>
   preferredUsername?: string
 }
 
-const BANKID_POLL_MS = 2000
+const BANKID_POLL_MS = 1500
 
 export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChallenge> {
   if (input.flow === 'bankid') {
-    const personnummer = String(input.input.personnummer ?? '').replace(/\s|-/g, '')
-    if (!personnummer) {
-      return { kind: 'error', message: 'personnummer required (YYYYMMDDXXXX)' }
+    let init
+    try {
+      init = await bankidInitiate()
+    } catch (e) {
+      return { kind: 'error', message: (e as Error).message }
     }
-    const init = await bankidInitiate(personnummer)
     const blob: BankIdStateBlob = {
       flow: 'bankid',
-      personnummer,
       transactionId: init.transactionId,
       expiresIso: init.expires,
-      autostartToken: init.autostartToken,
+      qrToken: init.qrToken,
+      cookies: init.cookies,
       preferredUsername: input.input.username as string | undefined,
     }
     db.insert(authStates)
@@ -55,9 +59,49 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
       state: input.state,
       pollEveryMs: BANKID_POLL_MS,
       expiresAt: new Date(init.expires).getTime(),
-      instructions: 'Open BankID on your phone and approve the login',
-      hint: { autostartToken: init.autostartToken },
+      instructions: 'Scan the QR code with your BankID app',
+      hint: { qrToken: init.qrToken, transactionId: init.transactionId },
     }
+  }
+
+  if (input.flow === 'cookies') {
+    const raw = String(input.input.cookies ?? '').trim()
+    if (!raw) return { kind: 'error', message: 'Cookie string is empty' }
+
+    const cookies: Record<string, string> = {}
+    for (const part of raw.split(';')) {
+      const eq = part.indexOf('=')
+      if (eq <= 0) continue
+      const name = part.slice(0, eq).trim()
+      const value = part.slice(eq + 1).trim()
+      if (name) cookies[name] = value
+    }
+    if (Object.keys(cookies).length === 0) {
+      return { kind: 'error', message: 'No cookies parsed from input' }
+    }
+
+    const session: AvanzaSession = {
+      cookies,
+      // No tokens — paste flow doesn't have them. The /_api/* endpoints
+      // we hit are cookie-authenticated, so this is enough.
+      expiresAt: Date.now() + 60 * 60 * 1000, // assume 60min until expiry
+    }
+
+    const connectionId = randomUUID()
+    db.insert(connections)
+      .values({
+        id: connectionId,
+        userId: input.userId,
+        providerId: 'avanza',
+        externalId: `pasted-${Date.now()}`,
+        label: 'Avanza (pasted cookies)',
+        status: 'active',
+        validUntil: session.expiresAt,
+        rawJson: JSON.stringify({ session, login: { username: 'pasted' } }),
+      })
+      .run()
+
+    return { kind: 'complete', connectionId }
   }
 
   if (input.flow === 'credentials') {
@@ -77,7 +121,6 @@ export async function avanzaPollAuth(input: PollAuthInput): Promise<AuthChalleng
     return { kind: 'error', state: input.state, message: 'State is not for Avanza' }
   }
 
-  // If already completed in a prior poll, fast-path the result.
   if (row.status === 'complete' && row.result) {
     const r = JSON.parse(row.result) as { connectionId: string }
     return { kind: 'complete', connectionId: r.connectionId }
@@ -94,30 +137,47 @@ export async function avanzaPollAuth(input: PollAuthInput): Promise<AuthChalleng
   }
 
   const blob = JSON.parse(row.payload) as BankIdStateBlob
-  if (blob.flow !== 'bankid') {
-    return { kind: 'error', state: input.state, message: 'State is not a BankID flow' }
-  }
 
   let collect
   try {
-    collect = await bankidCollect(blob.transactionId)
+    collect = await bankidCollect(blob.transactionId, blob.cookies)
   } catch (e) {
     return { kind: 'error', state: input.state, message: (e as Error).message }
   }
 
+  // Merge new cookies + refreshed qrToken into the persisted blob so the
+  // next poll continues with the full session state.
+  const merged = { ...blob, cookies: { ...blob.cookies, ...collect.cookies } }
+  if (collect.qrToken && collect.qrToken !== blob.qrToken) {
+    merged.qrToken = collect.qrToken
+  }
+  if (
+    merged.qrToken !== blob.qrToken ||
+    Object.keys(collect.cookies).length !== Object.keys(blob.cookies).length
+  ) {
+    db.update(authStates)
+      .set({ payload: JSON.stringify(merged) })
+      .where(eq(authStates.state, input.state))
+      .run()
+  }
+
   if (collect.state !== 'COMPLETE') {
-    // Still pending. Surface Avanza's hint code as a hint.
     return {
       kind: 'polling',
       state: input.state,
       pollEveryMs: BANKID_POLL_MS,
       expiresAt: row.expiresAt,
-      instructions: collect.hintCode ?? collect.state ?? 'Awaiting BankID',
-      hint: { state: collect.state, hintCode: collect.hintCode },
+      instructions: humanizeBankIdHint(collect.hint, collect.state),
+      hint: {
+        state: collect.state,
+        hintCode: collect.hint,
+        rfa: collect.rfa,
+        qrToken: merged.qrToken,
+        transactionId: blob.transactionId,
+      },
     }
   }
 
-  // COMPLETE — pick a login and finalize.
   if (!collect.logins || collect.logins.length === 0) {
     const msg = 'BankID complete but no Avanza logins returned'
     db.update(authStates)
@@ -134,7 +194,7 @@ export async function avanzaPollAuth(input: PollAuthInput): Promise<AuthChalleng
 
   let session: AvanzaSession
   try {
-    session = await bankidFinalize(login)
+    session = await bankidFinalize(login, merged.cookies)
   } catch (e) {
     const msg = (e as Error).message
     db.update(authStates)
@@ -144,14 +204,16 @@ export async function avanzaPollAuth(input: PollAuthInput): Promise<AuthChalleng
     return { kind: 'error', state: input.state, message: msg }
   }
 
-  // Persist the connection.
+  // The finalize step's session.cookies already contains the merged jar
+  // (it was seeded with `merged.cookies` then accumulated any Set-Cookie
+  // from the loginPath response). Persist as-is.
   const connectionId = randomUUID()
   db.insert(connections)
     .values({
       id: connectionId,
       userId: row.userId,
       providerId: 'avanza',
-      externalId: session.customerId,
+      externalId: session.customerId ?? login.customerId,
       label: `Avanza (${login.username})`,
       status: 'active',
       validUntil: session.expiresAt,
@@ -167,8 +229,27 @@ export async function avanzaPollAuth(input: PollAuthInput): Promise<AuthChalleng
   return { kind: 'complete', connectionId }
 }
 
-// Avanza doesn't use the OAuth-style completeAuth path. Defined for symmetry
-// only — startAuth/pollAuth handle everything.
+function humanizeBankIdHint(hint: string | undefined, state: string | undefined): string {
+  const key = (hint || state || '').toUpperCase().replace(/_/g, '')
+  switch (key) {
+    case 'OUTSTANDINGTRANSACTION':
+      return 'Open the BankID app and scan the QR code'
+    case 'USERSIGN':
+      return 'Confirm in your BankID app'
+    case 'STARTED':
+      return 'BankID started — keep going'
+    case 'NOCLIENT':
+      return 'Open BankID on your phone'
+    case 'CANCELLED':
+    case 'USERCANCEL':
+      return 'Cancelled'
+    case 'EXPIREDTRANSACTION':
+      return 'BankID transaction expired'
+    default:
+      return hint || state || 'Awaiting BankID'
+  }
+}
+
 export async function avanzaCompleteAuth(_input: CompleteAuthInput): Promise<ConnectionMaterial> {
   throw new Error('Avanza uses pollAuth, not completeAuth')
 }

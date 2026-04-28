@@ -1,0 +1,1 @@
+ALTER TABLE `accounts` ADD `excluded_from_total` integer DEFAULT 0 NOT NULL;

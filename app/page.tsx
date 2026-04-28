@@ -20,6 +20,8 @@ interface AccountSummary {
   product?: string | null
   currency?: string | null
   iban?: string | null
+  kind?: string | null
+  excludedFromTotal?: boolean
 }
 
 interface ConnectionView {
@@ -30,6 +32,7 @@ interface ConnectionView {
   validUntil: number | null
   lastSyncedAt: number | null
   initialSyncedAt: number | null
+  lastSyncError: string | null
   accounts: AccountSummary[]
 }
 
@@ -37,9 +40,16 @@ function key(a: ASPSP) {
   return `${a.name}||${a.country}`
 }
 
-function daysFromNow(ms: number | null) {
+function consentLabel(ms: number | null): { text: string; expired: boolean } | null {
   if (!ms) return null
-  return Math.max(0, Math.round((ms - Date.now()) / 86400_000))
+  const remaining = ms - Date.now()
+  if (remaining <= 0) return { text: 'consent expired', expired: true }
+  const days = Math.floor(remaining / 86400_000)
+  if (days >= 1) return { text: `consent ${days}d`, expired: false }
+  const hours = Math.floor(remaining / 3600_000)
+  if (hours >= 1) return { text: `consent ${hours}h`, expired: false }
+  const minutes = Math.max(1, Math.floor(remaining / 60_000))
+  return { text: `consent ${minutes}m`, expired: false }
 }
 
 function timeAgo(ms: number | null) {
@@ -126,6 +136,39 @@ export default function Home() {
     }
   }
 
+  async function toggleExclude(accountId: string, currentlyExcluded: boolean) {
+    try {
+      const res = await fetch(`/api/accounts/${accountId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ excludedFromTotal: !currentlyExcluded }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `HTTP ${res.status}`)
+      }
+      await loadConnections()
+      window.dispatchEvent(new CustomEvent('banking:synced'))
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  async function disconnect(id: string, label: string) {
+    if (!confirm(`Disconnect ${label}? This deletes its accounts, transactions and history.`)) return
+    try {
+      const res = await fetch(`/api/connections/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `HTTP ${res.status}`)
+      }
+      await loadConnections()
+      window.dispatchEvent(new CustomEvent('banking:synced'))
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
   async function syncAll() {
     setSyncing(true)
     setError(null)
@@ -198,7 +241,7 @@ export default function Home() {
           <p className="muted" style={{ marginTop: '0.75rem' }}>No banks connected yet.</p>
         )}
         {connectionsList.map((c) => {
-          const days = daysFromNow(c.validUntil)
+          const consent = consentLabel(c.validUntil)
           return (
             <div
               key={c.id}
@@ -206,24 +249,64 @@ export default function Home() {
             >
               <div className="row between">
                 <strong>{c.label ?? c.providerId}</strong>
-                <span className="muted">
-                  {c.lastSyncedAt ? `synced ${timeAgo(c.lastSyncedAt)}` : 'never synced'} ·{' '}
-                  <span className={days !== null && days < 7 ? 'amount-neg' : ''}>
-                    {days !== null
-                      ? days > 0
-                        ? `consent ${days}d`
-                        : 'consent expired'
-                      : c.status}
+                <div className="row" style={{ gap: '0.75rem' }}>
+                  <span className="muted">
+                    {c.lastSyncedAt ? `synced ${timeAgo(c.lastSyncedAt)}` : 'never synced'}
+                    {consent && (
+                      <>
+                        {' · '}
+                        <span className={consent.expired ? 'amount-neg' : ''}>{consent.text}</span>
+                      </>
+                    )}
                   </span>
-                </span>
+                  <button
+                    onClick={() => disconnect(c.id, c.label ?? c.providerId)}
+                    className="danger"
+                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                  >
+                    Disconnect
+                  </button>
+                </div>
               </div>
+              {c.lastSyncError && (
+                <div
+                  className="error"
+                  style={{ marginTop: '0.5rem', fontSize: '0.78rem', wordBreak: 'break-word' }}
+                >
+                  Sync error: {c.lastSyncError}
+                </div>
+              )}
               {c.accounts.length > 0 ? (
                 <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem' }}>
                   {c.accounts.map((a) => (
-                    <li key={a.id}>
+                    <li
+                      key={a.id}
+                      style={{
+                        opacity: a.excludedFromTotal ? 0.55 : 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                      }}
+                    >
                       <Link href={`/account/${a.id}`}>{accountLabel(a)}</Link>
                       {a.product && a.details ? <span className="muted"> · {a.product}</span> : null}
                       {a.currency ? <span className="muted"> · {a.currency}</span> : null}
+                      <button
+                        onClick={() => toggleExclude(a.id, a.excludedFromTotal ?? false)}
+                        title={
+                          a.excludedFromTotal
+                            ? 'Include in your total wealth'
+                            : 'Exclude from your total wealth'
+                        }
+                        style={{
+                          marginLeft: 'auto',
+                          background: a.excludedFromTotal ? '#1f242a' : '#14171c',
+                          fontSize: '0.7rem',
+                          padding: '0.15rem 0.5rem',
+                        }}
+                      >
+                        {a.excludedFromTotal ? 'excluded' : 'included'}
+                      </button>
                     </li>
                   ))}
                 </ul>

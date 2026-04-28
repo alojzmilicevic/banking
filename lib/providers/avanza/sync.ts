@@ -1,17 +1,15 @@
-import { AvanzaApi, type AvanzaSession, templatePath } from './api'
+import { AvanzaApi, type AvanzaSession } from './api'
 import { paths } from './constants'
+import { chartDate, fetchChartTimeperiod } from './chart'
 import {
   normalizeAccount,
   normalizeBalances,
-  normalizePositionsAndInstruments,
-  normalizeTransaction,
-  type AvanzaOverview,
-  type AvanzaPositionsResponse,
-  type AvanzaTransactionsResponse,
+  type AvanzaCategorizedAccount,
+  type AvanzaCategorizedAccountsResponse,
 } from './normalize'
 import type {
   ConnectionContext,
-  NormalizedInstrument,
+  NormalizedDailyValue,
   SyncOptions,
   SyncResult,
 } from '../types'
@@ -34,56 +32,107 @@ export async function avanzaSync(
 
   const api = new AvanzaApi(stored.session)
 
-  // 1. Account list + per-account totals.
-  const overview = await api.get<AvanzaOverview>(paths.OVERVIEW)
-  const accounts = overview.accounts.map(normalizeAccount)
+  // Account list + current balances.
+  const resp = await api.get<AvanzaCategorizedAccountsResponse>(paths.CATEGORIZED_ACCOUNTS)
 
-  // 2. Positions (with cash-on-account breakdown) — single call covers all accounts.
-  const positions = await api.get<AvanzaPositionsResponse>(paths.POSITIONS)
-  const balances = normalizeBalances(overview, positions)
-  const { positions: normPositions, instruments: posInstruments } =
-    normalizePositionsAndInstruments(positions)
+  const accounts = resp.accounts.map(normalizeAccount)
+  const balances = resp.accounts.flatMap(normalizeBalances)
 
-  // 3. Transactions per account in the requested window.
+  // Historical daily values per account — Avanza's chart endpoint.
+  // Choose a window: longer windows on initial backfill, short windows
+  // on routine syncs (old days are immutable, no point re-fetching).
+  const lookbackDays =
+    Math.round((opts.until.getTime() - opts.since.getTime()) / 86400_000)
+  const period =
+    lookbackDays > 90
+      ? 'ONE_YEAR'
+      : lookbackDays > 30
+        ? 'THREE_MONTHS'
+        : lookbackDays > 7
+          ? 'ONE_MONTH'
+          : 'ONE_WEEK'
+  const dailyValues = await fetchDailyValueSeries(api, resp.accounts, period)
+
   const dateFrom = opts.since.toISOString().slice(0, 10)
   const dateTo = opts.until.toISOString().slice(0, 10)
-
-  const perAccountTxs = await Promise.all(
-    overview.accounts.map(async (a) => {
-      const path = templatePath(paths.TRANSACTIONS, { accountOrType: a.accountId })
-      const qs = new URLSearchParams({ from: dateFrom, to: dateTo }).toString()
-      try {
-        return await api.get<AvanzaTransactionsResponse>(`${path}?${qs}`)
-      } catch (e) {
-        // Don't fail the whole sync if one account's tx fetch errors;
-        // that'd let a corrupt sub-account torpedo the rest.
-        return { transactions: [], error: (e as Error).message } as AvanzaTransactionsResponse & {
-          error?: string
-        }
-      }
-    }),
-  )
-
-  const transactions = []
-  const instrumentMap = new Map<string, NormalizedInstrument>()
-  for (const i of posInstruments) instrumentMap.set(i.id, i)
-
-  for (const resp of perAccountTxs) {
-    for (const t of resp.transactions ?? []) {
-      const { transaction, instrument } = normalizeTransaction(t)
-      if (transaction) transactions.push(transaction)
-      if (instrument && !instrumentMap.has(instrument.id)) {
-        instrumentMap.set(instrument.id, instrument)
-      }
-    }
-  }
 
   return {
     accounts,
     balances,
-    transactions,
-    instruments: Array.from(instrumentMap.values()),
-    positions: normPositions,
+    transactions: [],
+    instruments: [],
+    positions: [],
+    dailyValues,
     syncWindow: { from: dateFrom, to: dateTo },
   }
+}
+
+async function fetchDailyValueSeries(
+  api: AvanzaApi,
+  accounts: AvanzaCategorizedAccount[],
+  period: 'ONE_WEEK' | 'ONE_MONTH' | 'THREE_MONTHS' | 'ONE_YEAR',
+): Promise<NormalizedDailyValue[]> {
+  // urlParameterId is what the chart endpoint expects.
+  const idMap = new Map<string, AvanzaCategorizedAccount>()
+  for (const a of accounts) {
+    if (a.urlParameterId) idMap.set(a.urlParameterId, a)
+  }
+  if (idMap.size === 0) return []
+
+  let chart
+  try {
+    chart = await fetchChartTimeperiod(api, Array.from(idMap.keys()), period)
+  } catch (e) {
+    // Don't fail the whole sync if the chart endpoint regressed; we still
+    // have today's totals. Log and move on.
+    // eslint-disable-next-line no-console
+    console.warn('[avanza] chart/timeperiod failed:', (e as Error).message)
+    return []
+  }
+
+  // The chart API returns the SUMMED valueSeries when multiple accounts
+  // are passed. For a per-account history we'd need to call once per
+  // account. Trade-off: 1 call vs N calls. We do per-account calls so the
+  // daily_account_values table is correctly populated.
+  const out: NormalizedDailyValue[] = []
+  if (idMap.size === 1) {
+    // Single-call path — already fetched.
+    const a = Array.from(idMap.values())[0]
+    for (const p of chart.valueSeries) {
+      out.push({
+        accountId: a.id,
+        date: chartDate(p.timestamp),
+        value: p.performance.value,
+        currency: p.performance.unit,
+      })
+    }
+    return out
+  }
+
+  // Multi-account: fetch each account's chart separately so we can attribute
+  // daily values per account.
+  const perAccount = await Promise.all(
+    Array.from(idMap.entries()).map(async ([scrambledId, account]) => {
+      try {
+        const r = await fetchChartTimeperiod(api, [scrambledId], period)
+        return { account, series: r.valueSeries }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn(`[avanza] chart for ${account.id} failed:`, (e as Error).message)
+        return { account, series: [] }
+      }
+    }),
+  )
+
+  for (const { account, series } of perAccount) {
+    for (const p of series) {
+      out.push({
+        accountId: account.id,
+        date: chartDate(p.timestamp),
+        value: p.performance.value,
+        currency: p.performance.unit,
+      })
+    }
+  }
+  return out
 }

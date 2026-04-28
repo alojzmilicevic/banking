@@ -1,26 +1,32 @@
-// BankID auth flow.
+// BankID auth flow (v2, QR-code based).
 //
-// 1. POST /_api/authentication/sessions/bankid       { identificationNumber }
-//    → { transactionId, expires, autostartToken }
-// 2. GET  /_api/authentication/sessions/bankid/collect  Cookie: AZAMFATRANSACTION=<tid>
-//    → poll every ~2s until state === 'COMPLETE'
-// 3. GET  <login.loginPath>                              (returned by step 2)
+// 1. POST /_api/authentication/v2/sessions/bankid
+//    body { method: 'QR_START', returnScheme: 'NULL' }
+//    → { transactionId, expires, qrToken } + cookie jar updates
+// 2. POST /_api/authentication/v2/sessions/bankid/{transactionId}  (empty body)
+//    → { state, hint, rfa, qrToken? }    poll until state === 'COMPLETE'
+// 3. GET <login.loginPath>     (login from collect response when COMPLETE)
 //    → headers: X-SecurityToken
-//    → body:    { authenticationSession, customerId, pushSubscriptionId }
+//    → body:    { authenticationSession, customerId, ... }
 //
-// Result is the same session shape we'd get from password+TOTP — every
-// subsequent API call uses these tokens.
+// Each step accumulates cookies onto the jar — Avanza's /_api/* endpoints
+// rely on the full set being present for authentication. The orchestrator
+// in ./index.ts threads the cookies through across HTTP requests by
+// serializing them into the auth_states.payload row.
 
 import { AvanzaApi, type AvanzaSession } from '../api'
 import { paths } from '../constants'
 
-export interface BankIdInitiateResult {
+type Cookies = Record<string, string>
+
+export interface BankIdInitResult {
   transactionId: string
-  expires: string // ISO datetime
-  autostartToken: string
+  expires: string
+  qrToken: string
+  cookies: Cookies
 }
 
-export interface BankIdLogin {
+export interface BankIdCollectLogin {
   customerId: string
   username: string
   loginPath: string
@@ -28,34 +34,46 @@ export interface BankIdLogin {
 }
 
 export interface BankIdCollectResult {
-  state: string // OUTSTANDING_TRANSACTION | USER_SIGN | COMPLETE | FAILED | EXPIRED | ...
+  state: string
   transactionId: string
-  name?: string
-  logins?: BankIdLogin[]
-  hintCode?: string // e.g. outstandingTransaction, userSign, started
+  hint?: string
+  rfa?: string
+  qrToken?: string
+  logins?: BankIdCollectLogin[]
   errorMessage?: string
+  cookies: Cookies
 }
 
-export async function bankidInitiate(personnummer: string): Promise<BankIdInitiateResult> {
+export async function bankidInitiate(): Promise<BankIdInitResult> {
   const api = new AvanzaApi()
-  const body = await api.post<BankIdInitiateResult>(paths.BANKID_INITIATE, {
-    identificationNumber: personnummer,
+  const body = await api.post<Omit<BankIdInitResult, 'cookies'>>(paths.BANKID_V2_INITIATE, {
+    method: 'QR_START',
+    returnScheme: 'NULL',
   })
-  if (!body.transactionId) throw new Error('Avanza BankID initiate: missing transactionId')
-  return body
+  if (!body.transactionId || !body.qrToken) {
+    throw new Error(`Avanza BankID init: unexpected response ${JSON.stringify(body)}`)
+  }
+  return { ...body, cookies: api.cookieMap() }
 }
 
-export async function bankidCollect(transactionId: string): Promise<BankIdCollectResult> {
+export async function bankidCollect(
+  transactionId: string,
+  cookies: Cookies,
+): Promise<BankIdCollectResult> {
   const api = new AvanzaApi()
-  api.setCookie('AZAMFATRANSACTION', transactionId)
-  return api.get<BankIdCollectResult>(paths.BANKID_COLLECT)
+  for (const [k, v] of Object.entries(cookies)) api.setCookie(k, v)
+  const body = await api.post<Omit<BankIdCollectResult, 'cookies'>>(
+    paths.BANKID_V2_COLLECT.replace('{transactionId}', encodeURIComponent(transactionId)),
+  )
+  return { ...body, cookies: api.cookieMap() }
 }
 
-// Final step after BankID returns COMPLETE — picks a login and fetches the
-// session tokens. By default takes the first login; the caller can pre-pick
-// by username if there are multiple Avanza accounts on the same personnummer.
-export async function bankidFinalize(login: BankIdLogin): Promise<AvanzaSession> {
+export async function bankidFinalize(
+  login: BankIdCollectLogin,
+  cookies: Cookies,
+): Promise<AvanzaSession> {
   const api = new AvanzaApi()
+  for (const [k, v] of Object.entries(cookies)) api.setCookie(k, v)
   const { headers, body } = await api.raw<{
     authenticationSession: string
     pushSubscriptionId?: string
@@ -76,6 +94,7 @@ export async function bankidFinalize(login: BankIdLogin): Promise<AvanzaSession>
     authenticationSession: body.authenticationSession,
     customerId: body.customerId ?? login.customerId,
     pushSubscriptionId: body.pushSubscriptionId,
-    expiresAt: Date.now() + 55 * 60 * 1000, // generous: re-auth before 60 min idle
+    cookies: api.cookieMap(),
+    expiresAt: Date.now() + 55 * 60 * 1000,
   }
 }

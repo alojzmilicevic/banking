@@ -15,6 +15,27 @@
       "when": 1777366751978,
       "tag": "0001_overrated_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1777375021958,
+      "tag": "0002_old_thing",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1777384397347,
+      "tag": "0003_messy_shinko_yamashiro",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1777385993824,
+      "tag": "0004_bumpy_red_ghost",
+      "breakpoints": true
     }
   ]
 }

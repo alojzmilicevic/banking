@@ -1,5 +1,6 @@
 import { and, eq, gte } from 'drizzle-orm'
 import {
+  accountValueHistory,
   accounts,
   balances,
   connections,
@@ -47,10 +48,20 @@ export async function syncConnection(
   const until = new Date()
   const since = new Date(until.getTime() - lookbackDays * 86400_000)
 
-  const result = await provider.sync(
-    { id: conn.id, externalId: conn.externalId, rawJson: conn.rawJson },
-    { since, until },
-  )
+  let result
+  try {
+    result = await provider.sync(
+      { id: conn.id, externalId: conn.externalId, rawJson: conn.rawJson },
+      { since, until },
+    )
+  } catch (e) {
+    const message = (e as Error).message
+    db.update(connections)
+      .set({ lastSyncError: message })
+      .where(eq(connections.id, connectionId))
+      .run()
+    throw e
+  }
 
   const now = Date.now()
 
@@ -217,17 +228,40 @@ export async function syncConnection(
         .run()
     }
 
+    // Per-account daily value history (Avanza chart series).
+    // UPSERT only — older rows are immutable (a stock's value on March 1
+    // doesn't change retroactively), so we never delete. Each sync just
+    // refines/adds the days the chart endpoint returned this time.
+    for (const v of result.dailyValues ?? []) {
+      tx.insert(accountValueHistory)
+        .values({
+          accountId: v.accountId,
+          date: v.date,
+          value: v.value,
+          currency: v.currency,
+          fetchedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [accountValueHistory.accountId, accountValueHistory.date],
+          set: { value: v.value, currency: v.currency, fetchedAt: now },
+        })
+        .run()
+    }
+
     tx.update(connections)
       .set({
         lastSyncedAt: now,
+        lastSyncError: null, // clear any previous error on successful sync
         ...(isInitial ? { initialSyncedAt: now } : {}),
       })
       .where(eq(connections.id, connectionId))
       .run()
   })
 
-  // Recompute today's daily wealth snapshot for this user. Cheap (DB-only).
-  rebuildSnapshotsForUser(conn.userId, { onlyToday: true })
+  // Recompute the full last-365-day wealth snapshot series. DB-only and
+  // fast — uses Avanza account_value_history for investments + EB
+  // transaction walkback for cash, joined per day.
+  rebuildSnapshotsForUser(conn.userId, { daysBack: 365 })
 
   return {
     connectionId,
@@ -244,11 +278,26 @@ export async function syncConnection(
   }
 }
 
-export async function syncAllForUser(userId: string): Promise<SyncOutcome[]> {
+export interface SyncRunResult {
+  connectionId: string
+  outcome?: SyncOutcome
+  error?: string
+}
+
+export async function syncAllForUser(userId: string): Promise<SyncRunResult[]> {
   const conns = db
     .select()
     .from(connections)
     .where(and(eq(connections.userId, userId), eq(connections.status, 'active')))
     .all()
-  return Promise.all(conns.map((c) => syncConnection(c.id)))
+  const settled = await Promise.allSettled(conns.map((c) => syncConnection(c.id)))
+  return settled.map((r, i) => {
+    if (r.status === 'fulfilled') {
+      return { connectionId: conns[i].id, outcome: r.value }
+    }
+    return {
+      connectionId: conns[i].id,
+      error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+    }
+  })
 }

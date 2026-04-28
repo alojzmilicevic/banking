@@ -1,26 +1,38 @@
-// Avanza internal API endpoints. Cribbed from fhqvst/avanza and
-// codler/avanza-api as reference. These can change at any time without
-// notice — when they do, update them here.
+// Avanza internal API endpoints (reverse-engineered from the live frontend
+// at avanza.se). These can change at any time without notice — when they
+// do, update them here.
 
 export const BASE = 'https://www.avanza.se'
 
 export const paths = {
-  // Auth
+  // Auth (BankID v2, QR-code flow)
+  BANKID_V2_INITIATE: '/_api/authentication/v2/sessions/bankid',
+  BANKID_V2_COLLECT: '/_api/authentication/v2/sessions/bankid/{transactionId}',
+
+  // Auth (legacy username + TOTP — for headless cron once we have password)
   USERCREDENTIALS: '/_api/authentication/sessions/usercredentials',
   TOTP: '/_api/authentication/sessions/totp',
-  BANKID_INITIATE: '/_api/authentication/sessions/bankid',
-  BANKID_COLLECT: '/_api/authentication/sessions/bankid/collect',
 
-  // Account data
-  OVERVIEW: '/_mobile/account/overview',
-  ACCOUNT_OVERVIEW: '/_mobile/account/{accountId}/overview',
-  POSITIONS: '/_mobile/account/positions',
-  TRANSACTIONS: '/_mobile/account/transactions/{accountOrType}',
-  DEALS_AND_ORDERS: '/_mobile/account/dealsandorders',
+  // Account data — the new /_api/account-overview/* family that the
+  // current avanza.se frontend uses. Cookie-authenticated.
+  CATEGORIZED_ACCOUNTS: '/_api/account-overview/overview/categorizedAccounts',
 
-  // Instruments
-  INSTRUMENT: '/_mobile/market/{type}/{id}',
+  // POST endpoints — require X-SecurityToken: <AZACSRF cookie value>.
+  TOTAL_VALUES: '/_api/account-performance/overview/total-values',
+  CHART_TIMEPERIOD: '/_api/account-performance/overview/chart/accounts/timeperiod',
 }
+
+// Time periods accepted by the chart/timeperiod endpoint.
+export type ChartTimePeriod =
+  | 'TODAY'
+  | 'ONE_WEEK'
+  | 'ONE_MONTH'
+  | 'THREE_MONTHS'
+  | 'THIS_YEAR'
+  | 'ONE_YEAR'
+  | 'THREE_YEARS'
+  | 'FIVE_YEARS'
+  | 'ALL_TIME'
 
 // Avanza account type codes → our normalized AccountKind.
 export const ACCOUNT_TYPE_KIND: Record<string, 'cash' | 'investment' | 'pension'> = {

@@ -1,128 +1,87 @@
 import { NextResponse } from 'next/server'
-import { and, desc, gte, ne, sql } from 'drizzle-orm'
-import { connections, db, transactions, users } from '@/lib/db/client'
+import { db, users } from '@/lib/db/client'
 import {
-  computeAccountTotals,
-  computeUserSnapshot,
+  computeTodaySnapshot,
   getSnapshotsRange,
 } from '@/lib/sync/snapshots'
 
 const MS_DAY = 86400_000
 
-// Tx kinds that move money in/out of total wealth. Buy/sell/transfer/fx
-// are *internal* to the account or netted across accounts — they don't
-// change net worth, so they're excluded from the walkback.
-const WEALTH_AFFECTING_KINDS = new Set([
-  'cash_in',
-  'cash_out',
-  'dividend',
-  'interest',
-  'fee',
-  'tax',
-])
-
-interface SeriesPoint {
-  date: string
-  total: number
-  source: 'snapshot' | 'reconstructed'
-}
+// Period codes: how far back the chart looks. All snapshots already
+// live in daily_snapshots — this just slices the date range.
+const PERIODS = ['1W', '1M', '3M', '6M', 'YTD', '1Y', 'ALL'] as const
+type Period = (typeof PERIODS)[number]
 
 function isoDay(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-export async function GET() {
+function periodFromDate(period: Period, today: Date): string {
+  const t = new Date(today)
+  t.setUTCHours(0, 0, 0, 0)
+  switch (period) {
+    case '1W':
+      return isoDay(new Date(t.getTime() - 7 * MS_DAY))
+    case '1M':
+      return isoDay(new Date(t.getTime() - 30 * MS_DAY))
+    case '3M':
+      return isoDay(new Date(t.getTime() - 90 * MS_DAY))
+    case '6M':
+      return isoDay(new Date(t.getTime() - 180 * MS_DAY))
+    case 'YTD': {
+      const jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1))
+      return isoDay(jan1)
+    }
+    case '1Y':
+      return isoDay(new Date(t.getTime() - 365 * MS_DAY))
+    case 'ALL':
+    default:
+      // Bounded by what we have (365 days). Future-proof: when we extend
+      // history, ALL should pick the earliest snapshot date.
+      return '0000-01-01'
+  }
+}
+
+export async function GET(req: Request) {
+  const url = new URL(req.url)
+  const periodParam = url.searchParams.get('period') ?? '1Y'
+  const period = (PERIODS as readonly string[]).includes(periodParam)
+    ? (periodParam as Period)
+    : '1Y'
+
   const user = db.select().from(users).get()
   if (!user) {
-    return NextResponse.json({ series: [], currency: null, accounts: 0 })
+    return NextResponse.json({ series: [], currency: null, accounts: 0, period })
   }
 
-  // ── Today's totals (always computed live) ─────────────────────────────
-  const totals = computeAccountTotals(user.id)
-  const todaySnap = computeUserSnapshot(user.id)
-  const currentTotal = todaySnap.totalAmount
+  const today = computeTodaySnapshot(user.id)
+  const fromIso = periodFromDate(period, new Date())
+  const snaps = getSnapshotsRange(user.id, fromIso, today.date)
 
-  // ── Tx-based walkback covers the cash side over the last 365 days.
-  // Investments are held flat at today's value (no historical price data
-  // to do better). Once daily_snapshots accumulate over time, those win
-  // over the walkback for the dates they cover.
-  const userConns = db.select().from(connections).where(sql`${connections.userId} = ${user.id}`).all()
-  const userAccountIds = totals.map((t) => t.accountId)
-
-  const since = isoDay(new Date(Date.now() - 365 * MS_DAY))
-  const today = isoDay(new Date())
-
-  const rawTxs =
-    userAccountIds.length === 0
-      ? []
-      : db
-          .select({
-            date: transactions.date,
-            amount: transactions.amount,
-            kind: transactions.kind,
-          })
-          .from(transactions)
-          .where(
-            and(
-              gte(transactions.date, since),
-              ne(transactions.status, 'PDNG'),
-              ne(transactions.status, 'INFO'),
-              sql`${transactions.accountId} IN (${sql.join(
-                userAccountIds.map((id) => sql`${id}`),
-                sql`, `,
-              )})`,
-            ),
-          )
-          .orderBy(desc(transactions.date))
-          .all()
-          .filter((t) => !t.kind || WEALTH_AFFECTING_KINDS.has(t.kind))
-
-  // Walk back day by day, subtracting wealth-affecting txs that occurred
-  // strictly after each snapshot day.
-  const points: SeriesPoint[] = []
-  let running = currentTotal
-  let cursor = 0
-
-  for (let d = 0; d <= 365; d++) {
-    const dayStart = new Date(Date.now() - d * MS_DAY)
-    dayStart.setUTCHours(0, 0, 0, 0)
-    const dayIso = isoDay(dayStart)
-
-    while (cursor < rawTxs.length && rawTxs[cursor].date > dayIso) {
-      running -= rawTxs[cursor].amount
-      cursor++
-    }
-    points.push({
-      date: dayIso,
-      total: Math.round(running * 100) / 100,
-      source: 'reconstructed',
-    })
-  }
-
-  points.reverse()
-
-  // ── Overlay actual snapshots where we have them. They beat the
-  // reconstruction because they capture investment market drift the
-  // walkback can't see.
-  if (userConns.length > 0) {
-    const snaps = getSnapshotsRange(user.id, since, today)
-    const map = new Map(snaps.map((s) => [s.date, s.totalAmount]))
-    for (const p of points) {
-      const real = map.get(p.date)
-      if (real != null) {
-        p.total = Math.round(real * 100) / 100
-        p.source = 'snapshot'
-      }
-    }
-  }
+  const series = snaps.length
+    ? snaps.map((s) => ({
+        date: s.date,
+        total: s.totalAmount,
+        cash: s.cashAmount,
+        investments: s.investmentAmount,
+      }))
+    : [
+        {
+          date: today.date,
+          total: today.totalAmount,
+          cash: today.cashAmount,
+          investments: today.investmentAmount,
+        },
+      ]
 
   return NextResponse.json({
-    series: points.map((p) => ({ date: p.date, total: p.total, source: p.source })),
-    currency: todaySnap.baseCurrency,
-    accounts: totals.length,
-    cashTotal: Math.round(todaySnap.cashAmount * 100) / 100,
-    investmentTotal: Math.round(todaySnap.investmentAmount * 100) / 100,
-    snapshots: points.filter((p) => p.source === 'snapshot').length,
-    errors: todaySnap.currencyMismatches.length ? todaySnap.currencyMismatches : undefined,
+    series,
+    currency: today.baseCurrency,
+    accounts: snaps.length,
+    cashTotal: today.cashAmount,
+    investmentTotal: today.investmentAmount,
+    period,
+    snapshots: snaps.length,
+    errors: today.currencyMismatches.length ? today.currencyMismatches : undefined,
   })
 }
