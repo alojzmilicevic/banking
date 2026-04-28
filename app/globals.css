@@ -1,0 +1,64 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  background: #0b0d10;
+  color: #e6e8eb;
+  font-size: 15px;
+  line-height: 1.5;
+}
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+h1 { font-size: 1.6rem; margin: 0 0 1.5rem; }
+h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+button {
+  background: #2d6cdf;
+  color: white;
+  border: 0;
+  padding: 0.55rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+button:hover:not(:disabled) { background: #2558b8; }
+button:disabled { background: #2a2f36; color: #777; cursor: not-allowed; }
+button.danger { background: #4a1f24; color: #ffb3b3; }
+button.danger:hover:not(:disabled) { background: #6b2830; }
+a { color: #6ea8ff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+table { width: 100%; border-collapse: collapse; margin-top: 0.25rem; }
+th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid #1c1f24; font-size: 0.9rem; }
+th { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #888; font-weight: 500; }
+td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.card { background: #14171c; border: 1px solid #1f242a; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+.muted { color: #888; font-size: 0.85rem; }
+.row { display: flex; gap: 0.75rem; align-items: center; }
+.row.between { justify-content: space-between; }
+.pill { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; background: #1f242a; color: #aaa; }
+.pill.ok { background: #133621; color: #6ee7a7; }
+.pill.warn { background: #3a2a10; color: #fbbf60; }
+select, input {
+  background: #14171c;
+  color: #e6e8eb;
+  border: 1px solid #2a2f36;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+.error {
+  background: #2a1416;
+  border: 1px solid #5b2127;
+  color: #ffb3b3;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  word-break: break-word;
+}
+.amount-pos { color: #6ee7a7; }
+.amount-neg { color: #ff8b8b; }
