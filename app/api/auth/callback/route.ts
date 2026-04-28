@@ -6,8 +6,8 @@ import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/sync/orchestrator'
 
 // OAuth-style return URL (Enable Banking, future redirect-based providers).
-// Polling-based providers (Avanza/BankID) never hit this endpoint — they
-// finalize via /api/auth/poll instead.
+// Cookie-based providers (Avanza) never hit this endpoint — they create
+// the connection synchronously in /api/auth/start.
 
 export async function GET(req: Request) {
   const url = new URL(req.url)

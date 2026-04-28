@@ -24,10 +24,10 @@ export async function avanzaSync(
 ): Promise<SyncResult> {
   const stored = JSON.parse(connection.rawJson || '{}') as Partial<StoredAvanzaConnection>
   if (!stored.session) {
-    throw new Error('Avanza connection has no session — re-link via BankID required')
+    throw new Error('Avanza connection has no session — re-link via Read from Chrome / paste cookies')
   }
   if (stored.session.expiresAt < Date.now()) {
-    throw new Error('Avanza session expired — re-link via BankID required')
+    throw new Error('Avanza session expired — re-link via Read from Chrome / paste cookies')
   }
 
   const api = new AvanzaApi(stored.session)
