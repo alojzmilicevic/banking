@@ -36,6 +36,20 @@
       "when": 1777385993824,
       "tag": "0004_bumpy_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1777579836009,
+      "tag": "0005_drop_unused_raw_json",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1777619087191,
+      "tag": "0006_add_connection_holder",
+      "breakpoints": true
     }
   ]
 }

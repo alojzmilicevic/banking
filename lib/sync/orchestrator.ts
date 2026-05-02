@@ -10,7 +10,8 @@ import {
   transactions,
 } from '@/lib/db/client'
 import { getProvider } from '@/lib/providers/registry'
-import { loadCredentials } from './credentials'
+import { classifyError } from './errors'
+import { loadCredentials, saveCredentials } from './credentials'
 import { rebuildSnapshotsForUser } from './snapshots'
 
 const INITIAL_LOOKBACK_DAYS = 365
@@ -61,12 +62,15 @@ export async function syncConnection(
       { since, until },
     )
   } catch (e) {
-    const message = (e as Error).message
+    // Classify so the persisted error carries an actionable category prefix
+    // and the thrown error becomes a SyncError (callers can match on
+    // .category instead of regex-ing the message).
+    const classified = classifyError(e)
     db.update(connections)
-      .set({ lastSyncError: message })
+      .set({ lastSyncError: `[${classified.category}] ${classified.message}` })
       .where(eq(connections.id, connectionId))
       .run()
-    throw e
+    throw classified
   }
 
   const now = Date.now()
@@ -84,7 +88,6 @@ export async function syncConnection(
           isin: i.isin ?? null,
           providerId: i.providerId ?? null,
           providerInstrumentId: i.providerInstrumentId ?? null,
-          rawJson: JSON.stringify(i.raw),
           updatedAt: now,
         })
         .onConflictDoUpdate({
@@ -95,7 +98,6 @@ export async function syncConnection(
             ticker: i.ticker ?? null,
             currency: i.currency ?? null,
             isin: i.isin ?? null,
-            rawJson: JSON.stringify(i.raw),
             updatedAt: now,
           },
         })
@@ -118,7 +120,6 @@ export async function syncConnection(
           iban: a.iban ?? null,
           bban: a.bban ?? null,
           bic: a.bic ?? null,
-          rawJson: JSON.stringify(a.raw),
           updatedAt: now,
         })
         .onConflictDoUpdate({
@@ -134,7 +135,6 @@ export async function syncConnection(
             iban: a.iban ?? null,
             bban: a.bban ?? null,
             bic: a.bic ?? null,
-            rawJson: JSON.stringify(a.raw),
             updatedAt: now,
           },
         })
@@ -154,7 +154,6 @@ export async function syncConnection(
           amount: b.amount,
           currency: b.currency,
           referenceDate: b.referenceDate ?? null,
-          rawJson: JSON.stringify(b.raw),
           fetchedAt: now,
         })
         .onConflictDoUpdate({
@@ -163,7 +162,6 @@ export async function syncConnection(
             amount: b.amount,
             currency: b.currency,
             referenceDate: b.referenceDate ?? null,
-            rawJson: JSON.stringify(b.raw),
             fetchedAt: now,
           },
         })
@@ -186,7 +184,6 @@ export async function syncConnection(
           avgCost: p.avgCost ?? null,
           marketValue: p.marketValue ?? null,
           currency: p.currency,
-          rawJson: JSON.stringify(p.raw),
           fetchedAt: now,
         })
         .run()
@@ -214,7 +211,6 @@ export async function syncConnection(
           status: t.status ?? null,
           description: t.description ?? null,
           counterparty: t.counterparty ?? null,
-          rawJson: JSON.stringify(t.raw),
         })
         .onConflictDoUpdate({
           target: [transactions.accountId, transactions.fingerprint],
@@ -228,7 +224,6 @@ export async function syncConnection(
             status: t.status ?? null,
             description: t.description ?? null,
             counterparty: t.counterparty ?? null,
-            rawJson: JSON.stringify(t.raw),
           },
         })
         .run()
@@ -259,10 +254,19 @@ export async function syncConnection(
         lastSyncedAt: now,
         lastSyncError: null, // clear any previous error on successful sync
         ...(isInitial ? { initialSyncedAt: now } : {}),
+        ...(result.connectionValidUntil ? { validUntil: result.connectionValidUntil } : {}),
       })
       .where(eq(connections.id, connectionId))
       .run()
   })
+
+  // Persist any provider-rotated credentials. Done outside the data
+  // transaction so a credentials write isn't strictly tied to the data
+  // sync — we'd rather keep the data sync atomic and treat credential
+  // refresh as a best-effort follow-up.
+  if (result.refreshedCredentials) {
+    saveCredentials(conn.id, result.refreshedCredentials)
+  }
 
   // Recompute the full last-365-day wealth snapshot series. DB-only and
   // fast — uses Avanza account_value_history for investments + EB

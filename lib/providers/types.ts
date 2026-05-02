@@ -60,7 +60,6 @@ export interface NormalizedAccount {
   iban?: string | null
   bban?: string | null
   bic?: string | null
-  raw: unknown
 }
 
 export interface NormalizedBalance {
@@ -69,7 +68,6 @@ export interface NormalizedBalance {
   amount: number
   currency: string
   referenceDate?: string | null
-  raw: unknown
 }
 
 export type TransactionKind =
@@ -98,7 +96,6 @@ export interface NormalizedTransaction {
   status?: string | null
   description?: string | null
   counterparty?: string | null
-  raw: unknown
 }
 
 export interface NormalizedInstrument {
@@ -111,7 +108,6 @@ export interface NormalizedInstrument {
   isin?: string | null
   providerId?: string | null
   providerInstrumentId?: string | null
-  raw: unknown
 }
 
 export interface NormalizedPosition {
@@ -121,7 +117,6 @@ export interface NormalizedPosition {
   avgCost?: number | null
   marketValue?: number | null
   currency: string
-  raw: unknown
 }
 
 export interface NormalizedDailyValue {
@@ -141,6 +136,15 @@ export interface SyncResult {
   // Only present for providers that expose this; cash-only providers
   // leave it empty and rely on tx walkback in the snapshot builder.
   dailyValues?: NormalizedDailyValue[]
+  // Provider-rotated credentials to persist after this sync. Avanza
+  // rotates session cookies (notably AZACSRF) on most data calls — without
+  // this round-trip the stored jar drifts behind the live session.
+  refreshedCredentials?: Record<string, unknown>
+  // Push connections.validUntil forward when a successful sync proves the
+  // session is still alive. Used by Avanza, which has no client-readable
+  // session lifetime; EB leaves this unset since its validUntil is the
+  // PSD2 consent expiry agreed at link time.
+  connectionValidUntil?: number
   syncWindow: { from: string; to: string }
 }
 

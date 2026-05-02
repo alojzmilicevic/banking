@@ -13,6 +13,7 @@ import type {
   SyncOptions,
   SyncResult,
 } from '../types'
+import { AuthExpiredError } from '@/lib/sync/errors'
 
 interface AvanzaConnectionMeta {
   expiresAt?: number
@@ -34,20 +35,17 @@ export async function avanzaSync(
     | { cookies?: Record<string, string> }
     | undefined
   const cookies = fromCreds?.cookies ?? meta.session?.cookies
-  const expiresAt = meta.expiresAt ?? meta.session?.expiresAt ?? 0
 
   if (!cookies || Object.keys(cookies).length === 0) {
-    throw new Error(
+    throw new AuthExpiredError(
       'Avanza connection has no cookies — re-link via Read from Chrome / paste cookies',
     )
   }
-  if (expiresAt < Date.now()) {
-    throw new Error(
-      'Avanza session expired — re-link via Read from Chrome / paste cookies',
-    )
-  }
 
-  const session: AvanzaSession = { cookies, expiresAt }
+  // No wall-clock expiry precheck: Avanza's session cookies don't carry a
+  // client-readable lifetime. Let the API call fail naturally if the jar
+  // is stale, and the orchestrator surfaces an auth-shaped error.
+  const session: AvanzaSession = { cookies, expiresAt: 0 }
   const api = new AvanzaApi(session)
 
   // Account list + current balances.
@@ -57,19 +55,11 @@ export async function avanzaSync(
   const balances = resp.accounts.flatMap(normalizeBalances)
 
   // Historical daily values per account — Avanza's chart endpoint.
-  // Choose a window: longer windows on initial backfill, short windows
-  // on routine syncs (old days are immutable, no point re-fetching).
-  const lookbackDays =
-    Math.round((opts.until.getTime() - opts.since.getTime()) / 86400_000)
-  const period =
-    lookbackDays > 90
-      ? 'ONE_YEAR'
-      : lookbackDays > 30
-        ? 'THREE_MONTHS'
-        : lookbackDays > 7
-          ? 'ONE_MONTH'
-          : 'ONE_WEEK'
-  const dailyValues = await fetchDailyValueSeries(api, resp.accounts, period)
+  // Always request ONE_YEAR: the chart returns whatever range the account
+  // actually has data for (often less for newer accounts), and rows are
+  // UPSERTed into account_value_history so the cache only grows. Asking
+  // for a shorter window on incremental syncs would just leave gaps.
+  const dailyValues = await fetchDailyValueSeries(api, resp.accounts, 'ONE_YEAR')
 
   const dateFrom = opts.since.toISOString().slice(0, 10)
   const dateTo = opts.until.toISOString().slice(0, 10)
@@ -81,6 +71,14 @@ export async function avanzaSync(
     instruments: [],
     positions: [],
     dailyValues,
+    // Round-trip whatever the cookie jar looks like now — AZACSRF in
+    // particular gets refreshed mid-sync, and dropping the new value here
+    // means the next sync would still send the stale one and fail CSRF.
+    refreshedCredentials: { cookies: api.cookieMap() },
+    // Successful sync ⇒ session is alive *now*. The UI's "consent
+    // expired" warning should fire ~60min after the last working sync,
+    // which lines up with Avanza's typical idle timeout.
+    connectionValidUntil: Date.now() + 60 * 60 * 1000,
     syncWindow: { from: dateFrom, to: dateTo },
   }
 }
@@ -103,7 +101,6 @@ async function fetchDailyValueSeries(
   } catch (e) {
     // Don't fail the whole sync if the chart endpoint regressed; we still
     // have today's totals. Log and move on.
-    // eslint-disable-next-line no-console
     console.warn('[avanza] chart/timeperiod failed:', (e as Error).message)
     return []
   }
@@ -135,7 +132,6 @@ async function fetchDailyValueSeries(
         const r = await fetchChartTimeperiod(api, [scrambledId], period)
         return { account, series: r.valueSeries }
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.warn(`[avanza] chart for ${account.id} failed:`, (e as Error).message)
         return { account, series: [] }
       }

@@ -4,6 +4,8 @@ import { eq } from 'drizzle-orm'
 import { authStates, connections, db } from '@/lib/db/client'
 import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/sync/orchestrator'
+import { AuthCallbackQuerySchema } from '@/lib/api/schemas'
+import { validateQuery } from '@/lib/api/validate'
 
 // OAuth-style return URL (Enable Banking, future redirect-based providers).
 // Cookie-based providers (Avanza) never hit this endpoint — they create
@@ -11,10 +13,11 @@ import { syncConnection } from '@/lib/sync/orchestrator'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
-  const code = url.searchParams.get('code')
-  const state = url.searchParams.get('state')
-  const error = url.searchParams.get('error')
-  const errorDesc = url.searchParams.get('error_description')
+  const parsed = validateQuery(url, AuthCallbackQuerySchema)
+  if (!parsed.ok) {
+    return NextResponse.redirect(`${url.origin}/?error=invalid_callback_query`)
+  }
+  const { code, state, error, error_description: errorDesc } = parsed.data
 
   if (error) {
     return NextResponse.redirect(`${url.origin}/?error=${encodeURIComponent(errorDesc || error)}`)
@@ -40,6 +43,15 @@ export async function GET(req: Request) {
     }
     const completed = await provider.completeAuth({ state, code: code ?? undefined })
 
+    let holder: 'alma' | 'alojz' | 'joint' | null = null
+    try {
+      const parsedPayload = JSON.parse(pending.payload) as { holder?: string }
+      const h = parsedPayload.holder
+      if (h === 'alma' || h === 'alojz' || h === 'joint') holder = h
+    } catch {
+      // Legacy / malformed payload — leave holder unset.
+    }
+
     const connectionId = randomUUID()
     db.insert(connections)
       .values({
@@ -48,6 +60,7 @@ export async function GET(req: Request) {
         providerId: pending.providerId,
         externalId: completed.externalId,
         label: completed.label ?? null,
+        holder,
         status: 'active',
         validUntil: completed.validUntil ?? null,
         rawJson: JSON.stringify(completed.raw),

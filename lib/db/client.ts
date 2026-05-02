@@ -13,7 +13,6 @@ const MIGRATIONS_FOLDER = path.join(process.cwd(), 'lib', 'db', 'migrations')
 type Drizzle = ReturnType<typeof drizzle<typeof schema>>
 
 declare global {
-  // eslint-disable-next-line no-var
   var __bankingDb: Drizzle | undefined
 }
 

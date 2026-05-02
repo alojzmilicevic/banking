@@ -88,7 +88,6 @@ export function importLegacyIfPresent(
             iban: a.account_id?.iban ?? null,
             bban: a.account_id?.bban ?? a.account_id?.other?.identification ?? null,
             bic: a.account_servicer?.bic_fi ?? null,
-            rawJson: JSON.stringify(a),
           })
           .run()
         accountCount++

@@ -54,10 +54,6 @@ describe('normalizeAccount', () => {
     ).toBe('12345')
   })
 
-  it('preserves the full raw payload', () => {
-    expect(normalizeAccount(baseAccount).raw).toBe(baseAccount)
-  })
-
   it('clearingAccountNumber maps to bban', () => {
     expect(
       normalizeAccount({ ...baseAccount, clearingAccountNumber: '9554-1894850' }).bban,

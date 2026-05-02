@@ -60,7 +60,6 @@ function normalizeAccount(a: EBAccount): NormalizedAccount {
     iban: a.account_id?.iban ?? null,
     bban: a.account_id?.bban ?? a.account_id?.other?.identification ?? null,
     bic: a.account_servicer?.bic_fi ?? null,
-    raw: a,
   }
 }
 
@@ -71,7 +70,6 @@ function normalizeBalance(accountId: string, b: EBBalance): NormalizedBalance {
     amount: parseFloat(b.balance_amount.amount),
     currency: b.balance_amount.currency,
     referenceDate: b.reference_date ?? null,
-    raw: b,
   }
 }
 
@@ -89,7 +87,6 @@ function normalizeTransaction(accountId: string, t: EBTransaction): NormalizedTr
     status: t.status ?? null,
     description: (t.remittance_information ?? []).join(' ') || null,
     counterparty: t.creditor?.name ?? t.debtor?.name ?? null,
-    raw: t,
   }
 }
 

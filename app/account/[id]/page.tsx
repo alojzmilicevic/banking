@@ -1,50 +1,20 @@
 'use client'
-import { use, useEffect, useState } from 'react'
+import { use } from 'react'
 import Link from 'next/link'
-
-interface Tx {
-  fingerprint: string
-  date: string
-  amount: number
-  currency: string
-  status: string | null
-  description: string | null
-  counterparty: string | null
-}
-
-interface Account {
-  id: string
-  name: string | null
-  details: string | null
-  product: string | null
-  accountType: string | null
-  currency: string | null
-  iban: string | null
-  bban: string | null
-  bic: string | null
-}
-
-interface Connection {
-  id: string
-  providerId: string
-  label: string | null
-  validUntil: number | null
-  lastSyncedAt: number | null
-}
-
-interface Balance {
-  balanceType: string
-  amount: number
-  currency: string
-  referenceDate: string | null
-}
-
-function describe(t: Tx) {
-  return t.description || t.counterparty || '—'
-}
+import { Alert } from '@/components/ui/alert'
+import { Card, CardTitle } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { useAccount, useAccountTransactions } from '@/lib/queries'
 
 function fmtAmount(amount: number, currency: string) {
-  const cls = amount < 0 ? 'amount-neg' : amount > 0 ? 'amount-pos' : ''
+  const cls = amount < 0 ? 'text-neg' : amount > 0 ? 'text-pos' : ''
   const formatted = amount.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -58,145 +28,122 @@ function fmtAmount(amount: number, currency: string) {
 
 export default function AccountPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const [account, setAccount] = useState<Account | null>(null)
-  const [connection, setConnection] = useState<Connection | null>(null)
-  const [balances, setBalances] = useState<Balance[]>([])
-  const [transactions, setTransactions] = useState<Tx[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const accountQ = useAccount(id)
+  const txQ = useAccountTransactions(id)
 
-  useEffect(() => {
-    let alive = true
-    setLoading(true)
+  const account = accountQ.data?.account
+  const connection = accountQ.data?.connection
+  const balances = accountQ.data?.balances ?? []
+  const transactions = txQ.data?.transactions ?? []
 
-    Promise.all([
-      fetch(`/api/accounts/${id}`).then(async (r) => {
-        const d = await r.json()
-        if (!r.ok) throw new Error(d.error || r.statusText)
-        return d
-      }),
-      fetch(`/api/accounts/${id}/transactions`).then(async (r) => {
-        const d = await r.json()
-        if (!r.ok) throw new Error(d.error || r.statusText)
-        return d
-      }),
-    ])
-      .then(([acc, tx]) => {
-        if (!alive) return
-        setAccount(acc.account)
-        setConnection(acc.connection)
-        setBalances(acc.balances || [])
-        setTransactions(tx.transactions || [])
-      })
-      .catch((e) => {
-        if (alive) setError(e instanceof Error ? e.message : String(e))
-      })
-      .finally(() => alive && setLoading(false))
+  const error =
+    accountQ.error?.message ?? txQ.error?.message ?? null
+  const loading = accountQ.isLoading || txQ.isLoading
 
-    return () => {
-      alive = false
-    }
-  }, [id])
-
-  const title = account?.details || account?.product || account?.name || account?.iban || 'Account'
+  const title =
+    account?.details || account?.product || account?.name || account?.iban || 'Account'
 
   return (
-    <main>
-      <p style={{ marginTop: 0 }}>
+    <main className="mx-auto max-w-[960px] px-6 pb-16 pt-8">
+      <p className="mt-0">
         <Link href="/">← back</Link>
       </p>
-      <h1>{title}</h1>
-      {error && <div className="error">{error}</div>}
+      <h1 className="mb-6 text-[1.6rem] font-semibold">{title}</h1>
+      {error && <Alert>{error}</Alert>}
 
       {account && (
-        <div className="card">
-          <h2>Details</h2>
+        <Card>
+          <CardTitle>Details</CardTitle>
           {connection?.label && (
-            <p className="muted" style={{ margin: '0.25rem 0' }}>{connection.label}</p>
+            <p className="my-1 text-sm text-muted-foreground">{connection.label}</p>
           )}
           {account.name && (
-            <p className="muted" style={{ margin: '0.25rem 0' }}>Holder: {account.name}</p>
+            <p className="my-1 text-sm text-muted-foreground">Holder: {account.name}</p>
           )}
           {account.product && (
-            <p className="muted" style={{ margin: '0.25rem 0' }}>Product: {account.product}</p>
+            <p className="my-1 text-sm text-muted-foreground">Product: {account.product}</p>
           )}
           {account.iban && (
-            <p className="muted" style={{ margin: '0.25rem 0' }}>IBAN: {account.iban}</p>
+            <p className="my-1 text-sm text-muted-foreground">IBAN: {account.iban}</p>
           )}
           {account.bban && (
-            <p className="muted" style={{ margin: '0.25rem 0' }}>BBAN: {account.bban}</p>
+            <p className="my-1 text-sm text-muted-foreground">BBAN: {account.bban}</p>
           )}
           {account.bic && (
-            <p className="muted" style={{ margin: '0.25rem 0' }}>BIC: {account.bic}</p>
+            <p className="my-1 text-sm text-muted-foreground">BIC: {account.bic}</p>
           )}
           {account.currency && (
-            <p className="muted" style={{ margin: '0.25rem 0' }}>Currency: {account.currency}</p>
+            <p className="my-1 text-sm text-muted-foreground">Currency: {account.currency}</p>
           )}
           {account.accountType && (
-            <p className="muted" style={{ margin: '0.25rem 0' }}>Type: {account.accountType}</p>
+            <p className="my-1 text-sm text-muted-foreground">Type: {account.accountType}</p>
           )}
-        </div>
+        </Card>
       )}
 
       {balances.length > 0 && (
-        <div className="card">
-          <h2>Balances</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Reference date</th>
-                <th style={{ textAlign: 'right' }}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card>
+          <CardTitle>Balances</CardTitle>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Type</TableHead>
+                <TableHead>Reference date</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {balances.map((b, i) => (
-                <tr key={i}>
-                  <td>{b.balanceType}</td>
-                  <td className="muted">{b.referenceDate ?? '—'}</td>
-                  <td className="num">{fmtAmount(b.amount, b.currency)}</td>
-                </tr>
+                <TableRow key={i}>
+                  <TableCell>{b.balanceType}</TableCell>
+                  <TableCell className="text-muted-foreground">{b.referenceDate ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">
+                    {fmtAmount(b.amount, b.currency)}
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Card>
       )}
 
-      <div className="card">
-        <h2>
+      <Card>
+        <CardTitle>
           Transactions{' '}
-          <span className="muted" style={{ fontWeight: 'normal' }}>({transactions.length})</span>
-        </h2>
-        {loading && <p className="muted">Loading…</p>}
+          <span className="font-normal text-muted-foreground">({transactions.length})</span>
+        </CardTitle>
+        {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
         {!loading && transactions.length === 0 && (
-          <p className="muted">No transactions stored yet — try Sync now.</p>
+          <p className="text-sm text-muted-foreground">No transactions stored yet — try Sync now.</p>
         )}
         {transactions.length > 0 && (
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Description</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {transactions.map((t) => (
-                <tr
+                <TableRow
                   key={t.fingerprint}
-                  style={{ opacity: t.status && t.status !== 'BOOK' ? 0.6 : 1 }}
+                  className={t.status && t.status !== 'BOOK' ? 'opacity-60' : ''}
                 >
-                  <td>{t.date}</td>
-                  <td>{describe(t)}</td>
-                  <td className="muted">{t.status || ''}</td>
-                  <td className="num">{fmtAmount(t.amount, t.currency)}</td>
-                </tr>
+                  <TableCell>{t.date}</TableCell>
+                  <TableCell>{t.description || t.counterparty || '—'}</TableCell>
+                  <TableCell className="text-muted-foreground">{t.status || ''}</TableCell>
+                  <TableCell className="text-right tabular-nums whitespace-nowrap">
+                    {fmtAmount(t.amount, t.currency)}
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
-      </div>
+      </Card>
     </main>
   )
 }

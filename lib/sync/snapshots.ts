@@ -22,7 +22,7 @@
 // Bucketed totals (cash vs investment) come from accounts.kind so the
 // chart can show a stacked breakdown if we want one later.
 
-import { and, desc, eq, gte, ne, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm'
 import {
   accountValueHistory,
   accounts,
@@ -33,26 +33,9 @@ import {
   positions,
   transactions,
 } from '@/lib/db/client'
+import { balanceIncludesInvestments, pickBalance } from '@/lib/balance'
 
 const BASE_CURRENCY = 'SEK'
-
-const BALANCE_PREFERENCE = [
-  'totalBalance',
-  'ownCapital',
-  'closingBooked',
-  'CLBD',
-  'interimBooked',
-  'ITBD',
-  'expected',
-  'XPCD',
-  'interimAvailable',
-  'ITAV',
-  'forwardAvailable',
-  'FWAV',
-  'openingBooked',
-  'OPBD',
-  'cash',
-]
 
 // Tx kinds that change net wealth (in cash terms). Buy/sell/transfer are
 // internal to portfolios or netted across user's own accounts and don't
@@ -68,7 +51,7 @@ const WEALTH_AFFECTING_KINDS = new Set([
 
 const MS_DAY = 86400_000
 
-interface AccountSnapshot {
+export interface AccountSnapshot {
   accountId: string
   kind: string | null
   currency: string
@@ -78,26 +61,17 @@ interface AccountSnapshot {
   balanceIncludesInvestments: boolean
   // Holdings sum (only meaningful if !balanceIncludesInvestments).
   positionsValue: number
-  // Tx walkback support — every wealth-affecting tx for this account.
+  // Tx walkback support — every wealth-affecting tx for this account,
+  // sorted DESC by date (most recent first). The walker assumes this
+  // ordering; loadAccountSnapshots is the only producer and orders
+  // correctly.
   txs: { date: string; amount: number }[]
   // Map of date → real value from chart history (Avanza). Wins over walkback.
   history: Map<string, number>
-}
-
-function pickBalance(
-  rows: { balanceType: string; amount: number; currency: string }[],
-): { balance: { balanceType: string; amount: number; currency: string }; includesInvestments: boolean } | null {
-  if (rows.length === 0) return null
-  for (const t of BALANCE_PREFERENCE) {
-    const m = rows.find((r) => r.balanceType === t)
-    if (m) {
-      return {
-        balance: m,
-        includesInvestments: t === 'totalBalance' || t === 'ownCapital',
-      }
-    }
-  }
-  return { balance: rows[0], includesInvestments: false }
+  // Earliest date with chart history (or null if none). Days before this
+  // are treated as "account didn't exist yet" → 0, instead of flat-lining
+  // at today's value via walkback.
+  earliestHistoryDate: string | null
 }
 
 function isoDay(d: Date): string {
@@ -105,68 +79,123 @@ function isoDay(d: Date): string {
 }
 
 function loadAccountSnapshots(userId: string, sinceIso: string): AccountSnapshot[] {
-  const userConns = db.select().from(connections).where(eq(connections.userId, userId)).all()
-  const connIds = new Set(userConns.map((c) => c.id))
+  // User's accounts in one indexed query — joins via connections.user_id and
+  // pushes the excluded_from_total filter into SQL (was a JS .filter on a
+  // full-table scan).
   const userAccounts = db
-    .select()
+    .select({
+      id: accounts.id,
+      kind: accounts.kind,
+      currency: accounts.currency,
+    })
     .from(accounts)
+    .innerJoin(connections, eq(accounts.connectionId, connections.id))
+    .where(and(eq(connections.userId, userId), ne(accounts.excludedFromTotal, 1)))
     .all()
-    .filter((a) => connIds.has(a.connectionId) && a.excludedFromTotal !== 1)
 
-  const out: AccountSnapshot[] = []
+  if (userAccounts.length === 0) return []
+  const accountIds = userAccounts.map((a) => a.id)
 
-  for (const a of userAccounts) {
-    const accBalances = db.select().from(balances).where(eq(balances.accountId, a.id)).all()
+  // Batch the four per-account queries into one round-trip each. Each uses
+  // the existing per-account index (balances_pk, positions_pk,
+  // transactions_by_account_date, account_value_history_pk).
+  const allBalances = db
+    .select()
+    .from(balances)
+    .where(inArray(balances.accountId, accountIds))
+    .all()
+
+  const allPositions = db
+    .select({ accountId: positions.accountId, marketValue: positions.marketValue })
+    .from(positions)
+    .where(inArray(positions.accountId, accountIds))
+    .all()
+
+  // Global ORDER BY date DESC: after grouping by accountId, each per-account
+  // list is still in date-desc order (stable insertion).
+  const allTxs = db
+    .select({
+      accountId: transactions.accountId,
+      date: transactions.date,
+      amount: transactions.amount,
+      kind: transactions.kind,
+    })
+    .from(transactions)
+    .where(
+      and(
+        inArray(transactions.accountId, accountIds),
+        gte(transactions.date, sinceIso),
+        ne(transactions.status, 'PDNG'),
+        ne(transactions.status, 'INFO'),
+      ),
+    )
+    .orderBy(desc(transactions.date))
+    .all()
+
+  const allHistory = db
+    .select({
+      accountId: accountValueHistory.accountId,
+      date: accountValueHistory.date,
+      value: accountValueHistory.value,
+    })
+    .from(accountValueHistory)
+    .where(
+      and(
+        inArray(accountValueHistory.accountId, accountIds),
+        gte(accountValueHistory.date, sinceIso),
+      ),
+    )
+    .all()
+
+  function groupByAccountId<T extends { accountId: string }>(rows: T[]): Map<string, T[]> {
+    const m = new Map<string, T[]>()
+    for (const r of rows) {
+      const list = m.get(r.accountId)
+      if (list) list.push(r)
+      else m.set(r.accountId, [r])
+    }
+    return m
+  }
+  const balancesByAcct = groupByAccountId(allBalances)
+  const positionsByAcct = groupByAccountId(allPositions)
+  const txsByAcct = groupByAccountId(allTxs)
+  const historyByAcct = groupByAccountId(allHistory)
+
+  return userAccounts.map((a) => {
+    const accBalances = balancesByAcct.get(a.id) ?? []
     const picked = pickBalance(accBalances)
-    const todayAmount = picked?.balance.amount ?? 0
-    const currency = picked?.balance.currency ?? a.currency ?? BASE_CURRENCY
+    const todayAmount = picked?.amount ?? 0
+    const currency = picked?.currency ?? a.currency ?? BASE_CURRENCY
 
-    const accPositions = db.select().from(positions).where(eq(positions.accountId, a.id)).all()
+    const accPositions = positionsByAcct.get(a.id) ?? []
     const positionsValue = accPositions.reduce((s, p) => s + (p.marketValue ?? 0), 0)
 
-    const txRows = db
-      .select({ date: transactions.date, amount: transactions.amount, kind: transactions.kind })
-      .from(transactions)
-      .where(
-        and(
-          eq(transactions.accountId, a.id),
-          gte(transactions.date, sinceIso),
-          ne(transactions.status, 'PDNG'),
-          ne(transactions.status, 'INFO'),
-        ),
-      )
-      .orderBy(desc(transactions.date))
-      .all()
-    const txs = txRows
+    const accTxs = txsByAcct.get(a.id) ?? []
+    const txs = accTxs
       .filter((t) => !t.kind || WEALTH_AFFECTING_KINDS.has(t.kind))
       .map((t) => ({ date: t.date, amount: t.amount }))
 
-    const historyRows = db
-      .select({ date: accountValueHistory.date, value: accountValueHistory.value })
-      .from(accountValueHistory)
-      .where(
-        and(
-          eq(accountValueHistory.accountId, a.id),
-          gte(accountValueHistory.date, sinceIso),
-        ),
-      )
-      .all()
     const history = new Map<string, number>()
-    for (const r of historyRows) history.set(r.date, r.value)
+    let earliestHistoryDate: string | null = null
+    for (const r of historyByAcct.get(a.id) ?? []) {
+      history.set(r.date, r.value)
+      if (earliestHistoryDate === null || r.date < earliestHistoryDate) {
+        earliestHistoryDate = r.date
+      }
+    }
 
-    out.push({
+    return {
       accountId: a.id,
       kind: a.kind,
       currency,
       todayAmount,
-      balanceIncludesInvestments: picked?.includesInvestments ?? false,
+      balanceIncludesInvestments: picked ? balanceIncludesInvestments(picked.balanceType) : false,
       positionsValue,
       txs,
       history,
-    })
-  }
-
-  return out
+      earliestHistoryDate,
+    }
+  })
 }
 
 export interface SnapshotPoint {
@@ -183,27 +212,22 @@ export interface RebuildResult {
   currencyMismatches: string[]
 }
 
-export function rebuildSnapshotsForUser(
-  userId: string,
-  opts: { daysBack?: number; onlyToday?: boolean } = {},
-): RebuildResult {
-  const daysBack = opts.onlyToday ? 0 : opts.daysBack ?? 365
-  const now = Date.now()
-  const today = new Date()
-  today.setUTCHours(0, 0, 0, 0)
-  const sinceIso = isoDay(new Date(today.getTime() - daysBack * MS_DAY))
-
-  const snapshots = loadAccountSnapshots(userId, sinceIso)
+// Pure walkback math: given today's per-account state, project a per-day
+// total wealth series back `daysBack` days. Side-effect free — callers
+// (rebuildSnapshotsForUser) handle the surrounding DB I/O. This is the
+// part that actually matters for testing; the I/O wrappers are dumb.
+export function computeSnapshotPoints(
+  snapshots: AccountSnapshot[],
+  today: Date,
+  daysBack: number,
+): { points: SnapshotPoint[]; currencyMismatches: string[] } {
   const currencyMismatches: string[] = []
 
-  // For each account, prepare a tx walkback cursor (txs sorted desc by date).
-  // The cursor walks once across all days from today backward.
   type AccountWalker = AccountSnapshot & { running: number; cursor: number }
   const walkers: AccountWalker[] = snapshots.map((s) => {
     if (s.currency !== BASE_CURRENCY) {
       currencyMismatches.push(`${s.accountId}: ${s.currency} ≠ ${BASE_CURRENCY}`)
     }
-    // Initial running = today's amount (+ positions if balance doesn't include them)
     const startingTotal = s.balanceIncludesInvestments
       ? s.todayAmount
       : s.todayAmount + s.positionsValue
@@ -222,25 +246,32 @@ export function rebuildSnapshotsForUser(
     for (const w of walkers) {
       if (w.currency !== BASE_CURRENCY) continue
 
-      // Advance the tx walkback cursor for this account: subtract every tx
-      // that occurred AFTER `dayIso`. After this loop, `running` is the
-      // end-of-day-`dayIso` amount derived from today's amount minus future txs.
+      // Subtract every tx with date strictly after dayIso so `running`
+      // becomes the end-of-day-`dayIso` amount.
       while (w.cursor < w.txs.length && w.txs[w.cursor].date > dayIso) {
         w.running -= w.txs[w.cursor].amount
         w.cursor++
       }
 
-      // Per-account contribution: real history if we have it for this date,
-      // else the running walkback total.
+      // Real history (Avanza chart) wins over walkback when present.
+      // `!= null` keeps a real 0 from being treated as missing.
       const realHistory = w.history.get(dayIso)
-      const contribution = realHistory != null ? realHistory : w.running
+      let contribution: number
+      if (realHistory != null) {
+        contribution = realHistory
+      } else if (w.earliestHistoryDate != null && dayIso < w.earliestHistoryDate) {
+        // Account has chart history but not for this day, and the day is
+        // before the chart's earliest point — treat as "didn't exist yet".
+        // Without this, Avanza accounts (which sync no transactions) would
+        // flat-line at today's totalBalance going back 365 days.
+        contribution = 0
+      } else {
+        contribution = w.running
+      }
 
       const isInvestment = w.kind === 'investment' || w.kind === 'pension'
-      if (isInvestment) {
-        investmentAmount += contribution
-      } else {
-        cashAmount += contribution
-      }
+      if (isInvestment) investmentAmount += contribution
+      else cashAmount += contribution
     }
 
     points.push({
@@ -250,6 +281,22 @@ export function rebuildSnapshotsForUser(
       investmentAmount: Math.round(investmentAmount * 100) / 100,
     })
   }
+
+  return { points, currencyMismatches }
+}
+
+export function rebuildSnapshotsForUser(
+  userId: string,
+  opts: { daysBack?: number; onlyToday?: boolean } = {},
+): RebuildResult {
+  const daysBack = opts.onlyToday ? 0 : opts.daysBack ?? 365
+  const now = Date.now()
+  const today = new Date()
+  today.setUTCHours(0, 0, 0, 0)
+  const sinceIso = isoDay(new Date(today.getTime() - daysBack * MS_DAY))
+
+  const snapshots = loadAccountSnapshots(userId, sinceIso)
+  const { points, currencyMismatches } = computeSnapshotPoints(snapshots, today, daysBack)
 
   // Persist all points in a single transaction.
   db.transaction((tx) => {
@@ -342,7 +389,11 @@ export function getSnapshotsRange(
     })
     .from(dailySnapshots)
     .where(
-      sql`${dailySnapshots.userId} = ${userId} AND ${dailySnapshots.date} >= ${fromDate} AND ${dailySnapshots.date} <= ${toDate}`,
+      and(
+        eq(dailySnapshots.userId, userId),
+        gte(dailySnapshots.date, fromDate),
+        lte(dailySnapshots.date, toDate),
+      ),
     )
     .orderBy(dailySnapshots.date)
     .all()

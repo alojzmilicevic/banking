@@ -3,6 +3,8 @@ import { eq } from 'drizzle-orm'
 import { authStates, db } from '@/lib/db/client'
 import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/sync/orchestrator'
+import { PollAuthQuerySchema } from '@/lib/api/schemas'
+import { validateQuery } from '@/lib/api/validate'
 
 // GET /api/auth/poll?state=...
 // Returns the same AuthChallenge shape as /api/auth/start. The frontend
@@ -10,10 +12,11 @@ import { syncConnection } from '@/lib/sync/orchestrator'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
-  const state = url.searchParams.get('state')
-  if (!state) {
+  const parsed = validateQuery(url, PollAuthQuerySchema)
+  if (!parsed.ok) {
     return NextResponse.json({ kind: 'error', message: 'state required' })
   }
+  const { state } = parsed.data
 
   const row = db.select().from(authStates).where(eq(authStates.state, state)).get()
   if (!row) {

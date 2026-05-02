@@ -20,6 +20,10 @@ export const connections = sqliteTable(
     providerId: text('provider_id').notNull(), // 'enable-banking', 'avanza', ...
     externalId: text('external_id').notNull(), // provider's session id
     label: text('label'),
+    // Who in the household this connection belongs to. 'joint' means
+    // shared economy — accounts on this connection contribute once to
+    // the household total, just like sole connections.
+    holder: text('holder'), // 'alma' | 'alojz' | 'joint' | null (legacy)
     status: text('status').notNull().default('active'),
     validUntil: integer('valid_until'),
     initialSyncedAt: integer('initial_synced_at'),
@@ -86,7 +90,6 @@ export const accounts = sqliteTable(
     iban: text('iban'),
     bban: text('bban'),
     bic: text('bic'),
-    rawJson: text('raw_json').notNull(),
     createdAt: integer('created_at').notNull().default(sql`(unixepoch() * 1000)`),
     updatedAt: integer('updated_at').notNull().default(sql`(unixepoch() * 1000)`),
   },
@@ -106,7 +109,6 @@ export const balances = sqliteTable(
     amount: real('amount').notNull(),
     currency: text('currency').notNull(),
     referenceDate: text('reference_date'),
-    rawJson: text('raw_json').notNull(),
     fetchedAt: integer('fetched_at').notNull().default(sql`(unixepoch() * 1000)`),
   },
   (t) => ({
@@ -126,7 +128,6 @@ export const instruments = sqliteTable('instruments', {
   isin: text('isin'),
   providerId: text('provider_id'),
   providerInstrumentId: text('provider_instrument_id'),
-  rawJson: text('raw_json'),
   updatedAt: integer('updated_at').notNull().default(sql`(unixepoch() * 1000)`),
 })
 
@@ -146,7 +147,6 @@ export const positions = sqliteTable(
     // Market value in the position's own currency (USD, SEK, …).
     marketValue: real('market_value'),
     currency: text('currency').notNull(),
-    rawJson: text('raw_json').notNull(),
     fetchedAt: integer('fetched_at').notNull().default(sql`(unixepoch() * 1000)`),
   },
   (t) => ({
@@ -174,7 +174,6 @@ export const transactions = sqliteTable(
     status: text('status'),
     description: text('description'),
     counterparty: text('counterparty'),
-    rawJson: text('raw_json').notNull(),
     createdAt: integer('created_at').notNull().default(sql`(unixepoch() * 1000)`),
   },
   (t) => ({

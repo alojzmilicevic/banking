@@ -10,6 +10,12 @@
 // reuse them for subsequent /_api/* requests.
 
 import { BASE } from './constants'
+import {
+  AuthExpiredError,
+  NetworkError,
+  ProviderRegressionError,
+  RateLimitedError,
+} from '@/lib/sync/errors'
 
 export interface AvanzaSession {
   // Tokens are present when the session was established via BankID. They're
@@ -130,12 +136,19 @@ export class AvanzaApi {
         .join('; ')
     }
     for (let hop = 0; hop < 10; hop++) {
-      res = await fetch(url, {
-        method: hopMethod,
-        headers: hopHeaders,
-        body: hopBody,
-        redirect: 'manual',
-      })
+      try {
+        res = await fetch(url, {
+          method: hopMethod,
+          headers: hopHeaders,
+          body: hopBody,
+          redirect: 'manual',
+        })
+      } catch (e) {
+        // Node's fetch throws TypeError("fetch failed") for DNS/connect/TLS
+        // failures — surface those as a typed network error so the
+        // orchestrator can mark the connection retryable.
+        throw new NetworkError(`Avanza ${method} ${path}: ${(e as Error).message}`, { cause: e })
+      }
       const setCookies =
         typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : []
       if (setCookies.length > 0) {
@@ -144,12 +157,10 @@ export class AvanzaApi {
       }
       if (process.env.AVANZA_DEBUG === '1') {
         const names = setCookies.map((c) => c.split(';', 1)[0].split('=', 1)[0]).join(',')
-        // eslint-disable-next-line no-console
         console.log(`[avanza] ${hopMethod} ${url.replace(BASE, '')} → ${res.status} cookies+[${names}]`)
         // Full Set-Cookie strings (truncated per-cookie) for diagnosing
         // missing cookies / odd attributes / second values.
         for (const sc of setCookies) {
-          // eslint-disable-next-line no-console
           console.log(`[avanza]   set-cookie: ${sc.slice(0, 200)}`)
         }
       }
@@ -174,7 +185,7 @@ export class AvanzaApi {
         continue
       }
       break
-    }
+    } // end hop loop
     res = res!
     const setCookies = allSetCookies
 
@@ -189,7 +200,7 @@ export class AvanzaApi {
         try {
           data = JSON.parse(text) as T
         } catch {
-          throw new Error(
+          throw new ProviderRegressionError(
             `Avanza ${method} ${path} ${res.status}: non-JSON response: ${text.slice(0, 200)}`,
           )
         }
@@ -201,7 +212,18 @@ export class AvanzaApi {
         typeof data === 'object' && data !== null
           ? JSON.stringify(data).slice(0, 300)
           : String(data).slice(0, 300)
-      throw new Error(`Avanza ${method} ${path} ${res.status}: ${detail}`)
+      const summary = `Avanza ${method} ${path} ${res.status}: ${detail}`
+      if (res.status === 401 || res.status === 403) {
+        throw new AuthExpiredError(summary)
+      }
+      if (res.status === 429) {
+        const retryAfter = Number(res.headers.get('retry-after'))
+        throw new RateLimitedError(summary, {
+          retryAfterSec: Number.isFinite(retryAfter) ? retryAfter : undefined,
+        })
+      }
+      if (res.status >= 500) throw new ProviderRegressionError(summary)
+      throw new Error(summary)
     }
 
     return { status: res.status, body: data, headers: res.headers, setCookies }

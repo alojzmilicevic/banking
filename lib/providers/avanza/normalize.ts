@@ -83,7 +83,6 @@ export function normalizeAccount(a: AvanzaCategorizedAccount): NormalizedAccount
     iban: null,
     bban: a.clearingAccountNumber ?? null,
     bic: null,
-    raw: a,
   }
 }
 
@@ -101,7 +100,6 @@ export function normalizeBalances(a: AvanzaCategorizedAccount): NormalizedBalanc
       amount: a.balance.value,
       currency: a.balance.unit ?? 'SEK',
       referenceDate: null,
-      raw: a.balance,
     })
   }
   if (typeof a.totalValue?.value === 'number') {
@@ -111,7 +109,6 @@ export function normalizeBalances(a: AvanzaCategorizedAccount): NormalizedBalanc
       amount: a.totalValue.value,
       currency: a.totalValue.unit ?? 'SEK',
       referenceDate: null,
-      raw: a.totalValue,
     })
   }
   return out

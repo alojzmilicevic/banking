@@ -3,6 +3,12 @@
 
 import { createPrivateKey, createSign, type KeyObject } from 'node:crypto'
 import fs from 'node:fs'
+import {
+  AuthExpiredError,
+  NetworkError,
+  ProviderRegressionError,
+  RateLimitedError,
+} from '@/lib/sync/errors'
 
 const BASE = 'https://api.enablebanking.com'
 
@@ -38,16 +44,33 @@ function signJwt(): string {
 }
 
 export async function ebFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${signJwt()}`,
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  })
-  if (!res.ok) throw new Error(`EB ${path} ${res.status}: ${await res.text()}`)
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${signJwt()}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(init?.headers || {}),
+      },
+    })
+  } catch (e) {
+    throw new NetworkError(`EB ${path}: ${(e as Error).message}`, { cause: e })
+  }
+  if (!res.ok) {
+    const body = await res.text()
+    const summary = `EB ${path} ${res.status}: ${body}`
+    if (res.status === 401 || res.status === 403) throw new AuthExpiredError(summary)
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get('retry-after'))
+      throw new RateLimitedError(summary, {
+        retryAfterSec: Number.isFinite(retryAfter) ? retryAfter : undefined,
+      })
+    }
+    if (res.status >= 500) throw new ProviderRegressionError(summary)
+    throw new Error(summary)
+  }
   return res.json() as Promise<T>
 }
 

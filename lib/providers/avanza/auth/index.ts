@@ -6,6 +6,7 @@
 // the sustainable path. The Chrome scraper at /api/avanza/extract-cookies
 // automates the paste step on macOS.
 
+import { and, eq } from 'drizzle-orm'
 import { db, connections } from '@/lib/db/client'
 import { saveCredentials } from '@/lib/sync/credentials'
 import { randomUUID } from 'node:crypto'
@@ -53,24 +54,52 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
     expiresAt: Date.now() + 60 * 60 * 1000, // ~60min until Avanza idles us out
   }
 
-  const connectionId = randomUUID()
-  db.insert(connections)
-    .values({
-      id: connectionId,
-      userId: input.userId,
-      providerId: 'avanza',
-      externalId: `cookies-${Date.now()}`,
-      label: 'Avanza',
-      status: 'active',
-      validUntil: session.expiresAt,
-      // Only non-secret metadata in rawJson. Cookies live encrypted in
-      // connection_credentials.
-      rawJson: JSON.stringify({ expiresAt: session.expiresAt }),
-    })
-    .run()
+  // Re-link should reuse the existing (user, avanza) connection rather than
+  // creating a new "linked bank" entry every time. One Avanza per user.
+  const existing = db
+    .select({ id: connections.id })
+    .from(connections)
+    .where(and(eq(connections.userId, input.userId), eq(connections.providerId, 'avanza')))
+    .get()
+
+  const holderRaw = input.input.holder
+  const holder =
+    holderRaw === 'alma' || holderRaw === 'alojz' || holderRaw === 'joint' ? holderRaw : null
+
+  const connectionId = existing?.id ?? randomUUID()
+  if (existing) {
+    db.update(connections)
+      .set({
+        status: 'active',
+        validUntil: session.expiresAt,
+        lastSyncError: null,
+        rawJson: JSON.stringify({ expiresAt: session.expiresAt }),
+        // Only overwrite holder if the caller actually picked one — null
+        // from a legacy re-link should leave the existing assignment alone.
+        ...(holder ? { holder } : {}),
+      })
+      .where(eq(connections.id, existing.id))
+      .run()
+  } else {
+    db.insert(connections)
+      .values({
+        id: connectionId,
+        userId: input.userId,
+        providerId: 'avanza',
+        externalId: `cookies-${Date.now()}`,
+        label: 'Avanza',
+        holder,
+        status: 'active',
+        validUntil: session.expiresAt,
+        // Only non-secret metadata in rawJson. Cookies live encrypted in
+        // connection_credentials.
+        rawJson: JSON.stringify({ expiresAt: session.expiresAt }),
+      })
+      .run()
+  }
 
   // Encrypt + persist the cookie jar separately so the plaintext never
-  // touches connections.raw_json.
+  // touches connections.raw_json. saveCredentials upserts by connectionId.
   saveCredentials(connectionId, { cookies })
 
   return { kind: 'complete', connectionId }

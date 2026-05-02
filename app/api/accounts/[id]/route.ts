@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
 import { accounts, balances, connections, db } from '@/lib/db/client'
 import { rebuildSnapshotsForUser } from '@/lib/sync/snapshots'
+import { PatchAccountBodySchema } from '@/lib/api/schemas'
+import { validateJson } from '@/lib/api/validate'
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -54,13 +56,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const account = db.select().from(accounts).where(eq(accounts.id, id)).get()
   if (!account) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const body = (await req.json()) as { excludedFromTotal?: boolean }
-  if (typeof body.excludedFromTotal !== 'boolean') {
-    return NextResponse.json({ error: 'excludedFromTotal (boolean) required' }, { status: 400 })
-  }
+  const parsed = await validateJson(req, PatchAccountBodySchema)
+  if (!parsed.ok) return parsed.response
+  const { excludedFromTotal } = parsed.data
 
   db.update(accounts)
-    .set({ excludedFromTotal: body.excludedFromTotal ? 1 : 0 })
+    .set({ excludedFromTotal: excludedFromTotal ? 1 : 0 })
     .where(eq(accounts.id, id))
     .run()
 
@@ -68,5 +69,5 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const conn = db.select().from(connections).where(eq(connections.id, account.connectionId)).get()
   if (conn) rebuildSnapshotsForUser(conn.userId, { daysBack: 365 })
 
-  return NextResponse.json({ id, excludedFromTotal: body.excludedFromTotal })
+  return NextResponse.json({ id, excludedFromTotal })
 }
