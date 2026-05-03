@@ -16,18 +16,6 @@ export const Card = React.forwardRef<
 ))
 Card.displayName = 'Card'
 
-export const CardHeader = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn('flex items-center justify-between', className)}
-    {...props}
-  />
-))
-CardHeader.displayName = 'CardHeader'
-
 export const CardTitle = React.forwardRef<
   HTMLHeadingElement,
   React.HTMLAttributes<HTMLHeadingElement>
@@ -39,11 +27,3 @@ export const CardTitle = React.forwardRef<
   />
 ))
 CardTitle.displayName = 'CardTitle'
-
-export const CardContent = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('', className)} {...props} />
-))
-CardContent.displayName = 'CardContent'

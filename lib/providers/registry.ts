@@ -13,7 +13,3 @@ export function getProvider(id: string): Provider {
   if (!p) throw new Error(`Unknown provider: ${id}`)
   return p
 }
-
-export function listProviders(): Provider[] {
-  return Object.values(providers)
-}

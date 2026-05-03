@@ -1,7 +1,6 @@
 'use client'
-// Visual add-bank flow. Provider tiles instead of tabs, holder picked
-// once at the top as small avatar buttons, the right body slides in for
-// the selected provider.
+// Visual add-bank flow. Holder chips at the top come from the API now,
+// so adding a household member doesn't require code changes here.
 
 import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
@@ -22,82 +21,78 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   useChromeProfiles,
   useConnectAvanza,
-  useConnections,
+  useDashboard,
   useExtractAvanzaCookies,
+  useHolders,
   useInstitutions,
   useStartEbAuth,
   type ASPSP,
-  type ConnectionView,
-  type Holder,
+  type HolderListItem,
 } from '@/lib/queries'
+import { holderTint } from '@/lib/holders'
 
-type LinkerHolder = Exclude<Holder, 'joint'>
 type Provider = 'avanza' | 'eb'
 
 function key(a: ASPSP) {
   return `${a.name}||${a.country}`
 }
 
-const HOLDERS: { id: LinkerHolder; label: string; initials: string; tint: string; color: string }[] = [
-  {
-    id: 'alma',
-    label: 'Alma',
-    initials: 'AC',
-    color: 'oklch(70% 0.16 300)',
-    tint: 'oklch(61% 0.16 300 / 0.25)',
-  },
-  {
-    id: 'alojz',
-    label: 'Alojz',
-    initials: 'AM',
-    color: 'oklch(70% 0.13 195)',
-    tint: 'oklch(60% 0.14 195 / 0.25)',
-  },
-]
-
 export default function AddBankModal({
   open,
   onClose,
   onConnected,
-  initialHolder,
+  initialHolderId,
 }: {
   open: boolean
   onClose: () => void
   onConnected?: () => void
-  initialHolder?: LinkerHolder
+  initialHolderId?: string
 }) {
-  const [holder, setHolder] = useState<LinkerHolder>(initialHolder ?? 'alojz')
+  const holdersQ = useHolders()
+  const holders = useMemo(() => holdersQ.data ?? [], [holdersQ.data])
+  const dashboard = useDashboard()
+
+  const [holderId, setHolderId] = useState<string | undefined>(initialHolderId)
   const [provider, setProvider] = useState<Provider | null>(null)
 
-  const connections = useConnections()
-
-  // Re-sync holder when the caller pre-selects one (e.g., clicking an
-  // empty-state CTA for a specific household member).
+  // Default to the first holder once the list loads (or to the prop if
+  // the caller pre-picked one).
   useEffect(() => {
-    if (open && initialHolder) setHolder(initialHolder)
-  }, [open, initialHolder])
+    if (initialHolderId) {
+      setHolderId(initialHolderId)
+      return
+    }
+    if (!holderId && holders.length > 0) setHolderId(holders[0].id)
+  }, [initialHolderId, holderId, holders])
+
+  // Re-sync when the modal re-opens with a different initialHolderId.
+  useEffect(() => {
+    if (open && initialHolderId) setHolderId(initialHolderId)
+  }, [open, initialHolderId])
 
   // Per-holder map of which providers already have a connection. Used to
   // dim already-linked provider tiles and warn that picking them will
   // re-link (refresh credentials) rather than add a new bank.
   const linkedByHolder = useMemo(() => {
-    const map = new Map<LinkerHolder, { avanza: ConnectionView | null; eb: ConnectionView[] }>([
-      ['alma', { avanza: null, eb: [] }],
-      ['alojz', { avanza: null, eb: [] }],
-    ])
-    for (const c of connections.data ?? []) {
-      if (c.holder !== 'alma' && c.holder !== 'alojz') continue
-      const slot = map.get(c.holder)!
-      if (c.providerId === 'avanza') slot.avanza = c
-      else if (c.providerId === 'enable-banking') slot.eb.push(c)
+    const map = new Map<string, { avanza: boolean; eb: string[] }>()
+    if (!dashboard.data) return map
+    for (const h of dashboard.data.holders) {
+      const slot = { avanza: false, eb: [] as string[] }
+      for (const a of h.accounts) {
+        if (a.connection.providerId === 'avanza') slot.avanza = true
+        else if (a.connection.providerId === 'enable-banking') {
+          slot.eb.push(a.connection.label ?? 'a bank')
+        }
+      }
+      map.set(h.id, slot)
     }
     return map
-  }, [connections.data])
+  }, [dashboard.data])
 
-  const linkedHere = linkedByHolder.get(holder)!
-  const avanzaLinked = !!linkedHere.avanza
-  const ebLinked = linkedHere.eb.length > 0
-  const ebLabels = linkedHere.eb.map((c) => c.label ?? 'a bank').join(', ')
+  const linkedHere = holderId ? linkedByHolder.get(holderId) : undefined
+  const avanzaLinked = !!linkedHere?.avanza
+  const ebLinked = (linkedHere?.eb.length ?? 0) > 0
+  const ebLabels = (linkedHere?.eb ?? []).join(', ')
 
   return (
     <Modal
@@ -111,103 +106,49 @@ export default function AddBankModal({
         <div>
           <h2 className="text-base font-semibold">Link a bank</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Joint accounts get auto-detected when both link the same one.
+            Joint accounts get auto-detected when more than one holder links the same one.
           </p>
         </div>
       }
     >
-      {/* Holder — avatar segment */}
+      {/* Holder picker */}
       <div className="mb-5">
         <div className="mb-2 flex items-baseline justify-between">
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             Linked by
           </p>
-          <motion.p
-            key={holder}
-            initial={{ opacity: 0, y: -2 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.15 }}
-            className="text-xs font-medium text-foreground"
+          {holderId && (
+            <motion.p
+              key={holderId}
+              initial={{ opacity: 0, y: -2 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.15 }}
+              className="text-xs font-medium text-foreground"
+            >
+              {holders.find((h) => h.id === holderId)?.label}
+            </motion.p>
+          )}
+        </div>
+        {holders.length === 0 ? (
+          <p className="rounded-md border border-border-subtle bg-card/40 px-3 py-2 text-xs text-muted-foreground">
+            No household members yet — add one in settings.
+          </p>
+        ) : (
+          <div
+            className="grid gap-2"
+            style={{ gridTemplateColumns: `repeat(${Math.min(holders.length, 3)}, minmax(0, 1fr))` }}
           >
-            {HOLDERS.find((h) => h.id === holder)?.label}
-          </motion.p>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {HOLDERS.map((h) => {
-            const active = holder === h.id
-            return (
-              <motion.button
+            {holders.map((h) => (
+              <HolderChip
                 key={h.id}
-                type="button"
-                onClick={() => setHolder(h.id)}
-                whileTap={{ scale: 0.97 }}
-                aria-pressed={active}
-                className={`group relative flex items-center gap-3 overflow-hidden rounded-xl border-2 px-3 py-2.5 text-left transition-all ${
-                  active
-                    ? 'border-primary bg-card shadow-md ring-2 ring-primary/20'
-                    : 'border-border bg-card/30 opacity-60 hover:border-input-border hover:opacity-100'
-                }`}
-              >
-                {active && (
-                  <motion.div
-                    layoutId="holder-bg"
-                    className="absolute inset-0 -z-10"
-                    style={{
-                      background: `linear-gradient(135deg, ${h.tint} 0%, transparent 100%)`,
-                    }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                  />
-                )}
-                <span
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold transition-all"
-                  style={{
-                    background: `${h.color}22`,
-                    color: h.color,
-                    border: active ? `1.5px solid ${h.color}55` : '1.5px solid transparent',
-                  }}
-                >
-                  {h.initials}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p
-                    className={`text-sm font-semibold transition-colors ${
-                      active ? 'text-foreground' : 'text-muted-foreground'
-                    }`}
-                  >
-                    {h.label}
-                  </p>
-                  <p
-                    className={`text-[0.7rem] transition-colors ${
-                      active ? 'text-primary' : 'text-muted-foreground'
-                    }`}
-                  >
-                    {(() => {
-                      const slot = linkedByHolder.get(h.id)!
-                      const count = (slot.avanza ? 1 : 0) + slot.eb.length
-                      if (count === 0) return active ? 'Selected · nothing linked' : 'Nothing linked'
-                      const parts: string[] = []
-                      if (slot.avanza) parts.push('Avanza')
-                      if (slot.eb.length > 0)
-                        parts.push(slot.eb.length === 1 ? '1 bank' : `${slot.eb.length} banks`)
-                      return `${active ? 'Selected · ' : ''}${parts.join(' + ')}`
-                    })()}
-                  </p>
-                </div>
-                {active && (
-                  <motion.span
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                    className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                    aria-hidden
-                  >
-                    <Check className="h-3 w-3" strokeWidth={3} />
-                  </motion.span>
-                )}
-              </motion.button>
-            )
-          })}
-        </div>
+                holder={h}
+                active={holderId === h.id}
+                onPick={() => setHolderId(h.id)}
+                linkedSummary={summarize(linkedByHolder.get(h.id))}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Provider grid */}
@@ -228,6 +169,7 @@ export default function AddBankModal({
               subtitle="Stocks, funds, ISK & pension"
               hint={avanzaLinked ? 'Re-link to refresh cookies' : 'via Chrome cookies'}
               linked={avanzaLinked}
+              disabled={!holderId}
               onClick={() => setProvider('avanza')}
             />
             <ProviderTile
@@ -237,6 +179,7 @@ export default function AddBankModal({
               subtitle={ebLinked ? `${ebLabels} linked` : 'Handelsbanken, Swedbank, SEB…'}
               hint={ebLinked ? 'Add another or re-link' : 'via BankID (PSD2)'}
               linked={ebLinked}
+              disabled={!holderId}
               onClick={() => setProvider('eb')}
             />
           </div>
@@ -244,7 +187,7 @@ export default function AddBankModal({
       )}
 
       <AnimatePresence mode="wait">
-        {provider === 'avanza' && (
+        {provider === 'avanza' && holderId && (
           <motion.div
             key="avanza-panel"
             initial={{ opacity: 0, y: 8 }}
@@ -254,7 +197,8 @@ export default function AddBankModal({
           >
             <BackButton onClick={() => setProvider(null)} />
             <AvanzaPanel
-              holder={holder}
+              holderId={holderId}
+              holderLabel={holders.find((h) => h.id === holderId)?.label ?? ''}
               onDone={() => {
                 onConnected?.()
                 onClose()
@@ -263,7 +207,7 @@ export default function AddBankModal({
             />
           </motion.div>
         )}
-        {provider === 'eb' && (
+        {provider === 'eb' && holderId && (
           <motion.div
             key="eb-panel"
             initial={{ opacity: 0, y: 8 }}
@@ -272,11 +216,99 @@ export default function AddBankModal({
             transition={{ duration: 0.2 }}
           >
             <BackButton onClick={() => setProvider(null)} />
-            <BankPanel holder={holder} />
+            <BankPanel holderId={holderId} />
           </motion.div>
         )}
       </AnimatePresence>
     </Modal>
+  )
+}
+
+function summarize(slot: { avanza: boolean; eb: string[] } | undefined): string | null {
+  if (!slot) return null
+  const count = (slot.avanza ? 1 : 0) + slot.eb.length
+  if (count === 0) return null
+  const parts: string[] = []
+  if (slot.avanza) parts.push('Avanza')
+  if (slot.eb.length > 0) parts.push(slot.eb.length === 1 ? '1 bank' : `${slot.eb.length} banks`)
+  return parts.join(' + ')
+}
+
+function HolderChip({
+  holder,
+  active,
+  onPick,
+  linkedSummary,
+}: {
+  holder: HolderListItem
+  active: boolean
+  onPick: () => void
+  linkedSummary: string | null
+}) {
+  const tint = holderTint(holder.color)
+  const initials = holder.initials ?? holder.label.slice(0, 2).toUpperCase()
+  return (
+    <motion.button
+      type="button"
+      onClick={onPick}
+      whileTap={{ scale: 0.97 }}
+      aria-pressed={active}
+      className={`group relative flex items-center gap-3 overflow-hidden rounded-xl border-2 px-3 py-2.5 text-left transition-all ${
+        active
+          ? 'border-primary bg-card shadow-md ring-2 ring-primary/20'
+          : 'border-border bg-card/30 opacity-60 hover:border-input-border hover:opacity-100'
+      }`}
+    >
+      {active && (
+        <motion.div
+          layoutId="holder-bg"
+          className="absolute inset-0 -z-10"
+          style={{ background: `linear-gradient(135deg, ${tint} 0%, transparent 100%)` }}
+          transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+        />
+      )}
+      <span
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold transition-all"
+        style={{
+          background: `${holder.color}22`,
+          color: holder.color,
+          border: active ? `1.5px solid ${holder.color}55` : '1.5px solid transparent',
+        }}
+      >
+        {initials}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p
+          className={`text-sm font-semibold transition-colors ${
+            active ? 'text-foreground' : 'text-muted-foreground'
+          }`}
+        >
+          {holder.label}
+        </p>
+        <p
+          className={`text-[0.7rem] transition-colors ${
+            active ? 'text-primary' : 'text-muted-foreground'
+          }`}
+        >
+          {linkedSummary
+            ? `${active ? 'Selected · ' : ''}${linkedSummary}`
+            : active
+              ? 'Selected · nothing linked'
+              : 'Nothing linked'}
+        </p>
+      </div>
+      {active && (
+        <motion.span
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+          className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
+          aria-hidden
+        >
+          <Check className="h-3 w-3" strokeWidth={3} />
+        </motion.span>
+      )}
+    </motion.button>
   )
 }
 
@@ -287,6 +319,7 @@ function ProviderTile({
   subtitle,
   hint,
   linked,
+  disabled,
   onClick,
 }: {
   icon: React.ReactNode
@@ -295,24 +328,24 @@ function ProviderTile({
   subtitle: string
   hint: string
   linked?: boolean
+  disabled?: boolean
   onClick: () => void
 }) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
-      whileHover={{ y: linked ? 0 : -2 }}
+      disabled={disabled}
+      whileHover={{ y: linked || disabled ? 0 : -2 }}
       whileTap={{ scale: 0.98 }}
       className={`group relative flex flex-col items-start gap-2 overflow-hidden rounded-xl border bg-card p-4 text-left transition-colors ${
         linked
           ? 'border-pos/30 opacity-70 hover:opacity-100'
           : 'border-border hover:border-input-border'
-      }`}
+      } disabled:cursor-not-allowed disabled:opacity-40`}
     >
       <div
-        className={`pointer-events-none absolute inset-0 ${tone} ${
-          linked ? 'opacity-30' : 'opacity-70'
-        }`}
+        className={`pointer-events-none absolute inset-0 ${tone} ${linked ? 'opacity-30' : 'opacity-70'}`}
         aria-hidden
       />
       {linked && (
@@ -349,7 +382,15 @@ function BackButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-function AvanzaPanel({ holder, onDone }: { holder: LinkerHolder; onDone: () => void }) {
+function AvanzaPanel({
+  holderId,
+  holderLabel,
+  onDone,
+}: {
+  holderId: string
+  holderLabel: string
+  onDone: () => void
+}) {
   const [cookies, setCookies] = useState('')
   const [profileId, setProfileId] = useState('Default')
   const [localError, setLocalError] = useState<string | null>(null)
@@ -374,7 +415,7 @@ function AvanzaPanel({ holder, onDone }: { holder: LinkerHolder; onDone: () => v
     }
     setLocalError(null)
     try {
-      const challenge = await connect.mutateAsync({ cookies: cookies.trim(), holder })
+      const challenge = await connect.mutateAsync({ cookies: cookies.trim(), holderId })
       if (challenge.kind !== 'complete') {
         throw new Error(challenge.message ?? `Unexpected: ${challenge.kind}`)
       }
@@ -414,7 +455,7 @@ function AvanzaPanel({ holder, onDone }: { holder: LinkerHolder; onDone: () => v
             ))}
           </Select>
           <p className="text-[0.65rem] text-text-faint">
-            Pick the profile where {holder === 'alma' ? 'Alma' : 'Alojz'} is logged into avanza.se.
+            Pick the profile where {holderLabel} is logged into avanza.se.
           </p>
         </div>
       )}
@@ -453,7 +494,7 @@ function AvanzaPanel({ holder, onDone }: { holder: LinkerHolder; onDone: () => v
   )
 }
 
-function BankPanel({ holder }: { holder: LinkerHolder }) {
+function BankPanel({ holderId }: { holderId: string }) {
   const [country, setCountry] = useState('SE')
   const [selected, setSelected] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
@@ -470,7 +511,7 @@ function BankPanel({ holder }: { holder: LinkerHolder }) {
       const challenge = await startEb.mutateAsync({
         aspspName: aspsp.name,
         aspspCountry: aspsp.country,
-        holder,
+        holderId,
       })
       if (challenge.kind === 'error') throw new Error(challenge.message)
       if (challenge.kind !== 'redirect' || !challenge.url) {

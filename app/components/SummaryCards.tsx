@@ -1,13 +1,17 @@
 'use client'
-// The trio of cards at the bottom of the main panel:
-//   ┌────────────┐ ┌────────────┐ ┌────────────┐
-//   │ COMBINED   │ │  ALOJZ     │ │  ALMA      │
+// The trio (or N+1) of cards under the chart:
+//   ┌────────────┐ ┌────────────┐ ┌────────────┐ ...
+//   │ COMBINED   │ │  Person A  │ │  Person B  │
 //   │ €X         │ │ €Y         │ │ €Z         │
 //   │ +1.2% · 1Y │ │ +2.1% · 1Y │ │ +0.5% · 1Y │
 //   └────────────┘ └────────────┘ └────────────┘
+//
+// One card per holder + a Combined card. Driven by the holders array
+// from the dashboard API; adding a person grows the row automatically.
 
 import { fmtMoney } from '@/lib/format'
-import { COMBINED_META, HOLDER_LABEL } from '@/lib/holders'
+import { COMBINED_META, holderBg, holderBorder } from '@/lib/holders'
+import type { DashboardHolder } from '@/lib/api/dashboard'
 import type { Period } from './PeriodTabs'
 
 export interface SummaryRow {
@@ -21,18 +25,14 @@ export interface SummaryRow {
 
 export function buildSummaryRows({
   totalAll,
-  totalAlojz,
-  totalAlma,
   pctAll,
-  pctAlojz,
-  pctAlma,
+  holders,
+  pctByHolder,
 }: {
   totalAll: number
-  totalAlojz: number
-  totalAlma: number
   pctAll: number | null
-  pctAlojz: number | null
-  pctAlma: number | null
+  holders: DashboardHolder[]
+  pctByHolder: Record<string, number | null>
 }): SummaryRow[] {
   return [
     {
@@ -43,22 +43,14 @@ export function buildSummaryRows({
       bg: COMBINED_META.bg,
       border: COMBINED_META.border,
     },
-    {
-      label: HOLDER_LABEL.alojz.label,
-      total: totalAlojz,
-      pct: pctAlojz,
-      color: HOLDER_LABEL.alojz.color,
-      bg: HOLDER_LABEL.alojz.bg,
-      border: HOLDER_LABEL.alojz.border,
-    },
-    {
-      label: HOLDER_LABEL.alma.label,
-      total: totalAlma,
-      pct: pctAlma,
-      color: HOLDER_LABEL.alma.color,
-      bg: HOLDER_LABEL.alma.bg,
-      border: HOLDER_LABEL.alma.border,
-    },
+    ...holders.map((h) => ({
+      label: h.label,
+      total: h.total,
+      pct: pctByHolder[h.id] ?? null,
+      color: h.color,
+      bg: holderBg(h.color),
+      border: holderBorder(h.color),
+    })),
   ]
 }
 
@@ -71,16 +63,18 @@ export default function SummaryCards({
   period: Period
   currency: string | null
 }) {
+  // Grid auto-fits — fixed grid-cols-3 broke when there were >2 holders.
   return (
-    <div className="grid shrink-0 grid-cols-3 gap-[14px]">
+    <div
+      className="grid shrink-0 gap-[14px]"
+      style={{ gridTemplateColumns: `repeat(${rows.length}, minmax(0, 1fr))` }}
+    >
       {rows.map((s) => {
         const positive = (s.pct ?? 0) >= 0
         // Suppress garbage % when the baseline was effectively zero (early
-        // days of tracking → divide-by-near-zero → 3000%+ noise). Same
-        // guard as the topbar; > ±500% is almost certainly a tiny base
-        // getting funded, not real growth.
-        const showPct =
-          s.pct != null && Number.isFinite(s.pct) && Math.abs(s.pct) <= 500
+        // days of tracking → divide-by-near-zero → 3000%+ noise). > ±500%
+        // is almost certainly a tiny base getting funded, not real growth.
+        const showPct = s.pct != null && Number.isFinite(s.pct) && Math.abs(s.pct) <= 500
         return (
           <div
             key={s.label}

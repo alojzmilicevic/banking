@@ -237,11 +237,3 @@ export class AvanzaApi {
     return this.raw<T>('POST', path, body, headers).then((r) => r.body)
   }
 }
-
-export function templatePath(template: string, params: Record<string, string>): string {
-  let out = template
-  for (const [k, v] of Object.entries(params)) {
-    out = out.replace(`{${k}}`, encodeURIComponent(v))
-  }
-  return out
-}

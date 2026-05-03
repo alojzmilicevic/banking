@@ -12,71 +12,65 @@
 //   │ + Add account                                │
 //   └──────────────────────────────────────────────┘
 //
-// Sums + delta are derived from the visible (non-excluded) accounts only,
-// so toggling visibility updates the header instantly without round-trip.
-// Hidden accounts collapse under an expandable so the user can unhide
-// without leaving the sidebar.
+// Sums + delta come straight from the API (server already filtered by
+// holder, deduped joints, and computed change30d). Hidden accounts
+// collapse under an expandable so the user can unhide without leaving
+// the sidebar.
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { ChevronDown, Plus } from 'lucide-react'
-import type { AccountSummary, Holder } from '@/lib/queries'
+import type { DashboardAccount, DashboardHolder } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
-import { HOLDER_LABEL } from '@/lib/holders'
+import { holderBg, holderBorder } from '@/lib/holders'
 import SidebarAccountRow from './SidebarAccountRow'
 
 export default function PersonSection({
   holder,
-  accounts,
   onToggleAll,
   onAddAccount,
   onOpenAccountSettings,
 }: {
-  holder: Exclude<Holder, 'joint'>
-  accounts: AccountSummary[]
+  holder: DashboardHolder
   onToggleAll: () => void
   onAddAccount: () => void
-  onOpenAccountSettings?: (a: AccountSummary) => void
+  onOpenAccountSettings?: (a: DashboardAccount) => void
 }) {
-  const meta = HOLDER_LABEL[holder]
-  // possibleDuplicateOf: this row is the secondary copy of a joint account
-  // that's also linked under the other holder. We hide secondaries so the
-  // joint account appears exactly once across the household, in whichever
-  // section was linked first. Without this, both sidebar sections (and
-  // their totals) would contain the same physical account twice.
-  const dedupedAccounts = accounts.filter((a) => !a.possibleDuplicateOf)
-  const visibleAccounts = dedupedAccounts.filter((a) => !a.excludedFromTotal)
-  const hiddenAccounts = dedupedAccounts.filter((a) => a.excludedFromTotal)
-  const total = visibleAccounts.reduce((s, a) => s + (a.balance ?? 0), 0)
-  // 30-day delta = sum of each visible account's 30d absolute, when present.
-  const delta30 = visibleAccounts.reduce((s, a) => s + (a.change30d?.absolute ?? 0), 0)
-  const allHidden = dedupedAccounts.length > 0 && visibleAccounts.length === 0
+  // Server has already deduped joint accounts (each appears in exactly
+  // one bucket), but we still hide possibleDuplicateOf rows in case the
+  // server ever returns them in a holder bucket — defence in depth.
+  const visibleAccounts = holder.accounts.filter((a) => !a.excludedFromTotal && !a.possibleDuplicateOf)
+  const hiddenAccounts = holder.accounts.filter((a) => a.excludedFromTotal && !a.possibleDuplicateOf)
+  const allHidden = holder.accounts.length > 0 && visibleAccounts.length === 0
 
   const [showHidden, setShowHidden] = useState(false)
+
+  const bg = holderBg(holder.color)
+  const border = holderBorder(holder.color)
 
   return (
     <div
       className="mb-3 rounded-[14px] border p-[16px_18px]"
-      style={{ background: meta.bg, borderColor: meta.border }}
+      style={{ background: bg, borderColor: border }}
     >
       {/* Header */}
       <div className="mb-[14px] flex items-center gap-[10px]">
         <div
           className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-semibold"
           style={{
-            background: `${meta.color}22`,
-            color: meta.color,
-            border: `1.5px solid ${meta.color}55`,
+            background: `${holder.color}22`,
+            color: holder.color,
+            border: `1.5px solid ${holder.color}55`,
           }}
         >
-          {meta.initials}
+          {holder.initials ?? holder.label.slice(0, 2).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-medium text-foreground">{meta.label}</div>
+          <div className="truncate text-[15px] font-medium text-foreground">{holder.label}</div>
           <div className="mt-px text-[11px] text-text-faint">
             {visibleAccounts.length}
-            {hiddenAccounts.length > 0 ? ` of ${dedupedAccounts.length}` : ''}{' '}
-            {dedupedAccounts.length === 1 ? 'account' : 'accounts'}
+            {hiddenAccounts.length > 0 ? ` of ${visibleAccounts.length + hiddenAccounts.length}` : ''}{' '}
+            {visibleAccounts.length + hiddenAccounts.length === 1 ? 'account' : 'accounts'}
           </div>
         </div>
         <div className="shrink-0 whitespace-nowrap text-right">
@@ -84,15 +78,17 @@ export default function PersonSection({
             className="font-mono text-[16px] font-light text-foreground tabular-nums"
             style={{ letterSpacing: '-0.02em' }}
           >
-            {fmtMoneyCompact(total)}
+            {fmtMoneyCompact(holder.total)}
           </div>
-          <div
-            className="mt-px text-[11px]"
-            style={{ color: delta30 >= 0 ? 'var(--color-pos)' : 'var(--color-neg)' }}
-          >
-            {delta30 >= 0 ? '+' : ''}
-            {fmtMoneyCompact(Math.abs(delta30))}
-          </div>
+          {holder.change30d && (
+            <div
+              className="mt-px text-[11px]"
+              style={{ color: holder.change30d.absolute >= 0 ? 'var(--color-pos)' : 'var(--color-neg)' }}
+            >
+              {holder.change30d.absolute >= 0 ? '+' : ''}
+              {fmtMoneyCompact(Math.abs(holder.change30d.absolute))}
+            </div>
+          )}
         </div>
         <button
           type="button"
@@ -116,11 +112,11 @@ export default function PersonSection({
           <SidebarAccountRow
             key={a.id}
             account={a}
-            color={meta.color}
+            color={holder.color}
             onOpenSettings={onOpenAccountSettings ? () => onOpenAccountSettings(a) : undefined}
           />
         ))}
-        {dedupedAccounts.length === 0 && (
+        {holder.accounts.length === 0 && (
           <p className="px-1 py-2 text-[12px] text-text-faint">No accounts linked yet.</p>
         )}
         {visibleAccounts.length === 0 && hiddenAccounts.length > 0 && (
@@ -157,7 +153,7 @@ export default function PersonSection({
                     <SidebarAccountRow
                       key={a.id}
                       account={a}
-                      color={meta.color}
+                      color={holder.color}
                       onOpenSettings={
                         onOpenAccountSettings ? () => onOpenAccountSettings(a) : undefined
                       }

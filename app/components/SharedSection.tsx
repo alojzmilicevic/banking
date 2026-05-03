@@ -1,19 +1,20 @@
 'use client'
-// Sidebar block for accounts whose IBAN appears under both holders. The
-// API computes `derivedHolder='joint'` for these — the Sidebar buckets
-// them in here instead of into either personal section, so each shared
-// account shows exactly once.
+// Sidebar block for accounts whose IBAN appears under multiple holders'
+// connections, or whose connection is explicitly linked to >1 holder.
+// The API tags these with `bucket: { kind: 'shared' }` and surfaces them
+// on `dashboard.shared.accounts` — this section renders that array
+// instead of bucketing client-side, so each shared account shows once.
 //
 // Different from PersonSection in two ways:
 //   1. Header uses a Users icon (not initials avatar) since "Shared"
 //      isn't a single person.
 //   2. No "Add account" CTA — sharing is detected automatically when the
-//      same IBAN appears under both holders, not added by hand.
+//      same IBAN appears under multiple holders, not added by hand.
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { ChevronDown, Users } from 'lucide-react'
-import type { AccountSummary } from '@/lib/queries'
+import type { DashboardAccount } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
 import { SHARED_META } from '@/lib/holders'
 import SidebarAccountRow from './SidebarAccountRow'
@@ -23,20 +24,24 @@ export default function SharedSection({
   onToggleAll,
   onOpenAccountSettings,
 }: {
-  accounts: AccountSummary[]
+  accounts: DashboardAccount[]
   onToggleAll: () => void
-  onOpenAccountSettings?: (a: AccountSummary) => void
+  onOpenAccountSettings?: (a: DashboardAccount) => void
 }) {
   const meta = SHARED_META
-  const visibleAccounts = accounts.filter((a) => !a.excludedFromTotal)
-  const hiddenAccounts = accounts.filter((a) => a.excludedFromTotal)
+  // Server bucket includes the dupe copies of joint accounts (so the
+  // FE has the option to show them); filter them out for rendering so
+  // each shared account appears once.
+  const canonicals = accounts.filter((a) => !a.possibleDuplicateOf)
+  const visibleAccounts = canonicals.filter((a) => !a.excludedFromTotal)
+  const hiddenAccounts = canonicals.filter((a) => a.excludedFromTotal)
   const total = visibleAccounts.reduce((s, a) => s + (a.balance ?? 0), 0)
   const delta30 = visibleAccounts.reduce((s, a) => s + (a.change30d?.absolute ?? 0), 0)
-  const allHidden = accounts.length > 0 && visibleAccounts.length === 0
+  const allHidden = canonicals.length > 0 && visibleAccounts.length === 0
 
   const [showHidden, setShowHidden] = useState(false)
 
-  if (accounts.length === 0) return null
+  if (canonicals.length === 0) return null
 
   return (
     <div
@@ -59,8 +64,8 @@ export default function SharedSection({
           <div className="truncate text-[15px] font-medium text-foreground">{meta.label}</div>
           <div className="mt-px text-[11px] text-text-faint">
             {visibleAccounts.length}
-            {hiddenAccounts.length > 0 ? ` of ${accounts.length}` : ''}{' '}
-            {accounts.length === 1 ? 'account' : 'accounts'}
+            {hiddenAccounts.length > 0 ? ` of ${canonicals.length}` : ''}{' '}
+            {canonicals.length === 1 ? 'account' : 'accounts'}
           </div>
         </div>
         <div className="shrink-0 whitespace-nowrap text-right">

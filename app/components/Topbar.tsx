@@ -2,23 +2,14 @@
 // Top of the main panel — the small label, the big number, the +delta
 // pill, and the period pills on the right.
 //
-// The label/number/delta switch with the sidebar's view selection;
-// `total` and `delta` are passed in from the parent who already knows the
-// per-view sums.
+// `label` resolves in the parent (HomeContent) since holders are dynamic
+// now — Topbar doesn't need to know how to map a view key to a name.
 
 import { fmtMoney } from '@/lib/format'
 import PeriodTabs, { type Period } from './PeriodTabs'
-import type { ViewSelection } from './Sidebar'
-import { COMBINED_META, HOLDER_LABEL, SHARED_META } from '@/lib/holders'
-
-function viewMeta(view: ViewSelection) {
-  if (view === 'all') return COMBINED_META
-  if (view === 'shared') return SHARED_META
-  return HOLDER_LABEL[view]
-}
 
 export default function Topbar({
-  view,
+  label,
   total,
   delta,
   pct,
@@ -26,7 +17,7 @@ export default function Topbar({
   period,
   onPeriodChange,
 }: {
-  view: ViewSelection
+  label: string
   total: number | null
   delta: number | null
   pct: number | null
@@ -34,7 +25,6 @@ export default function Topbar({
   period: Period
   onPeriodChange: (p: Period) => void
 }) {
-  const meta = viewMeta(view)
   const positive = (delta ?? 0) >= 0
   const showPct = pct != null && Number.isFinite(pct) && Math.abs(pct) <= 500
 
@@ -48,7 +38,7 @@ export default function Topbar({
     >
       <div>
         <div className="mb-0.5 text-[11px] font-medium uppercase tracking-[0.08em] text-text-faint">
-          {meta.label}
+          {label}
         </div>
         <div className="flex items-baseline gap-3">
           <span

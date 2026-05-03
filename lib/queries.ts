@@ -1,14 +1,21 @@
 'use client'
-// All client-side data hooks for the app. One file because the surface
-// is small and centralizing query keys here makes invalidation patterns
-// (e.g. "any mutation that changes wealth invalidates connections +
-// timeseries") obvious.
+// Client-side data hooks. Centralizes query keys + invalidation patterns
+// so we don't forget to refresh dashboard + timeseries together when
+// wealth-affecting mutations fire.
+
 import {
   useMutation,
   useQuery,
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query'
+import type {
+  DashboardResponse,
+  HolderListItem,
+  TimeseriesResponse,
+} from '@/lib/api/dashboard'
+
+export type { HolderListItem }
 
 // ─── shared types ───────────────────────────────────────────────────────
 
@@ -19,71 +26,6 @@ export interface ASPSP {
   beta?: boolean
   maximum_consent_validity?: number
   psu_types?: string[]
-}
-
-export type Holder = 'alma' | 'alojz' | 'joint'
-
-export interface AccountSummary {
-  id: string
-  name?: string | null
-  details?: string | null
-  // Vendor's product label (e.g. "SHB-Anst-kto" from Handelsbanken). Often
-  // verbose / brand-specific.
-  product?: string | null
-  // Standardized type code (ISO 20022 for EB, Avanza-internal otherwise:
-  // CACC, INVESTERINGSSPARKONTO, AKTIEFONDKONTO, …). Use this to drive
-  // short labels — `product` is too noisy.
-  accountType?: string | null
-  currency?: string | null
-  iban?: string | null
-  kind?: string | null
-  excludedFromTotal?: boolean
-  balance?: number | null
-  balanceCurrency?: string | null
-  sparkline?: { date: string; value: number }[] | null
-  // pct is null for cash accounts (transfers swamp real growth) and for
-  // crazy ratios (>±500%) where a tiny base produced a misleading number.
-  change30d?: { absolute: number; pct: number | null } | null
-  possibleDuplicateOf?: string | null
-  // Resolved holder after joint-detection. Falls back to the connection's
-  // holder when the account isn't linked under multiple holders.
-  derivedHolder?: Holder | null
-}
-
-export interface ConnectionView {
-  id: string
-  providerId: string
-  label: string | null
-  holder: Holder | null
-  status: string
-  validUntil: number | null
-  lastSyncedAt: number | null
-  initialSyncedAt: number | null
-  lastSyncError: string | null
-  accounts: AccountSummary[]
-}
-
-export interface TimeseriesPoint {
-  date: string
-  total: number
-  cash?: number
-  investments?: number
-  alma?: number
-  alojz?: number
-  joint?: number
-}
-
-export interface TimeseriesResponse {
-  series: TimeseriesPoint[]
-  currency: string | null
-  points: number
-  period: string
-  cashTotal?: number
-  investmentTotal?: number
-  almaTotal?: number
-  alojzTotal?: number
-  jointTotal?: number
-  errors?: string[]
 }
 
 export interface AccountDetail {
@@ -158,18 +100,18 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 // ─── query keys ─────────────────────────────────────────────────────────
 
 export const qk = {
-  connections: ['connections'] as const,
+  dashboard: ['dashboard'] as const,
+  holders: ['holders'] as const,
   institutions: (country: string) => ['institutions', country] as const,
   timeseries: (period: string) => ['timeseries', period] as const,
   account: (id: string) => ['account', id] as const,
-  accountTransactions: (id: string) =>
-    ['account', id, 'transactions'] as const,
+  accountTransactions: (id: string) => ['account', id, 'transactions'] as const,
 }
 
 // Anything that changes wealth (sync, disconnect, exclude toggle, new
 // connection). Centralized so we don't forget one of the keys.
 function invalidateWealth(qc: QueryClient) {
-  qc.invalidateQueries({ queryKey: qk.connections })
+  qc.invalidateQueries({ queryKey: qk.dashboard })
   qc.invalidateQueries({ queryKey: ['timeseries'] })
 }
 
@@ -184,10 +126,19 @@ export function useInstitutions(country: string) {
   })
 }
 
-export function useConnections() {
+export function useDashboard() {
   return useQuery({
-    queryKey: qk.connections,
-    queryFn: () => fetchJson<ConnectionView[]>('/api/accounts'),
+    queryKey: qk.dashboard,
+    queryFn: () => fetchJson<DashboardResponse>('/api/dashboard'),
+  })
+}
+
+export function useHolders() {
+  return useQuery({
+    queryKey: qk.holders,
+    queryFn: () => fetchJson<HolderListItem[]>('/api/holders'),
+    // Holders rarely change between renders — cache aggressively.
+    staleTime: 5 * 60 * 1000,
   })
 }
 
@@ -247,14 +198,14 @@ export function useToggleExclude() {
 
 export function useStartEbAuth() {
   return useMutation({
-    mutationFn: (input: { aspspName: string; aspspCountry: string; holder?: Holder }) =>
+    mutationFn: (input: { aspspName: string; aspspCountry: string; holderId?: string }) =>
       fetchJson<AuthChallenge>('/api/auth/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           providerId: 'enable-banking',
           flow: 'redirect',
-          holder: input.holder,
+          holderId: input.holderId,
           input: { aspspName: input.aspspName, aspspCountry: input.aspspCountry },
         }),
       }),
@@ -294,16 +245,16 @@ export interface AvanzaPingResult {
 // who keeps the dashboard open never silently loses their session. On
 // success the connection's validUntil is bumped server-side and the chip
 // stays green; on auth failure the chip turns red and the re-link prompt
-// surfaces via useConnections.
+// surfaces via useDashboard.
 export function useAvanzaPing(enabled: boolean) {
   const qc = useQueryClient()
   return useQuery({
     queryKey: ['avanza-ping'],
     queryFn: async () => {
       const r = await fetchJson<AvanzaPingResult>('/api/avanza/ping', { method: 'POST' })
-      // Bank header chip reads validUntil from useConnections — refresh it
+      // Bank header chip reads validUntil from useDashboard — refresh it
       // so the "consent expires in N min" pill stays accurate.
-      qc.invalidateQueries({ queryKey: qk.connections })
+      qc.invalidateQueries({ queryKey: qk.dashboard })
       return r
     },
     enabled,
@@ -319,14 +270,14 @@ export function useAvanzaPing(enabled: boolean) {
 export function useConnectAvanza() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ cookies, holder }: { cookies: string; holder?: Holder }) =>
+    mutationFn: ({ cookies, holderId }: { cookies: string; holderId?: string }) =>
       fetchJson<AuthChallenge>('/api/auth/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           providerId: 'avanza',
           flow: 'cookies',
-          holder,
+          holderId,
           input: { cookies },
         }),
       }),

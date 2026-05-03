@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
-import { authStates, connections, db } from '@/lib/db/client'
+import { authStates, connectionHolders, connections, db } from '@/lib/db/client'
+import * as holdersRepo from '@/lib/repositories/holders'
 import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/sync/orchestrator'
 import { AuthCallbackQuerySchema } from '@/lib/api/schemas'
@@ -43,29 +44,38 @@ export async function GET(req: Request) {
     }
     const completed = await provider.completeAuth({ state, code: code ?? undefined })
 
-    let holder: 'alma' | 'alojz' | 'joint' | null = null
+    // Read holderId stashed at /api/auth/start. Validate against this user
+    // so a stale or tampered payload can't link under someone else's
+    // holder.
+    let holderId: string | null = null
     try {
-      const parsedPayload = JSON.parse(pending.payload) as { holder?: string }
-      const h = parsedPayload.holder
-      if (h === 'alma' || h === 'alojz' || h === 'joint') holder = h
+      const parsedPayload = JSON.parse(pending.payload) as { holderId?: string | null }
+      if (parsedPayload.holderId) {
+        const h = holdersRepo.getById(parsedPayload.holderId)
+        if (h && h.userId === pending.userId) holderId = h.id
+      }
     } catch {
-      // Legacy / malformed payload — leave holder unset.
+      // Legacy / malformed payload — leave holderId unset.
     }
 
     const connectionId = randomUUID()
-    db.insert(connections)
-      .values({
-        id: connectionId,
-        userId: pending.userId,
-        providerId: pending.providerId,
-        externalId: completed.externalId,
-        label: completed.label ?? null,
-        holder,
-        status: 'active',
-        validUntil: completed.validUntil ?? null,
-        rawJson: JSON.stringify(completed.raw),
-      })
-      .run()
+    db.transaction((tx) => {
+      tx.insert(connections)
+        .values({
+          id: connectionId,
+          userId: pending.userId,
+          providerId: pending.providerId,
+          externalId: completed.externalId,
+          label: completed.label ?? null,
+          status: 'active',
+          validUntil: completed.validUntil ?? null,
+          rawJson: JSON.stringify(completed.raw),
+        })
+        .run()
+      if (holderId) {
+        tx.insert(connectionHolders).values({ connectionId, holderId }).run()
+      }
+    })
 
     try {
       await syncConnection(connectionId)

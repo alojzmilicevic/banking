@@ -50,6 +50,20 @@
       "when": 1777619087191,
       "tag": "0006_add_connection_holder",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1777810355429,
+      "tag": "0007_add_holders_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1777811941581,
+      "tag": "0008_drop_legacy_connection_holder",
+      "breakpoints": true
     }
   ]
 }

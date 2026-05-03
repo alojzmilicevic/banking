@@ -1,11 +1,8 @@
 'use client'
-// Aloma growth chart. Up to three lines:
-//   • Combined (filled area, indigo) — toggleable from the sidebar
-//   • Alojz total (teal, line only)
-//   • Alma total (violet, line only)
-//
-// The series come from /api/timeseries which carries `total`, `alma`,
-// `alojz` per day (from the snapshot rebuild's per-holder breakdown).
+// Aloma growth chart. Renders a Combined area + one Line per holder +
+// one Line for the Shared bucket. The series come from /api/timeseries
+// which now keys by holderId, so the chart configuration is a loop —
+// adding a household member doesn't require a code change here.
 
 import { useEffect, useRef } from 'react'
 import {
@@ -20,14 +17,13 @@ import {
 } from 'recharts'
 import { Alert } from '@/components/ui/alert'
 import { useTimeseries } from '@/lib/queries'
+import { SHARED_META } from '@/lib/holders'
+import type { DashboardHolder } from '@/lib/api/dashboard'
 import type { Period } from './PeriodTabs'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-const PERSON_A_COLOR = 'oklch(70% 0.13 195)' // Alojz — teal
-const PERSON_B_COLOR = 'oklch(70% 0.16 300)' // Alma — violet
 const COMBINED_COLOR = 'oklch(65% 0.18 265)' // Indigo
-const SHARED_COLOR = 'oklch(72% 0.15 350)' // Shared — rose/pink
 
 function fmtCompact(v: number): string {
   if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
@@ -35,40 +31,38 @@ function fmtCompact(v: number): string {
   return String(v)
 }
 
+// Snapshot of "current period" totals + change pill, by view key. Driven
+// up to HomeContent so the topbar and SummaryCards can render without
+// re-running the chart math.
 export interface TimelineSnapshot {
   total: number | null
-  alma: number | null
-  alojz: number | null
-  joint: number | null
+  shared: number | null
+  // 'all' | <holderId> | 'shared' → amount for that view at the latest
+  // datapoint. Mirrors the topbar's view-selector keys.
+  byHolder: Record<string, number | null>
+  changeByKey: Record<string, { absolute: number | null; pct: number | null } | null>
   currency: string | null
   changeAbsolute: number | null
   changePct: number | null
-  // Per-holder period delta + pct so SummaryCards can render their pill.
-  almaChangeAbsolute: number | null
-  almaChangePct: number | null
-  alojzChangeAbsolute: number | null
-  alojzChangePct: number | null
-  jointChangeAbsolute: number | null
-  jointChangePct: number | null
 }
 
-function deltaPct(a: number | null, b: number | null): number | null {
-  if (a == null || b == null || b === 0 || !Number.isFinite((a - b) / b)) return null
-  return Math.round(((a - b) / Math.abs(b)) * 10000) / 100
+function deltaPct(now: number | null, then: number | null): number | null {
+  if (now == null || then == null || then === 0 || !Number.isFinite((now - then) / then)) return null
+  return Math.round(((now - then) / Math.abs(then)) * 10000) / 100
 }
 
 export default function Timeline({
   period,
+  holders,
   showCombined,
-  showAlojz,
-  showAlma,
+  visibleHolderIds,
   showShared,
   onSnapshotChange,
 }: {
   period: Period
+  holders: DashboardHolder[]
   showCombined: boolean
-  showAlojz: boolean
-  showAlma: boolean
+  visibleHolderIds: string[]
   showShared: boolean
   onSnapshotChange?: (snap: TimelineSnapshot) => void
 }) {
@@ -79,62 +73,61 @@ export default function Timeline({
   const first = series.length > 0 ? series[0] : null
 
   const total = last?.total ?? null
-  const alma = last?.alma ?? null
-  const alojz = last?.alojz ?? null
-  const joint = last?.joint ?? null
   const startTotal = first?.total ?? null
-  const startAlma = first?.alma ?? null
-  const startAlojz = first?.alojz ?? null
-  const startJoint = first?.joint ?? null
+  const shared = last?.shared ?? null
+  const startShared = first?.shared ?? null
+  const currency = data?.currency ?? null
 
   const changeAbsolute =
     total != null && startTotal != null ? Math.round((total - startTotal) * 100) / 100 : null
   const changePct = deltaPct(total, startTotal)
-  const almaChangeAbsolute =
-    alma != null && startAlma != null ? Math.round((alma - startAlma) * 100) / 100 : null
-  const almaChangePct = deltaPct(alma, startAlma)
-  const alojzChangeAbsolute =
-    alojz != null && startAlojz != null ? Math.round((alojz - startAlojz) * 100) / 100 : null
-  const alojzChangePct = deltaPct(alojz, startAlojz)
-  const jointChangeAbsolute =
-    joint != null && startJoint != null ? Math.round((joint - startJoint) * 100) / 100 : null
-  const jointChangePct = deltaPct(joint, startJoint)
 
-  const currency = data?.currency ?? null
+  // Per-holder current + change pills, keyed by holderId. 'shared' and
+  // 'all' get folded into changeByKey so MobileLayout / Topbar can index
+  // by ViewSelection directly.
+  const byHolder: Record<string, number | null> = {}
+  const changeByKey: Record<string, { absolute: number | null; pct: number | null } | null> = {
+    all: { absolute: changeAbsolute, pct: changePct },
+    shared:
+      shared != null && startShared != null
+        ? {
+            absolute: Math.round((shared - startShared) * 100) / 100,
+            pct: deltaPct(shared, startShared),
+          }
+        : null,
+  }
+  for (const h of holders) {
+    const now = last?.byHolder[h.id] ?? null
+    const then = first?.byHolder[h.id] ?? null
+    byHolder[h.id] = now
+    changeByKey[h.id] =
+      now != null && then != null
+        ? { absolute: Math.round((now - then) * 100) / 100, pct: deltaPct(now, then) }
+        : null
+  }
 
+  // Push the snapshot upward whenever the relevant inputs change. We
+  // serialize the dynamic-key maps so the dep-array can compare values
+  // (React diffs by reference, which would re-fire on every render).
   const cbRef = useRef(onSnapshotChange)
   cbRef.current = onSnapshotChange
+  const byHolderKey = JSON.stringify(byHolder)
+  const changeByKeyKey = JSON.stringify(changeByKey)
   useEffect(() => {
     cbRef.current?.({
       total,
-      alma,
-      alojz,
-      joint,
+      shared,
+      byHolder,
+      changeByKey,
       currency,
       changeAbsolute,
       changePct,
-      almaChangeAbsolute,
-      almaChangePct,
-      alojzChangeAbsolute,
-      alojzChangePct,
-      jointChangeAbsolute,
-      jointChangePct,
     })
-  }, [
-    total,
-    alma,
-    alojz,
-    joint,
-    currency,
-    changeAbsolute,
-    changePct,
-    almaChangeAbsolute,
-    almaChangePct,
-    alojzChangeAbsolute,
-    alojzChangePct,
-    jointChangeAbsolute,
-    jointChangePct,
-  ])
+    // byHolder / changeByKey are intentionally referenced via their JSON
+    // signatures (byHolderKey / changeByKeyKey) — React's dep array
+    // compares by reference and these maps are rebuilt every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total, shared, currency, changeAbsolute, changePct, byHolderKey, changeByKeyKey])
 
   if (error) {
     return (
@@ -152,6 +145,18 @@ export default function Timeline({
     return `${MONTHS[d.getUTCMonth()]} '${String(d.getUTCFullYear()).slice(2)}`
   }
 
+  // Recharts wants flat-keyed data; flatten the byHolder map into top-level
+  // keys (one per holder id) so dataKey={holderId} works.
+  const chartData = series.map((p) => ({
+    date: p.date,
+    total: p.total,
+    cash: p.cash,
+    investment: p.investment,
+    shared: p.shared,
+    unassigned: p.unassigned,
+    ...p.byHolder,
+  }))
+
   return (
     <div
       className="flex min-w-0 flex-1 flex-col rounded-[16px] border p-[14px_16px] lg:p-[20px_24px]"
@@ -166,9 +171,12 @@ export default function Timeline({
         </span>
         <div className="flex flex-wrap gap-x-3 gap-y-1 lg:gap-4">
           {showCombined && <LegendDot color={COMBINED_COLOR} label="Combined" />}
-          {showAlojz && <LegendDot color={PERSON_A_COLOR} label="Alojz" />}
-          {showAlma && <LegendDot color={PERSON_B_COLOR} label="Alma" />}
-          {showShared && <LegendDot color={SHARED_COLOR} label="Shared" />}
+          {holders
+            .filter((h) => visibleHolderIds.includes(h.id))
+            .map((h) => (
+              <LegendDot key={h.id} color={h.color} label={h.label} />
+            ))}
+          {showShared && <LegendDot color={SHARED_META.color} label={SHARED_META.label} />}
         </div>
       </div>
 
@@ -183,7 +191,7 @@ export default function Timeline({
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={series} margin={{ top: 10, right: 12, bottom: 0, left: 0 }}>
+            <ComposedChart data={chartData} margin={{ top: 10, right: 12, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id="combined-fill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={COMBINED_COLOR} stopOpacity={0.18} />
@@ -239,41 +247,31 @@ export default function Timeline({
                   animationDuration={600}
                 />
               )}
-              {showAlojz && (
-                <Line
-                  type="monotone"
-                  dataKey="alojz"
-                  name="Alojz"
-                  stroke={PERSON_A_COLOR}
-                  strokeWidth={1.5}
-                  dot={false}
-                  activeDot={{ r: 3, fill: PERSON_A_COLOR, strokeWidth: 0 }}
-                  isAnimationActive
-                  animationDuration={600}
-                />
-              )}
-              {showAlma && (
-                <Line
-                  type="monotone"
-                  dataKey="alma"
-                  name="Alma"
-                  stroke={PERSON_B_COLOR}
-                  strokeWidth={1.5}
-                  dot={false}
-                  activeDot={{ r: 3, fill: PERSON_B_COLOR, strokeWidth: 0 }}
-                  isAnimationActive
-                  animationDuration={600}
-                />
-              )}
+              {holders
+                .filter((h) => visibleHolderIds.includes(h.id))
+                .map((h) => (
+                  <Line
+                    key={h.id}
+                    type="monotone"
+                    dataKey={h.id}
+                    name={h.label}
+                    stroke={h.color}
+                    strokeWidth={1.5}
+                    dot={false}
+                    activeDot={{ r: 3, fill: h.color, strokeWidth: 0 }}
+                    isAnimationActive
+                    animationDuration={600}
+                  />
+                ))}
               {showShared && (
                 <Line
                   type="monotone"
-                  dataKey="joint"
-                  name="Shared"
-                  stroke={SHARED_COLOR}
+                  dataKey="shared"
+                  name={SHARED_META.label}
+                  stroke={SHARED_META.color}
                   strokeWidth={1.5}
                   dot={false}
-                  activeDot={{ r: 3, fill: SHARED_COLOR, strokeWidth: 0 }}
+                  activeDot={{ r: 3, fill: SHARED_META.color, strokeWidth: 0 }}
                   isAnimationActive
                   animationDuration={600}
                 />

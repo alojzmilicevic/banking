@@ -3,9 +3,10 @@
 // combined-line toggle) on the left. Main panel (topbar, growth chart,
 // summary cards) on the right.
 //
-// The view switcher only re-labels the topbar number/delta — the chart
-// is controlled by per-account eye toggles + the combined-line toggle in
-// the sidebar (matches the Aloma desktop kit exactly).
+// All bucketing/totals come from /api/dashboard now — this component
+// just routes data + UI state. The view switcher only re-labels the
+// topbar number/delta; the chart is controlled by the per-account eye
+// toggles + the combined-line toggle in the sidebar.
 
 import { useEffect, useMemo, useState } from 'react'
 import AccountSettingsModal from './components/AccountSettingsModal'
@@ -19,16 +20,23 @@ import { type Period } from './components/PeriodTabs'
 import { Alert } from '@/components/ui/alert'
 import {
   useAvanzaPing,
-  useConnections,
+  useDashboard,
   useDisconnect,
   useSyncAll,
   useToggleExclude,
-  type AccountSummary,
-  type ConnectionView,
-  type Holder,
 } from '@/lib/queries'
-import type { LinkerHolder } from '@/lib/holders'
+import type { DashboardAccount } from '@/lib/api/dashboard'
 import { celebrate } from '@/lib/animation/confetti'
+
+const EMPTY_SNAP: TimelineSnapshot = {
+  total: null,
+  shared: null,
+  byHolder: {},
+  changeByKey: {},
+  currency: null,
+  changeAbsolute: null,
+  changePct: null,
+}
 
 export default function HomeContent({
   initialError,
@@ -41,35 +49,24 @@ export default function HomeContent({
   const [view, setView] = useState<ViewSelection>('all')
   const [showCombined, setShowCombined] = useState(true)
   const [pageError, setPageError] = useState<string | null>(initialError)
-  const [snap, setSnap] = useState<TimelineSnapshot>({
-    total: null,
-    alma: null,
-    alojz: null,
-    joint: null,
-    currency: null,
-    changeAbsolute: null,
-    changePct: null,
-    almaChangeAbsolute: null,
-    almaChangePct: null,
-    alojzChangeAbsolute: null,
-    alojzChangePct: null,
-    jointChangeAbsolute: null,
-    jointChangePct: null,
-  })
+  const [snap, setSnap] = useState<TimelineSnapshot>(EMPTY_SNAP)
   const [addOpen, setAddOpen] = useState(false)
-  const [addHolder, setAddHolder] = useState<LinkerHolder | undefined>(undefined)
-  const [activeAccount, setActiveAccount] = useState<{
-    account: AccountSummary
-    connection: ConnectionView
-  } | null>(null)
+  const [addHolderId, setAddHolderId] = useState<string | undefined>(undefined)
+  const [activeAccount, setActiveAccount] = useState<DashboardAccount | null>(null)
 
-  const connections = useConnections()
+  const dashboard = useDashboard()
   const syncAll = useSyncAll()
   const disconnect = useDisconnect()
   const toggleExclude = useToggleExclude()
 
-  const conns = useMemo(() => connections.data ?? [], [connections.data])
-  const hasAvanza = useMemo(() => conns.some((c) => c.providerId === 'avanza'), [conns])
+  const data = dashboard.data
+  const hasAvanza = useMemo(() => {
+    if (!data) return false
+    for (const h of data.holders) {
+      if (h.accounts.some((a) => a.connection.providerId === 'avanza')) return true
+    }
+    return data.shared.accounts.some((a) => a.connection.providerId === 'avanza')
+  }, [data])
   // Background keepalive — only runs when an Avanza connection exists.
   useAvanzaPing(hasAvanza)
 
@@ -85,12 +82,12 @@ export default function HomeContent({
     }
   }, [])
 
-  function openAdd(h?: LinkerHolder) {
-    setAddHolder(h)
+  function openAdd(holderId?: string) {
+    setAddHolderId(holderId)
     setAddOpen(true)
   }
 
-  function onToggleAccount(a: AccountSummary) {
+  function onToggleAccount(a: DashboardAccount) {
     toggleExclude.mutate({ id: a.id, exclude: !a.excludedFromTotal })
   }
 
@@ -107,119 +104,103 @@ export default function HomeContent({
     setActiveAccount(null)
   }
 
-  function bulkToggle(predicate: (a: AccountSummary) => boolean) {
-    const owned: AccountSummary[] = []
-    for (const c of conns) {
-      for (const a of c.accounts) {
-        if (predicate(a)) owned.push(a)
-      }
+  function bulkToggle(predicate: (a: DashboardAccount) => boolean) {
+    if (!data) return
+    const owned: DashboardAccount[] = []
+    for (const h of data.holders) {
+      for (const a of h.accounts) if (predicate(a)) owned.push(a)
     }
+    for (const a of data.shared.accounts) if (predicate(a)) owned.push(a)
+
     const anyVisible = owned.some((a) => !a.excludedFromTotal)
     for (const a of owned) {
       const shouldExclude = anyVisible
-      if ((a.excludedFromTotal ?? false) === shouldExclude) continue
+      if (a.excludedFromTotal === shouldExclude) continue
       toggleExclude.mutate({ id: a.id, exclude: shouldExclude })
     }
   }
 
-  function onToggleAllForHolder(h: LinkerHolder) {
-    // Match the sidebar's bucketing: derivedHolder takes precedence so
-    // joint accounts aren't toggled here (they live in the Shared section).
-    bulkToggle((a) => {
-      const dh = a.derivedHolder
-      if (dh === 'joint') return false
-      if (dh === 'alma' || dh === 'alojz') return dh === h
-      // Fall back to connection holder for accounts without derivedHolder
-      // — but we need the connection here. Cheap re-walk:
-      for (const c of conns) {
-        if (c.accounts.some((x) => x.id === a.id)) return c.holder === h
-      }
-      return false
-    })
+  function onToggleAllForHolder(holderId: string) {
+    bulkToggle((a) => a.bucket.kind === 'holder' && a.bucket.holderId === holderId)
   }
 
   function onToggleAllShared() {
-    bulkToggle((a) => a.derivedHolder === 'joint' && !a.possibleDuplicateOf)
+    bulkToggle((a) => a.bucket.kind === 'shared' && !a.possibleDuplicateOf)
   }
 
   // Topbar values: pick the slice that matches the current view.
   const topbarTotal =
     view === 'all'
       ? snap.total
-      : view === 'alma'
-        ? snap.alma
-        : view === 'alojz'
-          ? snap.alojz
-          : snap.joint
-  const topbarDelta =
+      : view === 'shared'
+        ? snap.shared
+        : snap.byHolder[view] ?? null
+  const topbarChange = snap.changeByKey[view] ?? null
+  const topbarDelta = topbarChange?.absolute ?? null
+  const topbarPct = topbarChange?.pct ?? null
+  const topbarLabel =
     view === 'all'
-      ? snap.changeAbsolute
-      : view === 'alma'
-        ? snap.almaChangeAbsolute
-        : view === 'alojz'
-          ? snap.alojzChangeAbsolute
-          : snap.jointChangeAbsolute
-  const topbarPct =
-    view === 'all'
-      ? snap.changePct
-      : view === 'alma'
-        ? snap.almaChangePct
-        : view === 'alojz'
-          ? snap.alojzChangePct
-          : snap.jointChangePct
+      ? 'All Accounts'
+      : view === 'shared'
+        ? 'Shared'
+        : data?.holders.find((h) => h.id === view)?.label ?? 'Total balance'
 
-  const summaryRows = buildSummaryRows({
-    totalAll: snap.total ?? 0,
-    totalAlojz: snap.alojz ?? 0,
-    totalAlma: snap.alma ?? 0,
-    pctAll: snap.changePct,
-    pctAlojz: snap.alojzChangePct,
-    pctAlma: snap.almaChangePct,
-  })
+  const summaryRows = data
+    ? buildSummaryRows({
+        totalAll: snap.total ?? data.totals.total,
+        pctAll: snap.changePct,
+        holders: data.holders,
+        pctByHolder: Object.fromEntries(
+          data.holders.map((h) => [h.id, snap.changeByKey[h.id]?.pct ?? null]),
+        ),
+      })
+    : []
 
   // Chart line visibility — light up a per-holder/shared line whenever
-  // that bucket has any non-excluded canonical accounts.
-  function bucketHasVisible(predicate: (a: AccountSummary) => boolean) {
-    return conns.some((c) =>
-      c.accounts.some((a) => predicate(a) && !a.excludedFromTotal && !a.possibleDuplicateOf),
-    )
+  // that bucket has any non-excluded canonical accounts. Server already
+  // pre-filtered dupes via `possibleDuplicateOf`, so the predicate is
+  // simple here.
+  function holderHasVisible(accs: DashboardAccount[]) {
+    return accs.some((a) => !a.excludedFromTotal && !a.possibleDuplicateOf)
   }
-  const showAlojz = bucketHasVisible((a) => a.derivedHolder === 'alojz')
-  const showAlma = bucketHasVisible((a) => a.derivedHolder === 'alma')
-  const showShared = bucketHasVisible((a) => a.derivedHolder === 'joint')
-
-  const sidebarConnections: ConnectionView[] = conns
+  const visibleHolderIds = data
+    ? data.holders.filter((h) => holderHasVisible(h.accounts)).map((h) => h.id)
+    : []
+  const showShared = data ? holderHasVisible(data.shared.accounts) : false
 
   const topError =
     pageError ??
-    connections.error?.message ??
+    dashboard.error?.message ??
     syncAll.error?.message ??
     disconnect.error?.message ??
     toggleExclude.error?.message ??
     null
 
+  // Empty placeholder until the first /api/dashboard fetch resolves.
+  const empty = !data
+
   return (
     <>
       {/* Desktop: sidebar + main panel. Hidden below `lg` (1024px). */}
       <div className="hidden h-screen w-screen overflow-hidden lg:flex">
-        <Sidebar
-          connections={sidebarConnections}
-          view={view}
-          onChangeView={setView}
-          showCombined={showCombined}
-          onToggleCombined={() => setShowCombined((v) => !v)}
-          onToggleAllForHolder={onToggleAllForHolder}
-          onToggleAllShared={onToggleAllShared}
-          onAddAccount={openAdd}
-          initialWidth={initialSidebarWidth}
-          onOpenAccountSettings={(account, connection) =>
-            setActiveAccount({ account, connection })
-          }
-        />
+        {data && (
+          <Sidebar
+            dashboard={data}
+            view={view}
+            onChangeView={setView}
+            showCombined={showCombined}
+            onToggleCombined={() => setShowCombined((v) => !v)}
+            onToggleAllForHolder={onToggleAllForHolder}
+            onToggleAllShared={onToggleAllShared}
+            onAddAccount={openAdd}
+            initialWidth={initialSidebarWidth}
+            onOpenAccountSettings={(account) => setActiveAccount(account)}
+          />
+        )}
 
         <main className="flex flex-1 flex-col overflow-hidden">
           <Topbar
-            view={view}
+            label={topbarLabel}
             total={topbarTotal}
             delta={topbarDelta}
             pct={topbarPct}
@@ -243,54 +224,60 @@ export default function HomeContent({
               </Alert>
             )}
 
-            <Timeline
-              period={period}
-              showCombined={showCombined}
-              showAlojz={showAlojz}
-              showAlma={showAlma}
-              showShared={showShared}
-              onSnapshotChange={setSnap}
-            />
+            {data && (
+              <>
+                <Timeline
+                  period={period}
+                  holders={data.holders}
+                  showCombined={showCombined}
+                  visibleHolderIds={visibleHolderIds}
+                  showShared={showShared}
+                  onSnapshotChange={setSnap}
+                />
 
-            <SummaryCards rows={summaryRows} period={period} currency={snap.currency} />
+                <SummaryCards rows={summaryRows} period={period} currency={snap.currency} />
+              </>
+            )}
+
+            {empty && (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            )}
           </div>
         </main>
       </div>
 
       {/* Mobile + tablet: stacked layout matching the Aloma mobile UI kit. */}
-      <MobileLayout
-        connections={sidebarConnections}
-        view={view}
-        onChangeView={setView}
-        period={period}
-        onPeriodChange={setPeriod}
-        snap={snap}
-        showCombined={showCombined}
-        showAlojz={showAlojz}
-        showAlma={showAlma}
-        showShared={showShared}
-        onAddAccount={openAdd}
-        onOpenAccountSettings={(account, connection) =>
-          setActiveAccount({ account, connection })
-        }
-        topError={topError}
-        onDismissError={() => setPageError(null)}
-      />
+      {data && (
+        <MobileLayout
+          dashboard={data}
+          view={view}
+          onChangeView={setView}
+          period={period}
+          onPeriodChange={setPeriod}
+          snap={snap}
+          showCombined={showCombined}
+          visibleHolderIds={visibleHolderIds}
+          showShared={showShared}
+          onAddAccount={openAdd}
+          onOpenAccountSettings={(account) => setActiveAccount(account)}
+          topError={topError}
+          onDismissError={() => setPageError(null)}
+        />
+      )}
 
       <AddBankModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onConnected={() => celebrate()}
-        initialHolder={addHolder}
+        initialHolderId={addHolderId}
       />
 
       <AccountSettingsModal
-        account={activeAccount?.account ?? null}
-        connection={activeAccount?.connection ?? null}
+        account={activeAccount}
         onClose={() => setActiveAccount(null)}
         onToggleHide={() => {
           if (!activeAccount) return
-          onToggleAccount(activeAccount.account)
+          onToggleAccount(activeAccount)
           setActiveAccount(null)
         }}
         onDisconnect={onDisconnectActive}
@@ -300,7 +287,3 @@ export default function HomeContent({
     </>
   )
 }
-
-// Re-export so AccountTile / others that previously imported Holder from
-// lib/queries don't have to learn another import path.
-export type { Holder }

@@ -6,37 +6,36 @@
 //      connection (cascades to accounts/balances/history). The user
 //      then re-links via Add bank under the right holder.
 //
-// Holder reassignment is intentionally NOT here — accounts belong to
-// either Alma or Alojz and that's set once at link time.
+// Holder reassignment is intentionally NOT here — a connection's holder
+// set is decided once at link time.
 
 import Link from 'next/link'
 import { Eye, EyeOff, Link2Off, Loader2 } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { fmtMoney } from '@/lib/format'
-import type { AccountSummary, ConnectionView } from '@/lib/queries'
+import type { DashboardAccount } from '@/lib/api/dashboard'
 
-function accountLabel(a: AccountSummary): string {
+function accountLabel(a: DashboardAccount): string {
   return a.details || a.product || a.name || a.iban || a.id
 }
 
 export default function AccountSettingsModal({
   account,
-  connection,
   onClose,
   onToggleHide,
   onDisconnect,
   toggling,
   disconnecting,
 }: {
-  account: AccountSummary | null
-  connection: ConnectionView | null
+  account: DashboardAccount | null
   onClose: () => void
   onToggleHide: () => void
   onDisconnect: () => void
   toggling: boolean
   disconnecting: boolean
 }) {
+  const connection = account?.connection ?? null
   const open = !!account && !!connection
 
   return (

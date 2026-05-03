@@ -1,13 +1,43 @@
 import { sql } from 'drizzle-orm'
-import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core'
 
-// People in the household. Multi-user from day one.
+// One row per "household" (single-tenant for now — there's typically one
+// users row that represents the whole household, with N holders below).
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email'),
   createdAt: integer('created_at').notNull().default(sql`(unixepoch() * 1000)`),
 })
+
+// Members of the household. N people supported (was hardcoded 'alma' /
+// 'alojz' before). Display label, color, and order all live here so the
+// UI iterates rows instead of referencing names by literal id.
+export const holders = sqliteTable(
+  'holders',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    color: text('color').notNull(),
+    initials: text('initials'),
+    displayOrder: integer('display_order').notNull().default(0),
+    createdAt: integer('created_at').notNull().default(sql`(unixepoch() * 1000)`),
+  },
+  (t) => ({
+    byUser: index('holders_by_user').on(t.userId),
+  }),
+)
 
 // One row per (user × provider × external auth session).
 export const connections = sqliteTable(
@@ -20,10 +50,6 @@ export const connections = sqliteTable(
     providerId: text('provider_id').notNull(), // 'enable-banking', 'avanza', ...
     externalId: text('external_id').notNull(), // provider's session id
     label: text('label'),
-    // Who in the household this connection belongs to. 'joint' means
-    // shared economy — accounts on this connection contribute once to
-    // the household total, just like sole connections.
-    holder: text('holder'), // 'alma' | 'alojz' | 'joint' | null (legacy)
     status: text('status').notNull().default('active'),
     validUntil: integer('valid_until'),
     initialSyncedAt: integer('initial_synced_at'),
@@ -35,6 +61,28 @@ export const connections = sqliteTable(
   (t) => ({
     byUser: index('connections_by_user').on(t.userId),
     byProvider: uniqueIndex('connections_provider_external').on(t.providerId, t.externalId),
+  }),
+)
+
+// Many-to-many: which holder(s) own a given connection.
+//   • 0 rows → unassigned (legacy connection or user hasn't set ownership)
+//   • 1 row  → personal account
+//   • 2+ rows → explicitly joint (in addition to auto-joint detection that
+//              fires when the same IBAN appears under different holders'
+//              connections; the dashboard service unions both signals).
+export const connectionHolders = sqliteTable(
+  'connection_holders',
+  {
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => connections.id, { onDelete: 'cascade' }),
+    holderId: text('holder_id')
+      .notNull()
+      .references(() => holders.id, { onDelete: 'cascade' }),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.connectionId, t.holderId] }),
+    byHolder: index('connection_holders_by_holder').on(t.holderId),
   }),
 )
 
@@ -227,8 +275,13 @@ export const accountValueHistory = sqliteTable(
 )
 
 export type User = typeof users.$inferSelect
+// Named `HolderRow` (not `Holder`) to avoid clashing with the legacy
+// literal-union `Holder` in lib/api/schemas.ts during the transition.
+// Once that union is gone, this can be renamed to `Holder`.
+export type HolderRow = typeof holders.$inferSelect
 export type AccountValueHistory = typeof accountValueHistory.$inferSelect
 export type Connection = typeof connections.$inferSelect
+export type ConnectionHolder = typeof connectionHolders.$inferSelect
 export type ConnectionCredential = typeof connectionCredentials.$inferSelect
 export type Account = typeof accounts.$inferSelect
 export type Balance = typeof balances.$inferSelect

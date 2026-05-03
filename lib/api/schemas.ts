@@ -5,13 +5,13 @@ import { z } from 'zod'
 
 const AuthFlowSchema = z.enum(['redirect', 'bankid', 'credentials', 'apikey', 'cookies'])
 
-export const HolderSchema = z.enum(['alma', 'alojz', 'joint'])
-export type Holder = z.infer<typeof HolderSchema>
-
+// `holderId` references holders.id (uuid). Server validates the holder
+// belongs to the requesting user before linking. Optional — connections
+// can be created without a holder and assigned later from the UI.
 export const StartAuthBodySchema = z.object({
   providerId: z.string().min(1, 'providerId required'),
   flow: AuthFlowSchema.optional(),
-  holder: HolderSchema.optional(),
+  holderId: z.string().min(1).optional(),
   input: z.record(z.string(), z.unknown()).optional(),
 })
 export type StartAuthBody = z.infer<typeof StartAuthBodySchema>

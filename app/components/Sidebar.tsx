@@ -4,35 +4,25 @@
 // and re-totals the topbar/summary — the chart is controlled by the
 // per-account eye toggles inside each section.
 //
-// The sidebar is horizontally resizable. A 4-px hover-target on the
-// right edge listens for pointer drag; the chosen width is persisted
-// in a cookie so the server can read it during SSR and render the HTML
-// at the correct width on first paint (no flicker, no boot script).
+// All bucketing/totals come straight from the dashboard API now —
+// components iterate over `dashboard.holders[]` and `dashboard.shared`.
 
 import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AccountSummary, ConnectionView, Holder } from '@/lib/queries'
+import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
-import {
-  COMBINED_META,
-  HOLDER_LABEL,
-  HOUSEHOLD,
-  SHARED_META,
-  type LinkerHolder,
-} from '@/lib/holders'
+import { COMBINED_META, SHARED_META } from '@/lib/holders'
 import PersonSection from './PersonSection'
 import SharedSection from './SharedSection'
 import {
   SIDEBAR_DEFAULT_WIDTH,
-  SIDEBAR_MAX_WIDTH,
-  SIDEBAR_MIN_WIDTH,
   SIDEBAR_WIDTH_COOKIE,
   clampSidebarWidth,
 } from './sidebar-width'
 
-export type ViewSelection = 'all' | LinkerHolder | 'shared'
-
-type AccountWithConn = { account: AccountSummary; conn: ConnectionView }
+// 'all' | <holderId> | 'shared'. Encoded as a string so the value can be
+// passed through useState / event handlers without a discriminated union.
+export type ViewSelection = string
 
 // 1-year cookie. Lax keeps it client-readable for our own writes and
 // also sent on top-level navigations (which is when SSR needs it).
@@ -44,7 +34,7 @@ function persistWidth(w: number) {
 }
 
 export default function Sidebar({
-  connections,
+  dashboard,
   view,
   onChangeView,
   showCombined,
@@ -55,87 +45,26 @@ export default function Sidebar({
   onOpenAccountSettings,
   initialWidth,
 }: {
-  connections: ConnectionView[]
+  dashboard: DashboardResponse
   view: ViewSelection
   onChangeView: (v: ViewSelection) => void
   showCombined: boolean
   onToggleCombined: () => void
-  onToggleAllForHolder: (h: LinkerHolder) => void
+  onToggleAllForHolder: (holderId: string) => void
   onToggleAllShared: () => void
-  onAddAccount: (h: LinkerHolder) => void
-  onOpenAccountSettings?: (a: AccountSummary, c: ConnectionView) => void
+  onAddAccount: (holderId: string) => void
+  onOpenAccountSettings?: (a: DashboardAccount) => void
   // Comes from the server via the cookie read in app/page.tsx, so the
   // SSR'd HTML already has the correct width on first paint.
   initialWidth: number
 }) {
-  // Bucket accounts by their *derived* holder (set by the API) so joint
-  // accounts go into the Shared section instead of duplicating across
-  // both PersonSections. We also skip rows flagged `possibleDuplicateOf`
-  // (the secondary copy of a joint account) — only the canonical copy
-  // appears in the Shared section.
-  const byBucket: Record<LinkerHolder | 'shared', AccountWithConn[]> = {
-    alma: [],
-    alojz: [],
-    shared: [],
-  }
-  for (const c of connections) {
-    for (const a of c.accounts) {
-      if (a.possibleDuplicateOf) continue
-      const dh = a.derivedHolder
-      if (dh === 'joint') byBucket.shared.push({ account: a, conn: c })
-      else if (dh === 'alma') byBucket.alma.push({ account: a, conn: c })
-      else if (dh === 'alojz') byBucket.alojz.push({ account: a, conn: c })
-      else if (c.holder === 'alma' || c.holder === 'alojz') {
-        // No derivedHolder (no IBAN/BBAN) — fall back to connection holder.
-        byBucket[c.holder].push({ account: a, conn: c })
-      }
-    }
-  }
-
-  const totals: Record<LinkerHolder | 'shared' | 'all', number> = {
-    alma: 0,
-    alojz: 0,
-    shared: 0,
-    all: 0,
-  }
-  for (const k of ['alma', 'alojz', 'shared'] as const) {
-    totals[k] = byBucket[k]
-      .filter(({ account }) => !account.excludedFromTotal)
-      .reduce((s, { account }) => s + (account.balance ?? 0), 0)
-  }
-  totals.all = totals.alma + totals.alojz + totals.shared
-
+  // Switcher rows: All + each holder + Shared. Server already computed
+  // every total — we just render.
   const switcher: { key: ViewSelection; label: string; color: string; total: number }[] = [
-    { key: 'all', label: COMBINED_META.label, color: COMBINED_META.color, total: totals.all },
-    {
-      key: 'alojz',
-      label: HOLDER_LABEL.alojz.label,
-      color: HOLDER_LABEL.alojz.color,
-      total: totals.alojz,
-    },
-    {
-      key: 'alma',
-      label: HOLDER_LABEL.alma.label,
-      color: HOLDER_LABEL.alma.color,
-      total: totals.alma,
-    },
-    {
-      key: 'shared',
-      label: SHARED_META.label,
-      color: SHARED_META.color,
-      total: totals.shared,
-    },
+    { key: 'all', label: COMBINED_META.label, color: COMBINED_META.color, total: dashboard.totals.total },
+    ...dashboard.holders.map((h) => ({ key: h.id, label: h.label, color: h.color, total: h.total })),
+    { key: 'shared', label: SHARED_META.label, color: SHARED_META.color, total: dashboard.shared.total },
   ]
-
-  // Resolve the connection for the per-account settings modal — needed
-  // because the modal renders Disconnect Bank, which is per-connection.
-  function resolveConn(a: AccountSummary): ConnectionView | null {
-    for (const bucket of Object.values(byBucket)) {
-      const hit = bucket.find((it) => it.account.id === a.id)
-      if (hit) return hit.conn
-    }
-    return null
-  }
 
   // Width comes from the cookie on first render (via initialWidth). All
   // updates live in local state; on drag end we write the cookie so the
@@ -252,39 +181,20 @@ export default function Sidebar({
         Accounts
       </div>
 
-      {HOUSEHOLD.map((h) => {
-        const items = byBucket[h]
-        const accounts = items.map(({ account }) => account)
-        return (
-          <PersonSection
-            key={h}
-            holder={h}
-            accounts={accounts}
-            onToggleAll={() => onToggleAllForHolder(h)}
-            onAddAccount={() => onAddAccount(h)}
-            onOpenAccountSettings={
-              onOpenAccountSettings
-                ? (a) => {
-                    const conn = resolveConn(a)
-                    if (conn) onOpenAccountSettings(a, conn)
-                  }
-                : undefined
-            }
-          />
-        )
-      })}
+      {dashboard.holders.map((h) => (
+        <PersonSection
+          key={h.id}
+          holder={h}
+          onToggleAll={() => onToggleAllForHolder(h.id)}
+          onAddAccount={() => onAddAccount(h.id)}
+          onOpenAccountSettings={onOpenAccountSettings}
+        />
+      ))}
 
       <SharedSection
-        accounts={byBucket.shared.map(({ account }) => account)}
+        accounts={dashboard.shared.accounts}
         onToggleAll={onToggleAllShared}
-        onOpenAccountSettings={
-          onOpenAccountSettings
-            ? (a) => {
-                const conn = resolveConn(a)
-                if (conn) onOpenAccountSettings(a, conn)
-              }
-            : undefined
-        }
+        onOpenAccountSettings={onOpenAccountSettings}
       />
 
       {/* Combined toggle */}
@@ -330,7 +240,3 @@ export default function Sidebar({
     </aside>
   )
 }
-
-// Keep these exports so consumers can also work with Holders without
-// importing from lib/holders directly.
-export type { Holder }

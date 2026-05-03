@@ -1,180 +1,118 @@
 'use client'
-// Phone-and-tablet layout for the dashboard, mirroring the Aloma mobile UI
-// kit. Below `lg` we drop the sidebar entirely: the view switcher (Me /
-// Alma / Shared / All) becomes the top tab strip, the balance hero +
-// chart + range pills stack vertically, and accounts move into a flat
-// list below the chart.
+// Phone-and-tablet layout, mirroring the Aloma mobile UI kit. Below `lg`
+// the sidebar drops out: the view switcher (one chip per holder + Shared
+// + All) becomes the top tab strip, the balance hero + chart + range
+// pills stack vertically, and accounts move into a flat list below.
 //
-// The data layer is shared with the desktop layout — same `view`,
-// `period`, `snap` and `connections` from HomeContent — so toggles in
-// either layout stay coherent if the viewport is resized.
+// Same data layer as the desktop layout — same `dashboard`, `view`,
+// `period`, `snap` from HomeContent — so toggles in either layout stay
+// coherent if the viewport is resized.
 
 import Image from 'next/image'
 import Link from 'next/link'
 import { Eye, EyeOff, Plus, Settings as SettingsIcon } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { fmtMoney, fmtMoneyCompact, shortProduct } from '@/lib/format'
-import {
-  COMBINED_META,
-  HOLDER_LABEL,
-  HOUSEHOLD,
-  SHARED_META,
-  type LinkerHolder,
-} from '@/lib/holders'
-import type { AccountSummary, ConnectionView } from '@/lib/queries'
+import { COMBINED_META, SHARED_META } from '@/lib/holders'
+import type {
+  DashboardAccount,
+  DashboardResponse,
+} from '@/lib/api/dashboard'
 import PeriodTabs, { type Period } from './PeriodTabs'
 import type { ViewSelection } from './Sidebar'
 import Timeline, { type TimelineSnapshot } from './Timeline'
 
-type AccountWithConn = { account: AccountSummary; conn: ConnectionView }
-
-// Labels are kept terse so all four tabs fit on a phone — "All Accounts"
-// is ~80px on its own and would push "Shared" off a 360-390px viewport.
-const VIEW_TABS: { key: ViewSelection; label: string; color: string }[] = [
-  { key: 'all', label: 'All', color: COMBINED_META.color },
-  { key: 'alojz', label: HOLDER_LABEL.alojz.label, color: HOLDER_LABEL.alojz.color },
-  { key: 'alma', label: HOLDER_LABEL.alma.label, color: HOLDER_LABEL.alma.color },
-  { key: 'shared', label: SHARED_META.label, color: SHARED_META.color },
-]
-
-function bucketAccounts(connections: ConnectionView[]) {
-  const byBucket: Record<LinkerHolder | 'shared', AccountWithConn[]> = {
-    alma: [],
-    alojz: [],
-    shared: [],
-  }
-  for (const c of connections) {
-    for (const a of c.accounts) {
-      if (a.possibleDuplicateOf) continue
-      const dh = a.derivedHolder
-      if (dh === 'joint') byBucket.shared.push({ account: a, conn: c })
-      else if (dh === 'alma') byBucket.alma.push({ account: a, conn: c })
-      else if (dh === 'alojz') byBucket.alojz.push({ account: a, conn: c })
-      else if (c.holder === 'alma' || c.holder === 'alojz') {
-        byBucket[c.holder].push({ account: a, conn: c })
-      }
-    }
-  }
-  return byBucket
-}
-
-function accountLabel(a: AccountSummary): string {
+function accountLabel(a: DashboardAccount): string {
   return a.details || a.product || a.name || a.iban || a.id
 }
 
-function holderColor(a: AccountSummary, conn: ConnectionView): string {
-  const dh = a.derivedHolder
-  if (dh === 'joint') return SHARED_META.color
-  if (dh === 'alma' || dh === 'alojz') return HOLDER_LABEL[dh].color
-  if (conn.holder === 'alma' || conn.holder === 'alojz') {
-    return HOLDER_LABEL[conn.holder].color
+function bucketColor(
+  a: DashboardAccount,
+  holderColorById: Map<string, string>,
+): string {
+  switch (a.bucket.kind) {
+    case 'holder':
+      return holderColorById.get(a.bucket.holderId) ?? COMBINED_META.color
+    case 'shared':
+      return SHARED_META.color
+    case 'unassigned':
+      return COMBINED_META.color
   }
-  return COMBINED_META.color
 }
 
 export default function MobileLayout({
-  connections,
+  dashboard,
   view,
   onChangeView,
   period,
   onPeriodChange,
   snap,
   showCombined,
-  showAlojz,
-  showAlma,
+  visibleHolderIds,
   showShared,
   onAddAccount,
   onOpenAccountSettings,
   topError,
   onDismissError,
 }: {
-  connections: ConnectionView[]
+  dashboard: DashboardResponse
   view: ViewSelection
   onChangeView: (v: ViewSelection) => void
   period: Period
   onPeriodChange: (p: Period) => void
   snap: TimelineSnapshot
   showCombined: boolean
-  showAlojz: boolean
-  showAlma: boolean
+  visibleHolderIds: string[]
   showShared: boolean
-  onAddAccount: (h: LinkerHolder) => void
-  onOpenAccountSettings: (account: AccountSummary, connection: ConnectionView) => void
+  onAddAccount: (holderId: string) => void
+  onOpenAccountSettings: (account: DashboardAccount) => void
   topError: string | null
   onDismissError: () => void
 }) {
-  const byBucket = bucketAccounts(connections)
+  // Tabs: All + each holder + Shared. Server already ordered holders by
+  // displayOrder.
+  const tabs: { key: ViewSelection; label: string; color: string }[] = [
+    { key: 'all', label: 'All', color: COMBINED_META.color },
+    ...dashboard.holders.map((h) => ({ key: h.id, label: h.label, color: h.color })),
+    { key: 'shared', label: SHARED_META.label, color: SHARED_META.color },
+  ]
+  const holderColorById = new Map(dashboard.holders.map((h) => [h.id, h.color]))
 
-  // Filter accounts by the active view tab.
-  let visibleItems: AccountWithConn[]
-  if (view === 'all') {
-    visibleItems = [...byBucket.alojz, ...byBucket.alma, ...byBucket.shared]
-  } else if (view === 'alojz') {
-    visibleItems = byBucket.alojz
-  } else if (view === 'alma') {
-    visibleItems = byBucket.alma
-  } else {
-    visibleItems = byBucket.shared
-  }
+  // Account list filtered by active tab.
+  const visibleItems: DashboardAccount[] =
+    view === 'all'
+      ? [
+          ...dashboard.holders.flatMap((h) => h.accounts),
+          ...dashboard.shared.accounts.filter((a) => !a.possibleDuplicateOf),
+        ]
+      : view === 'shared'
+        ? dashboard.shared.accounts.filter((a) => !a.possibleDuplicateOf)
+        : (dashboard.holders.find((h) => h.id === view)?.accounts ?? [])
 
   // Topbar values: pick the slice that matches the current view.
   const total =
     view === 'all'
       ? snap.total
-      : view === 'alma'
-        ? snap.alma
-        : view === 'alojz'
-          ? snap.alojz
-          : snap.joint
-  const delta =
-    view === 'all'
-      ? snap.changeAbsolute
-      : view === 'alma'
-        ? snap.almaChangeAbsolute
-        : view === 'alojz'
-          ? snap.alojzChangeAbsolute
-          : snap.jointChangeAbsolute
-  const pct =
-    view === 'all'
-      ? snap.changePct
-      : view === 'alma'
-        ? snap.almaChangePct
-        : view === 'alojz'
-          ? snap.alojzChangePct
-          : snap.jointChangePct
+      : view === 'shared'
+        ? snap.shared
+        : snap.byHolder[view] ?? null
+  const change = snap.changeByKey[view] ?? null
+  const delta = change?.absolute ?? null
+  const pct = change?.pct ?? null
 
   const positive = (delta ?? 0) >= 0
   const showPct = pct != null && Number.isFinite(pct) && Math.abs(pct) <= 500
 
-  // For the "All" view divider showing per-person sub-totals.
+  // Sub-totals row (only for the "All" view) — one chip per holder + Shared.
   const subTotals = [
-    {
-      label: HOLDER_LABEL.alojz.label,
-      val: byBucket.alojz
-        .filter(({ account }) => !account.excludedFromTotal)
-        .reduce((s, { account }) => s + (account.balance ?? 0), 0),
-      color: HOLDER_LABEL.alojz.color,
-    },
-    {
-      label: HOLDER_LABEL.alma.label,
-      val: byBucket.alma
-        .filter(({ account }) => !account.excludedFromTotal)
-        .reduce((s, { account }) => s + (account.balance ?? 0), 0),
-      color: HOLDER_LABEL.alma.color,
-    },
-    {
-      label: SHARED_META.label,
-      val: byBucket.shared
-        .filter(({ account }) => !account.excludedFromTotal)
-        .reduce((s, { account }) => s + (account.balance ?? 0), 0),
-      color: SHARED_META.color,
-    },
+    ...dashboard.holders.map((h) => ({ label: h.label, val: h.total, color: h.color })),
+    { label: SHARED_META.label, val: dashboard.shared.total, color: SHARED_META.color },
   ]
 
-  // "+ Add account" lands on the active person's section when one is
-  // selected; for All / Shared we default to alojz (user) since the
-  // AddBankModal needs a target holder.
-  const addHolder: LinkerHolder = view === 'alma' ? 'alma' : 'alojz'
+  // "+ Add account" defaults to the active person's section if one is
+  // selected; otherwise the first holder.
+  const addHolderId =
+    dashboard.holders.find((h) => h.id === view)?.id ?? dashboard.holders[0]?.id ?? ''
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden lg:hidden">
@@ -198,7 +136,7 @@ export default function MobileLayout({
         className="flex shrink-0 border-b px-[20px]"
         style={{ borderColor: 'var(--color-border-subtle)' }}
       >
-        {VIEW_TABS.map((v) => {
+        {tabs.map((v) => {
           const active = view === v.key
           return (
             <button
@@ -285,9 +223,9 @@ export default function MobileLayout({
         <div className="flex h-[200px] shrink-0 px-[12px]">
           <Timeline
             period={period}
+            holders={dashboard.holders}
             showCombined={showCombined}
-            showAlojz={showAlojz}
-            showAlma={showAlma}
+            visibleHolderIds={visibleHolderIds}
             showShared={showShared}
           />
         </div>
@@ -336,18 +274,19 @@ export default function MobileLayout({
 
           {visibleItems.length === 0 ? (
             <p className="px-[20px] py-[14px] text-[13px] text-text-faint">
-              {connections.length === 0
+              {dashboard.holders.every((h) => h.accounts.length === 0) &&
+              dashboard.shared.accounts.length === 0
                 ? 'No accounts linked yet — tap “Add account” to get started.'
                 : 'No accounts in this view.'}
             </p>
           ) : (
-            visibleItems.map(({ account, conn }) => (
+            visibleItems.map((account) => (
               <MobileAccountRow
                 key={account.id}
                 account={account}
-                connectionLabel={conn.label ?? conn.providerId}
-                color={holderColor(account, conn)}
-                onOpenSettings={() => onOpenAccountSettings(account, conn)}
+                connectionLabel={account.connection.label ?? account.connection.providerId}
+                color={bucketColor(account, holderColorById)}
+                onOpenSettings={() => onOpenAccountSettings(account)}
               />
             ))
           )}
@@ -355,8 +294,9 @@ export default function MobileLayout({
           <div className="px-[16px] pt-[10px]">
             <button
               type="button"
-              onClick={() => onAddAccount(addHolder)}
-              className="flex w-full items-center justify-center gap-[8px] rounded-[12px] border border-dashed px-[16px] py-[12px] text-[13px] text-text-faint transition-colors hover:border-input-border hover:text-foreground"
+              onClick={() => addHolderId && onAddAccount(addHolderId)}
+              disabled={!addHolderId}
+              className="flex w-full items-center justify-center gap-[8px] rounded-[12px] border border-dashed px-[16px] py-[12px] text-[13px] text-text-faint transition-colors hover:border-input-border hover:text-foreground disabled:opacity-50"
               style={{ borderColor: 'rgba(255,255,255,0.12)' }}
             >
               <Plus className="h-[14px] w-[14px]" />
@@ -371,7 +311,7 @@ export default function MobileLayout({
         className="flex shrink-0 items-center justify-center gap-[6px] border-t py-[10px]"
         style={{ borderColor: 'var(--color-border-subtle)' }}
       >
-        {VIEW_TABS.map((v) => {
+        {tabs.map((v) => {
           const active = view === v.key
           return (
             <button
@@ -399,7 +339,7 @@ function MobileAccountRow({
   color,
   onOpenSettings,
 }: {
-  account: AccountSummary
+  account: DashboardAccount
   connectionLabel: string
   color: string
   onOpenSettings: () => void
@@ -427,13 +367,11 @@ function MobileAccountRow({
         cursor: 'pointer',
       }}
     >
-      {/* Color bar */}
       <div
         className="shrink-0 rounded-[2px]"
         style={{ width: 3, height: 32, background: color, opacity: visible ? 1 : 0.4 }}
         aria-hidden
       />
-      {/* Name + bank */}
       <div className="min-w-0 flex-1">
         <div className="truncate text-[15px] font-medium leading-[1.2] text-foreground">
           <Link
@@ -450,7 +388,6 @@ function MobileAccountRow({
             .join(' · ')}
         </div>
       </div>
-      {/* Balance + delta */}
       <div className="shrink-0 whitespace-nowrap text-right">
         <div
           className="font-mono text-[15px] font-normal text-foreground tabular-nums"
@@ -471,7 +408,6 @@ function MobileAccountRow({
           </div>
         )}
       </div>
-      {/* Eye indicator (decorative — actual toggle in the settings modal) */}
       <button
         type="button"
         onClick={(e) => {

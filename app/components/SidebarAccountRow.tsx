@@ -8,10 +8,10 @@
 // topbar/summary totals.
 
 import Link from 'next/link'
-import type { AccountSummary } from '@/lib/queries'
+import type { DashboardAccount } from '@/lib/api/dashboard'
 import { fmtMoney, shortProduct } from '@/lib/format'
 
-function accountLabel(a: AccountSummary): string {
+function accountLabel(a: DashboardAccount): string {
   return a.details || a.product || a.name || a.iban || a.id
 }
 
@@ -20,7 +20,7 @@ export default function SidebarAccountRow({
   color,
   onOpenSettings,
 }: {
-  account: AccountSummary
+  account: DashboardAccount
   color: string
   onOpenSettings?: () => void
 }) {

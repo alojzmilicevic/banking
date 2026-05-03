@@ -69,15 +69,6 @@
   --color-text-faint: rgba(240, 244, 255, 0.38);
   --color-text-disabled: rgba(240, 244, 255, 0.22);
 
-  /* ── Person accent colors ───────────────────────────────────── */
-  --color-person-a: oklch(70% 0.13 195); /* Alojz — teal */
-  --color-person-a-bg: oklch(60% 0.14 195 / 0.14);
-  --color-person-a-border: oklch(60% 0.14 195 / 0.30);
-
-  --color-person-b: oklch(70% 0.16 300); /* Alma — violet */
-  --color-person-b-bg: oklch(61% 0.16 300 / 0.14);
-  --color-person-b-border: oklch(61% 0.16 300 / 0.30);
-
   /* ── Radii ──────────────────────────────────────────────────── */
   --radius: 0.5rem;
   --radius-sm: 6px;

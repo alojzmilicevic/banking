@@ -56,7 +56,7 @@ export function importLegacyIfPresent(
   let accountCount = 0
 
   db.transaction((tx) => {
-    tx.insert(users).values({ id: userId, name: 'Alojz' }).run()
+    tx.insert(users).values({ id: userId, name: 'Household' }).run()
 
     for (const s of parsed.sessions!) {
       const connId = randomUUID()
