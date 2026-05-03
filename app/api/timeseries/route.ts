@@ -8,7 +8,7 @@ import {
 
 const MS_DAY = 86400_000
 
-const PERIODS = ['1W', '1M', '3M', '6M', 'YTD', '1Y', 'ALL'] as const
+const PERIODS = ['1W', '1M', '3M', '1Y', 'ALL'] as const
 type Period = (typeof PERIODS)[number]
 
 function isoDay(d: Date): string {
@@ -25,10 +25,6 @@ function periodFromDate(period: Period, today: Date, userId: string): string {
       return isoDay(new Date(t.getTime() - 30 * MS_DAY))
     case '3M':
       return isoDay(new Date(t.getTime() - 90 * MS_DAY))
-    case '6M':
-      return isoDay(new Date(t.getTime() - 180 * MS_DAY))
-    case 'YTD':
-      return isoDay(new Date(Date.UTC(t.getUTCFullYear(), 0, 1)))
     case '1Y':
       return isoDay(new Date(t.getTime() - 365 * MS_DAY))
     case 'ALL':
@@ -53,12 +49,18 @@ export async function GET(req: Request) {
   const fromIso = periodFromDate(period, new Date(), user.id)
   const snaps = getSnapshotsRange(user.id, fromIso, today.date)
 
+  // Each point carries combined + per-holder breakdown so the chart can
+  // render multiple lines (Combined / Alojz / Alma / Shared) without a
+  // second round-trip.
   const series = snaps.length
     ? snaps.map((s) => ({
         date: s.date,
         total: s.totalAmount,
         cash: s.cashAmount,
         investments: s.investmentAmount,
+        alma: s.byHolder.alma,
+        alojz: s.byHolder.alojz,
+        joint: s.byHolder.joint,
       }))
     : [
         {
@@ -66,6 +68,9 @@ export async function GET(req: Request) {
           total: today.totalAmount,
           cash: today.cashAmount,
           investments: today.investmentAmount,
+          alma: today.byHolder.alma,
+          alojz: today.byHolder.alojz,
+          joint: today.byHolder.joint,
         },
       ]
 
@@ -73,9 +78,12 @@ export async function GET(req: Request) {
     series,
     currency: today.baseCurrency,
     period,
-    points: series.length, // renamed from `accounts` (was misleading)
+    points: series.length,
     cashTotal: today.cashAmount,
     investmentTotal: today.investmentAmount,
+    almaTotal: today.byHolder.alma,
+    alojzTotal: today.byHolder.alojz,
+    jointTotal: today.byHolder.joint,
     errors: today.currencyMismatches.length ? today.currencyMismatches : undefined,
   })
 }

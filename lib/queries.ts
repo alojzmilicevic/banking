@@ -27,7 +27,13 @@ export interface AccountSummary {
   id: string
   name?: string | null
   details?: string | null
+  // Vendor's product label (e.g. "SHB-Anst-kto" from Handelsbanken). Often
+  // verbose / brand-specific.
   product?: string | null
+  // Standardized type code (ISO 20022 for EB, Avanza-internal otherwise:
+  // CACC, INVESTERINGSSPARKONTO, AKTIEFONDKONTO, …). Use this to drive
+  // short labels — `product` is too noisy.
+  accountType?: string | null
   currency?: string | null
   iban?: string | null
   kind?: string | null
@@ -62,6 +68,9 @@ export interface TimeseriesPoint {
   total: number
   cash?: number
   investments?: number
+  alma?: number
+  alojz?: number
+  joint?: number
 }
 
 export interface TimeseriesResponse {
@@ -69,6 +78,11 @@ export interface TimeseriesResponse {
   currency: string | null
   points: number
   period: string
+  cashTotal?: number
+  investmentTotal?: number
+  almaTotal?: number
+  alojzTotal?: number
+  jointTotal?: number
   errors?: string[]
 }
 
@@ -115,6 +129,13 @@ export interface ExtractedCookies {
   cookieHeader: string
   names: string[]
   count: number
+  profile: string
+}
+
+export interface ChromeProfile {
+  id: string
+  name: string
+  email: string | null
 }
 
 export interface AuthChallenge {
@@ -242,7 +263,22 @@ export function useStartEbAuth() {
 
 export function useExtractAvanzaCookies() {
   return useMutation({
-    mutationFn: () => fetchJson<ExtractedCookies>('/api/avanza/extract-cookies'),
+    mutationFn: (profile?: string) =>
+      fetchJson<ExtractedCookies>(
+        `/api/avanza/extract-cookies${profile ? `?profile=${encodeURIComponent(profile)}` : ''}`,
+      ),
+  })
+}
+
+export function useChromeProfiles() {
+  return useQuery({
+    queryKey: ['chrome-profiles'],
+    queryFn: () =>
+      fetchJson<{ profiles: ChromeProfile[] }>('/api/avanza/extract-cookies?list=1').then(
+        (r) => r.profiles,
+      ),
+    // Profiles rarely change mid-session — cache for the page lifetime.
+    staleTime: Infinity,
   })
 }
 

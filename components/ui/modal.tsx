@@ -37,9 +37,10 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
         role="dialog"
         aria-modal="true"
         className={cn(
-          'w-full max-w-md rounded-lg border border-border bg-card p-5 text-card-foreground shadow-xl',
+          'w-full max-w-md rounded-[20px] border border-border p-[28px_32px] text-card-foreground shadow-aloma-lg',
           className,
         )}
+        style={{ background: 'var(--color-elevated)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">

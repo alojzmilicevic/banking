@@ -51,10 +51,15 @@ const WEALTH_AFFECTING_KINDS = new Set([
 
 const MS_DAY = 86400_000
 
+export type HolderBucket = 'alma' | 'alojz' | 'joint' | 'unassigned'
+
 export interface AccountSnapshot {
   accountId: string
   kind: string | null
   currency: string
+  // Holder of the connection this account belongs to. Used to bucket the
+  // per-day contribution into per-holder series for the chart.
+  holder: HolderBucket
   // Today's chosen balance amount (from balances table).
   todayAmount: number
   // True if `todayAmount` already includes investment market value.
@@ -82,18 +87,71 @@ function loadAccountSnapshots(userId: string, sinceIso: string): AccountSnapshot
   // User's accounts in one indexed query — joins via connections.user_id and
   // pushes the excluded_from_total filter into SQL (was a JS .filter on a
   // full-table scan).
-  const userAccounts = db
+  const rawUserAccounts = db
     .select({
       id: accounts.id,
       kind: accounts.kind,
       currency: accounts.currency,
+      holder: connections.holder,
+      iban: accounts.iban,
+      bban: accounts.bban,
+      createdAt: accounts.createdAt,
     })
     .from(accounts)
     .innerJoin(connections, eq(accounts.connectionId, connections.id))
     .where(and(eq(connections.userId, userId), ne(accounts.excludedFromTotal, 1)))
     .all()
 
-  if (userAccounts.length === 0) return []
+  if (rawUserAccounts.length === 0) return []
+
+  // Joint dedup: when the same physical account (same IBAN/BBAN) is
+  // linked by both holders, both connections return it as a separate row.
+  // Without dedup the snapshot rebuild would sum its balance twice. We
+  // keep the earliest-created copy as canonical and drop the rest from
+  // the totals; the canonical's holder is rewritten to 'joint' so the
+  // per-holder breakdown reflects the shared ownership instead of
+  // arbitrarily attributing it to whoever happened to link first.
+  const groups = new Map<
+    string,
+    { canonicalId: string; canonicalCreatedAt: number; holders: Set<string> }
+  >()
+  for (const a of rawUserAccounts) {
+    const ext = (a.iban ?? a.bban ?? '').trim()
+    if (!ext) continue
+    const g = groups.get(ext)
+    if (!g) {
+      groups.set(ext, {
+        canonicalId: a.id,
+        canonicalCreatedAt: a.createdAt,
+        holders: new Set(a.holder ? [a.holder] : []),
+      })
+    } else {
+      if (a.holder) g.holders.add(a.holder)
+      if (a.createdAt < g.canonicalCreatedAt) {
+        g.canonicalCreatedAt = a.createdAt
+        g.canonicalId = a.id
+      }
+    }
+  }
+  const userAccounts = rawUserAccounts
+    .filter((a) => {
+      const ext = (a.iban ?? a.bban ?? '').trim()
+      if (!ext) return true
+      const g = groups.get(ext)
+      return !g || g.canonicalId === a.id
+    })
+    .map((a) => {
+      const ext = (a.iban ?? a.bban ?? '').trim()
+      const g = ext ? groups.get(ext) : undefined
+      const isJoint = !!g && g.holders.size > 1
+      return {
+        ...a,
+        // Override holder for joint accounts so the per-holder breakdown
+        // sees them as 'joint' rather than attributing to the linker.
+        holder: isJoint ? 'joint' : a.holder,
+      }
+    })
+
   const accountIds = userAccounts.map((a) => a.id)
 
   // Batch the four per-account queries into one round-trip each. Each uses
@@ -184,10 +242,16 @@ function loadAccountSnapshots(userId: string, sinceIso: string): AccountSnapshot
       }
     }
 
+    const holder: HolderBucket =
+      a.holder === 'alma' || a.holder === 'alojz' || a.holder === 'joint'
+        ? a.holder
+        : 'unassigned'
+
     return {
       accountId: a.id,
       kind: a.kind,
       currency,
+      holder,
       todayAmount,
       balanceIncludesInvestments: picked ? balanceIncludesInvestments(picked.balanceType) : false,
       positionsValue,
@@ -203,6 +267,11 @@ export interface SnapshotPoint {
   totalAmount: number
   cashAmount: number
   investmentAmount: number
+  // Per-holder breakdown — drives the chart's per-person lines and the
+  // SummaryCards trio. `unassigned` is for legacy connections that have
+  // no holder set yet; merged into the combined total but shown nowhere
+  // per-holder.
+  byHolder: Record<HolderBucket, number>
 }
 
 export interface RebuildResult {
@@ -242,6 +311,12 @@ export function computeSnapshotPoints(
 
     let cashAmount = 0
     let investmentAmount = 0
+    const byHolder: Record<HolderBucket, number> = {
+      alma: 0,
+      alojz: 0,
+      joint: 0,
+      unassigned: 0,
+    }
 
     for (const w of walkers) {
       if (w.currency !== BASE_CURRENCY) continue
@@ -272,6 +347,7 @@ export function computeSnapshotPoints(
       const isInvestment = w.kind === 'investment' || w.kind === 'pension'
       if (isInvestment) investmentAmount += contribution
       else cashAmount += contribution
+      byHolder[w.holder] += contribution
     }
 
     points.push({
@@ -279,6 +355,12 @@ export function computeSnapshotPoints(
       totalAmount: Math.round((cashAmount + investmentAmount) * 100) / 100,
       cashAmount: Math.round(cashAmount * 100) / 100,
       investmentAmount: Math.round(investmentAmount * 100) / 100,
+      byHolder: {
+        alma: Math.round(byHolder.alma * 100) / 100,
+        alojz: Math.round(byHolder.alojz * 100) / 100,
+        joint: Math.round(byHolder.joint * 100) / 100,
+        unassigned: Math.round(byHolder.unassigned * 100) / 100,
+      },
     })
   }
 
@@ -301,6 +383,7 @@ export function rebuildSnapshotsForUser(
   // Persist all points in a single transaction.
   db.transaction((tx) => {
     for (const p of points) {
+      const detailJson = JSON.stringify({ byHolder: p.byHolder })
       tx.insert(dailySnapshots)
         .values({
           userId,
@@ -309,7 +392,7 @@ export function rebuildSnapshotsForUser(
           totalAmount: p.totalAmount,
           cashAmount: p.cashAmount,
           investmentAmount: p.investmentAmount,
-          detailJson: '{}',
+          detailJson,
           computedAt: now,
         })
         .onConflictDoUpdate({
@@ -319,7 +402,7 @@ export function rebuildSnapshotsForUser(
             totalAmount: p.totalAmount,
             cashAmount: p.cashAmount,
             investmentAmount: p.investmentAmount,
-            detailJson: '{}',
+            detailJson,
             computedAt: now,
           },
         })
@@ -344,6 +427,7 @@ export function computeTodaySnapshot(userId: string): {
   investmentAmount: number
   baseCurrency: string
   currencyMismatches: string[]
+  byHolder: Record<HolderBucket, number>
 } {
   const now = new Date()
   const today = isoDay(now)
@@ -351,6 +435,12 @@ export function computeTodaySnapshot(userId: string): {
   let cashAmount = 0
   let investmentAmount = 0
   const currencyMismatches: string[] = []
+  const byHolder: Record<HolderBucket, number> = {
+    alma: 0,
+    alojz: 0,
+    joint: 0,
+    unassigned: 0,
+  }
 
   for (const s of snapshots) {
     if (s.currency !== BASE_CURRENCY) {
@@ -363,6 +453,7 @@ export function computeTodaySnapshot(userId: string): {
     const isInvestment = s.kind === 'investment' || s.kind === 'pension'
     if (isInvestment) investmentAmount += accountTotal
     else cashAmount += accountTotal
+    byHolder[s.holder] += accountTotal
   }
 
   return {
@@ -372,6 +463,40 @@ export function computeTodaySnapshot(userId: string): {
     investmentAmount: Math.round(investmentAmount * 100) / 100,
     baseCurrency: BASE_CURRENCY,
     currencyMismatches,
+    byHolder: {
+      alma: Math.round(byHolder.alma * 100) / 100,
+      alojz: Math.round(byHolder.alojz * 100) / 100,
+      joint: Math.round(byHolder.joint * 100) / 100,
+      unassigned: Math.round(byHolder.unassigned * 100) / 100,
+    },
+  }
+}
+
+export interface SnapshotRangeRow {
+  date: string
+  totalAmount: number
+  cashAmount: number
+  investmentAmount: number
+  byHolder: Record<HolderBucket, number>
+}
+
+function emptyByHolder(): Record<HolderBucket, number> {
+  return { alma: 0, alojz: 0, joint: 0, unassigned: 0 }
+}
+
+function parseByHolder(detailJson: string | null | undefined): Record<HolderBucket, number> {
+  if (!detailJson) return emptyByHolder()
+  try {
+    const parsed = JSON.parse(detailJson) as { byHolder?: Partial<Record<HolderBucket, number>> }
+    const src = parsed.byHolder ?? {}
+    return {
+      alma: src.alma ?? 0,
+      alojz: src.alojz ?? 0,
+      joint: src.joint ?? 0,
+      unassigned: src.unassigned ?? 0,
+    }
+  } catch {
+    return emptyByHolder()
   }
 }
 
@@ -379,13 +504,14 @@ export function getSnapshotsRange(
   userId: string,
   fromDate: string,
   toDate: string,
-): { date: string; totalAmount: number; cashAmount: number; investmentAmount: number }[] {
-  return db
+): SnapshotRangeRow[] {
+  const rows = db
     .select({
       date: dailySnapshots.date,
       totalAmount: dailySnapshots.totalAmount,
       cashAmount: dailySnapshots.cashAmount,
       investmentAmount: dailySnapshots.investmentAmount,
+      detailJson: dailySnapshots.detailJson,
     })
     .from(dailySnapshots)
     .where(
@@ -397,6 +523,14 @@ export function getSnapshotsRange(
     )
     .orderBy(dailySnapshots.date)
     .all()
+
+  return rows.map((r) => ({
+    date: r.date,
+    totalAmount: r.totalAmount,
+    cashAmount: r.cashAmount,
+    investmentAmount: r.investmentAmount,
+    byHolder: parseByHolder(r.detailJson),
+  }))
 }
 
 // Earliest snapshot date stored for a user (or null if none yet).

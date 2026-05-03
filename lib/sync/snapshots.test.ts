@@ -9,6 +9,7 @@ function snap(over: Partial<AccountSnapshot> = {}): AccountSnapshot {
     accountId: 'acc1',
     kind: 'cash',
     currency: 'SEK',
+    holder: 'unassigned',
     todayAmount: 0,
     balanceIncludesInvestments: false,
     positionsValue: 0,

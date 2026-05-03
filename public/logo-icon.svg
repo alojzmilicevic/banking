@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" fill="none">
+  <rect x="2" y="2" width="40" height="40" rx="12" fill="#1C2333"/>
+  <polyline points="8,34 16,22 24,27 36,11" fill="none" stroke="url(#aloma-icon-grad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="36" cy="11" r="3.5" fill="oklch(65% 0.18 265)"/>
+  <defs>
+    <linearGradient id="aloma-icon-grad" x1="8" y1="34" x2="36" y2="11" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="oklch(70% 0.13 195)"/>
+      <stop offset="100%" stop-color="oklch(65% 0.18 265)"/>
+    </linearGradient>
+  </defs>
+</svg>

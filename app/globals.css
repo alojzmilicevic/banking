@@ -1,57 +1,102 @@
 @import "tailwindcss";
 
-/* Design tokens — dark by default. Carries the existing palette into a
- * shadcn-shaped variable set so components can use semantic class names
- * (bg-card, text-muted-foreground, ...) instead of raw hex. */
+/* ============================================================
+   ALOMA DESIGN SYSTEM — Tokens
+   Mapped onto shadcn-shaped semantic names so existing components
+   that use bg-card / text-muted-foreground / etc. keep working.
+   ============================================================ */
 @theme {
-  --color-background: #0b0d10;
-  --color-foreground: #e6e8eb;
+  /* ── Backgrounds (Aloma deep navy) ──────────────────────────── */
+  --color-background: #0a0e1a; /* base */
+  --color-foreground: #f0f4ff;
 
-  --color-card: #14171c;
-  --color-card-foreground: #e6e8eb;
+  --color-card: #111827;
+  --color-card-foreground: #f0f4ff;
 
-  --color-popover: #14171c;
-  --color-popover-foreground: #e6e8eb;
+  --color-popover: #1c2333;
+  --color-popover-foreground: #f0f4ff;
 
-  --color-primary: #2d6cdf;
+  --color-elevated: #1c2333;
+  --color-overlay: #232d42;
+
+  /* ── Primary accent — Indigo ────────────────────────────────── */
+  --color-primary: oklch(65% 0.18 265);
   --color-primary-foreground: #ffffff;
-  --color-primary-hover: #2558b8;
+  --color-primary-hover: oklch(74% 0.15 265);
 
-  --color-secondary: #1f242a;
-  --color-secondary-foreground: #e6e8eb;
-  --color-secondary-hover: #2a2f36;
+  /* ── Secondary surface (chips, secondary buttons) ───────────── */
+  --color-secondary: rgba(255, 255, 255, 0.06);
+  --color-secondary-foreground: #f0f4ff;
+  --color-secondary-hover: rgba(255, 255, 255, 0.1);
 
-  --color-muted: #1f242a;
-  --color-muted-foreground: #888888;
+  /* ── Muted / accent (used by shadcn names; we keep them subtle) */
+  --color-muted: rgba(255, 255, 255, 0.04);
+  --color-muted-foreground: rgba(240, 244, 255, 0.65);
 
-  --color-accent: #1f242a;
-  --color-accent-foreground: #e6e8eb;
+  --color-accent: rgba(255, 255, 255, 0.06);
+  --color-accent-foreground: #f0f4ff;
 
-  --color-destructive: #4a1f24;
-  --color-destructive-foreground: #ffb3b3;
-  --color-destructive-hover: #6b2830;
+  /* ── Destructive ────────────────────────────────────────────── */
+  --color-destructive: oklch(40% 0.13 25);
+  --color-destructive-foreground: oklch(85% 0.06 25);
+  --color-destructive-hover: oklch(48% 0.15 25);
 
-  --color-error-bg: #2a1416;
-  --color-error-border: #5b2127;
-  --color-error-foreground: #ffb3b3;
+  /* ── Status surfaces ────────────────────────────────────────── */
+  --color-error-bg: oklch(28% 0.10 25);
+  --color-error-border: oklch(50% 0.13 25);
+  --color-error-foreground: oklch(85% 0.06 25);
 
-  --color-link: #6ea8ff;
+  --color-warn: oklch(78% 0.13 80);
+  --color-warn-bg: oklch(28% 0.08 80);
 
-  --color-pos: #6ee7a7;
-  --color-pos-bg: #133621;
-  --color-neg: #ff8b8b;
-  --color-warn: #fbbf60;
-  --color-warn-bg: #3a2a10;
+  /* Positive / negative deltas */
+  --color-pos: oklch(70% 0.17 150);
+  --color-pos-bg: oklch(70% 0.17 150 / 0.12);
+  --color-neg: oklch(65% 0.16 25);
 
-  --color-border: #1f242a;
-  --color-input: #14171c;
-  --color-input-border: #2a2f36;
-  --color-ring: #2d6cdf;
+  --color-link: oklch(74% 0.15 265);
 
-  --radius: 0.375rem;
+  /* ── Borders + form surfaces ────────────────────────────────── */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-strong: rgba(255, 255, 255, 0.2);
 
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --color-input: #111827;
+  --color-input-border: rgba(255, 255, 255, 0.1);
+  --color-ring: oklch(65% 0.18 265);
+
+  /* Foreground tiers */
+  --color-text-faint: rgba(240, 244, 255, 0.38);
+  --color-text-disabled: rgba(240, 244, 255, 0.22);
+
+  /* ── Person accent colors ───────────────────────────────────── */
+  --color-person-a: oklch(70% 0.13 195); /* Alojz — teal */
+  --color-person-a-bg: oklch(60% 0.14 195 / 0.14);
+  --color-person-a-border: oklch(60% 0.14 195 / 0.30);
+
+  --color-person-b: oklch(70% 0.16 300); /* Alma — violet */
+  --color-person-b-bg: oklch(61% 0.16 300 / 0.14);
+  --color-person-b-border: oklch(61% 0.16 300 / 0.30);
+
+  /* ── Radii ──────────────────────────────────────────────────── */
+  --radius: 0.5rem;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+
+  /* ── Shadows ────────────────────────────────────────────────── */
+  --shadow-aloma-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
+  --shadow-aloma-md: 0 2px 6px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.25);
+  --shadow-aloma-lg: 0 4px 12px rgba(0, 0, 0, 0.55), 0 16px 48px rgba(0, 0, 0, 0.3);
+
+  /* ── Fonts ──────────────────────────────────────────────────── */
+  /* `--font-aloma-*` come from next/font in app/layout.tsx. The
+     `--font-sans` etc. names are what tailwind/components consume. */
+  --font-sans: var(--font-aloma-sans), system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: var(--font-aloma-display), Georgia, serif;
+  --font-mono: var(--font-aloma-mono), "SF Mono", Menlo, monospace;
 }
 
 html,
@@ -66,6 +111,8 @@ body {
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
@@ -74,4 +121,9 @@ a {
 }
 a:hover {
   text-decoration: underline;
+}
+
+/* Tabular numerals for any DM Mono usage */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }

@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  useChromeProfiles,
   useConnectAvanza,
   useConnections,
   useExtractAvanzaCookies,
@@ -37,9 +38,21 @@ function key(a: ASPSP) {
   return `${a.name}||${a.country}`
 }
 
-const HOLDERS: { id: LinkerHolder; label: string; emoji: string; tint: string }[] = [
-  { id: 'alma', label: 'Alma', emoji: '🌷', tint: 'from-pink-500/20' },
-  { id: 'alojz', label: 'Alojz', emoji: '🦊', tint: 'from-amber-500/20' },
+const HOLDERS: { id: LinkerHolder; label: string; initials: string; tint: string; color: string }[] = [
+  {
+    id: 'alma',
+    label: 'Alma',
+    initials: 'AC',
+    color: 'oklch(70% 0.16 300)',
+    tint: 'oklch(61% 0.16 300 / 0.25)',
+  },
+  {
+    id: 'alojz',
+    label: 'Alojz',
+    initials: 'AM',
+    color: 'oklch(70% 0.13 195)',
+    tint: 'oklch(60% 0.14 195 / 0.25)',
+  },
 ]
 
 export default function AddBankModal({
@@ -138,18 +151,22 @@ export default function AddBankModal({
                 {active && (
                   <motion.div
                     layoutId="holder-bg"
-                    className={`absolute inset-0 -z-10 bg-gradient-to-br ${h.tint} to-transparent`}
+                    className="absolute inset-0 -z-10"
+                    style={{
+                      background: `linear-gradient(135deg, ${h.tint} 0%, transparent 100%)`,
+                    }}
                     transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                   />
                 )}
                 <span
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl transition-all ${
-                    active
-                      ? 'bg-card ring-2 ring-primary/40'
-                      : 'bg-secondary/60 grayscale'
-                  }`}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold transition-all"
+                  style={{
+                    background: `${h.color}22`,
+                    color: h.color,
+                    border: active ? `1.5px solid ${h.color}55` : '1.5px solid transparent',
+                  }}
                 >
-                  {h.emoji}
+                  {h.initials}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p
@@ -334,14 +351,16 @@ function BackButton({ onClick }: { onClick: () => void }) {
 
 function AvanzaPanel({ holder, onDone }: { holder: LinkerHolder; onDone: () => void }) {
   const [cookies, setCookies] = useState('')
+  const [profileId, setProfileId] = useState('Default')
   const [localError, setLocalError] = useState<string | null>(null)
   const extract = useExtractAvanzaCookies()
   const connect = useConnectAvanza()
+  const profilesQ = useChromeProfiles()
 
   async function readFromChrome() {
     setLocalError(null)
     try {
-      const data = await extract.mutateAsync()
+      const data = await extract.mutateAsync(profileId)
       setCookies(data.cookieHeader)
     } catch {
       // surfaced via extract.error
@@ -369,14 +388,36 @@ function AvanzaPanel({ holder, onDone }: { holder: LinkerHolder; onDone: () => v
 
   const busy = extract.isPending || connect.isPending
   const error = localError ?? extract.error?.message ?? connect.error?.message ?? null
+  const profiles = profilesQ.data ?? []
+  const multiProfile = profiles.length > 1
 
   return (
     <div className="flex flex-col gap-3">
       <div className="rounded-lg border border-border bg-secondary/30 p-3 text-xs text-muted-foreground">
         Log in to <code className="rounded bg-card px-1 py-0.5 text-[0.7rem]">avanza.se</code> in
-        Chrome, then click <strong className="text-foreground">Read from Chrome</strong>. macOS
-        Keychain may prompt the first time.
+        Chrome{multiProfile ? ' (in the right profile below)' : ''}, then click{' '}
+        <strong className="text-foreground">Read from Chrome</strong>. macOS Keychain may prompt the
+        first time.
       </div>
+
+      {multiProfile && (
+        <div className="flex flex-col gap-1">
+          <label className="text-[0.7rem] font-medium uppercase tracking-[0.06em] text-text-faint">
+            Chrome profile
+          </label>
+          <Select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.email ? ` — ${p.email}` : ''} ({p.id})
+              </option>
+            ))}
+          </Select>
+          <p className="text-[0.65rem] text-text-faint">
+            Pick the profile where {holder === 'alma' ? 'Alma' : 'Alojz'} is logged into avanza.se.
+          </p>
+        </div>
+      )}
 
       <Button onClick={readFromChrome} disabled={busy} variant="secondary">
         {extract.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cookie className="h-4 w-4" />}
@@ -385,8 +426,8 @@ function AvanzaPanel({ holder, onDone }: { holder: LinkerHolder; onDone: () => v
 
       {extract.data && (
         <div className="rounded-md border border-pos/20 bg-pos-bg/40 px-3 py-2 text-xs text-pos">
-          ✓ {extract.data.count} cookies extracted{' '}
-          {extract.data.names.includes('csid') ? '· auth ✓' : '· auth ✗'}
+          ✓ {extract.data.count} cookies extracted from <code>{extract.data.profile}</code>
+          {extract.data.names.includes('csid') ? ' · auth ✓' : ' · auth ✗'}
         </div>
       )}
 

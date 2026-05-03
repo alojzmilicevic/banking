@@ -6,9 +6,10 @@
 // the sustainable path. The Chrome scraper at /api/avanza/extract-cookies
 // automates the paste step on macOS.
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db, connections } from '@/lib/db/client'
 import { saveCredentials } from '@/lib/sync/credentials'
+import { syncConnection } from '@/lib/sync/orchestrator'
 import { randomUUID } from 'node:crypto'
 import type {
   AuthChallenge,
@@ -54,17 +55,26 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
     expiresAt: Date.now() + 60 * 60 * 1000, // ~60min until Avanza idles us out
   }
 
-  // Re-link should reuse the existing (user, avanza) connection rather than
-  // creating a new "linked bank" entry every time. One Avanza per user.
-  const existing = db
-    .select({ id: connections.id })
-    .from(connections)
-    .where(and(eq(connections.userId, input.userId), eq(connections.providerId, 'avanza')))
-    .get()
-
   const holderRaw = input.input.holder
   const holder =
     holderRaw === 'alma' || holderRaw === 'alojz' || holderRaw === 'joint' ? holderRaw : null
+
+  // Re-link should reuse the existing (user, avanza, holder) connection so
+  // refreshing credentials doesn't create a duplicate row. The upsert key
+  // MUST include holder — the household shares one user but has multiple
+  // holders, so matching on (user, provider) alone would have a re-link
+  // under Alojz overwrite Alma's connection (and vice-versa).
+  const existing = db
+    .select({ id: connections.id })
+    .from(connections)
+    .where(
+      and(
+        eq(connections.userId, input.userId),
+        eq(connections.providerId, 'avanza'),
+        holder ? eq(connections.holder, holder) : isNull(connections.holder),
+      ),
+    )
+    .get()
 
   const connectionId = existing?.id ?? randomUUID()
   if (existing) {
@@ -74,9 +84,6 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
         validUntil: session.expiresAt,
         lastSyncError: null,
         rawJson: JSON.stringify({ expiresAt: session.expiresAt }),
-        // Only overwrite holder if the caller actually picked one — null
-        // from a legacy re-link should leave the existing assignment alone.
-        ...(holder ? { holder } : {}),
       })
       .where(eq(connections.id, existing.id))
       .run()
@@ -101,6 +108,17 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
   // Encrypt + persist the cookie jar separately so the plaintext never
   // touches connections.raw_json. saveCredentials upserts by connectionId.
   saveCredentials(connectionId, { cookies })
+
+  // Trigger initial sync inline so the user sees accounts/balances right
+  // after the success splash. EB does this from its OAuth callback;
+  // cookie-flow providers have no callback so it lands here. Failures
+  // are logged but don't abort link — the connection still exists; the
+  // user can retry sync from the UI.
+  try {
+    await syncConnection(connectionId)
+  } catch (e) {
+    console.error('[avanza] initial sync failed:', e)
+  }
 
   return { kind: 'complete', connectionId }
 }
