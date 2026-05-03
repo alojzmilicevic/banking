@@ -393,6 +393,15 @@ export function computeSnapshotPoints(
   return { points, currencyMismatches }
 }
 
+// Recompute every daily_snapshots row for a user. Call this AFTER any
+// mutation that changes a value the chart reads (balances, positions,
+// transactions, account_value_history, the excluded flag, the M:N
+// connection_holders, or the connection set itself).
+//
+// Don't call this directly from a route handler — the wealth service
+// (lib/services/wealth.ts) is the single funnel for wealth-mutating
+// operations and already invokes this internally. The orchestrator's
+// `syncConnection` also calls it after a successful sync.
 export function rebuildSnapshotsForUser(
   userId: string,
   opts: { daysBack?: number; onlyToday?: boolean } = {},

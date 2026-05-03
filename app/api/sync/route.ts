@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
 import { connections, db, users } from '@/lib/db/client'
-import { syncConnection, type SyncMode } from '@/lib/sync/orchestrator'
+import { syncConnection, type SyncMode } from '@/lib/services/wealth'
 import { rateLimit } from '@/lib/sync/rate-limit'
 
 // POST /api/sync                  → sync all active connections

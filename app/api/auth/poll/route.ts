@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
 import { authStates, db } from '@/lib/db/client'
 import { getProvider } from '@/lib/providers/registry'
-import { syncConnection } from '@/lib/sync/orchestrator'
+import { syncConnection } from '@/lib/services/wealth'
 import { PollAuthQuerySchema } from '@/lib/api/schemas'
 import { validateQuery } from '@/lib/api/validate'
 

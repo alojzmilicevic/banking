@@ -10,7 +10,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { connectionHolders, connections, db } from '@/lib/db/client'
 import * as holdersRepo from '@/lib/repositories/holders'
 import { saveCredentials } from '@/lib/sync/credentials'
-import { syncConnection } from '@/lib/sync/orchestrator'
+import { syncConnection } from '@/lib/services/wealth'
 import { randomUUID } from 'node:crypto'
 import type {
   AuthChallenge,

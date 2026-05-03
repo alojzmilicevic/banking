@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm'
 import { authStates, connectionHolders, connections, db } from '@/lib/db/client'
 import * as holdersRepo from '@/lib/repositories/holders'
 import { getProvider } from '@/lib/providers/registry'
-import { syncConnection } from '@/lib/sync/orchestrator'
+import { syncConnection } from '@/lib/services/wealth'
 import { AuthCallbackQuerySchema } from '@/lib/api/schemas'
 import { validateQuery } from '@/lib/api/validate'
 

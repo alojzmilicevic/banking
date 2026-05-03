@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
 import { accounts, balances, connections, db } from '@/lib/db/client'
-import { rebuildSnapshotsForUser } from '@/lib/sync/snapshots'
+import { setAccountExcluded } from '@/lib/services/wealth'
 import { PatchAccountBodySchema } from '@/lib/api/schemas'
 import { validateJson } from '@/lib/api/validate'
 
@@ -49,25 +49,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 }
 
 // PATCH /api/accounts/:id  body { excludedFromTotal: boolean }
-// Toggles whether an account contributes to the user's wealth total. Also
-// rebuilds the user's daily snapshots so the chart updates immediately.
+// Toggles whether an account contributes to the user's wealth total.
+// The wealth service handles the snapshot rebuild so the chart updates
+// in step.
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const account = db.select().from(accounts).where(eq(accounts.id, id)).get()
-  if (!account) return NextResponse.json({ error: 'not found' }, { status: 404 })
-
   const parsed = await validateJson(req, PatchAccountBodySchema)
   if (!parsed.ok) return parsed.response
-  const { excludedFromTotal } = parsed.data
 
-  db.update(accounts)
-    .set({ excludedFromTotal: excludedFromTotal ? 1 : 0 })
-    .where(eq(accounts.id, id))
-    .run()
-
-  // Recompute the daily wealth chart so the change shows up immediately.
-  const conn = db.select().from(connections).where(eq(connections.id, account.connectionId)).get()
-  if (conn) rebuildSnapshotsForUser(conn.userId, { daysBack: 365 })
-
-  return NextResponse.json({ id, excludedFromTotal })
+  const result = setAccountExcluded(id, parsed.data.excludedFromTotal)
+  if (!result) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  return NextResponse.json(result)
 }
