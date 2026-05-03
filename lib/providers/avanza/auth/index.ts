@@ -1,16 +1,16 @@
-// Avanza auth — currently a single flow: paste a Cookie header from your
-// already-logged-in browser. Avanza's BankID server-side flow doesn't
-// produce a session cookie that authenticates the /_api/* endpoints
-// (their TLS/HTTP fingerprint check or similar rejects the auth jar
-// after BankID handshake). Until that's solved, paste-from-browser is
-// the sustainable path. The Chrome scraper at /api/avanza/extract-cookies
-// automates the paste step on macOS.
+// Avanza auth — username + password + TOTP. The credentials are stored
+// encrypted (AES-GCM via BANKING_SECRET) so sync.ts can re-auth
+// headlessly when the cookie jar expires; the user only re-links if
+// they change their Avanza password or rotate the TOTP seed.
+//
+// BankID server-side was attempted but rejected by Avanza's TLS/HTTP
+// fingerprint check; cookie-paste from a browser worked but couldn't
+// refresh itself. Password+TOTP is the path that survives.
 
 import { and, eq, inArray } from 'drizzle-orm'
 import { connectionHolders, connections, db } from '@/lib/db/client'
 import * as holdersRepo from '@/lib/repositories/holders'
-import { saveCredentials } from '@/lib/sync/credentials'
-import { syncConnection } from '@/lib/services/wealth'
+import { deleteCredentials } from '@/lib/sync/credentials'
 import { randomUUID } from 'node:crypto'
 import type {
   AuthChallenge,
@@ -20,44 +20,54 @@ import type {
   StartAuthInput,
 } from '../../types'
 import type { AvanzaSession } from '../api'
+import { saveAvanzaCredentials } from './credentials-store'
+import { AvanzaLoginError, loginWithPassword, type AvanzaCredentials } from './login'
+
+// 60 min lines up with Avanza's typical idle timeout. There's no
+// client-readable session lifetime — we just optimistically assume an
+// hour and let sync.ts re-auth on demand if the jar dies sooner.
+const SESSION_TTL_MS = 60 * 60 * 1000
 
 export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChallenge> {
-  if (input.flow !== 'cookies') {
-    return { kind: 'error', message: `Avanza only supports the 'cookies' flow` }
-  }
-
-  const raw = String(input.input.cookies ?? '').trim()
-  if (!raw) return { kind: 'error', message: 'Cookie string is empty' }
-
-  const cookies: Record<string, string> = {}
-  for (const part of raw.split(';')) {
-    const eq = part.indexOf('=')
-    if (eq <= 0) continue
-    const name = part.slice(0, eq).trim()
-    const value = part.slice(eq + 1).trim()
-    if (name) cookies[name] = value
-  }
-  if (Object.keys(cookies).length === 0) {
-    return { kind: 'error', message: 'No cookies parsed from input' }
-  }
-
-  // Sanity check the bare-minimum auth cookies are present.
-  const required = ['csid', 'cstoken', 'AZACSRF']
-  const missing = required.filter((k) => !cookies[k])
-  if (missing.length > 0) {
+  if (input.flow !== 'credentials') {
     return {
       kind: 'error',
-      message: `Cookie string is missing required keys: ${missing.join(', ')}`,
+      message: `Avanza only supports the 'credentials' flow`,
     }
   }
 
-  const session: AvanzaSession = {
-    cookies,
-    expiresAt: Date.now() + 60 * 60 * 1000, // ~60min until Avanza idles us out
+  const username = String(input.input.username ?? '').trim()
+  const password = String(input.input.password ?? '')
+  const totpSeed = String(input.input.totpSeed ?? '').trim()
+
+  if (!username || !password || !totpSeed) {
+    return {
+      kind: 'error',
+      message: 'username, password, and totpSeed are all required',
+    }
   }
 
-  // Validate holderId against the user's holders. Unknown ids are
-  // ignored (treated as "no holder linked"); the UI can re-assign later.
+  let result
+  try {
+    result = await loginWithPassword(username, password, totpSeed)
+  } catch (e) {
+    if (e instanceof AvanzaLoginError) {
+      return { kind: 'error', message: `${e.stage}: ${e.message}` }
+    }
+    return { kind: 'error', message: (e as Error).message }
+  }
+
+  const credentials: AvanzaCredentials = {
+    cookies: result.cookies,
+    username,
+    password,
+    totpSeed,
+  }
+  const session: AvanzaSession = {
+    cookies: credentials.cookies,
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  }
+
   const holderIdRaw = input.input.holderId
   let holderId: string | null = null
   if (typeof holderIdRaw === 'string' && holderIdRaw.length > 0) {
@@ -90,12 +100,12 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
           id: connectionId,
           userId: input.userId,
           providerId: 'avanza',
-          externalId: `cookies-${Date.now()}`,
+          externalId: `avanza-${Date.now()}`,
           label: 'Avanza',
           status: 'active',
           validUntil: session.expiresAt,
-          // Only non-secret metadata in rawJson. Cookies live encrypted in
-          // connection_credentials.
+          // Only non-secret metadata in rawJson. Cookies + creds live
+          // encrypted in connection_credentials.
           rawJson: JSON.stringify({ expiresAt: session.expiresAt }),
         })
         .run()
@@ -105,21 +115,19 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
     })
   }
 
-  // Encrypt + persist the cookie jar separately so the plaintext never
-  // touches connections.raw_json. saveCredentials upserts by connectionId.
-  saveCredentials(connectionId, { cookies })
+  // Avanza creds skip the encrypted-DB path used by other providers
+  // and land in macOS Keychain instead — see credentials-store.ts.
+  // Pre-Keychain rows in connection_credentials may exist for older
+  // connections — clear those so the same plaintext doesn't live in
+  // two places (and so a leaked BANKING_SECRET can't decrypt them).
+  deleteCredentials(connectionId)
+  saveAvanzaCredentials(connectionId, credentials)
 
-  // Trigger initial sync inline so the user sees accounts/balances right
-  // after the success splash. EB does this from its OAuth callback;
-  // cookie-flow providers have no callback so it lands here. Failures
-  // are logged but don't abort link — the connection still exists; the
-  // user can retry sync from the UI.
-  try {
-    await syncConnection(connectionId)
-  } catch (e) {
-    console.error('[avanza] initial sync failed:', e)
-  }
-
+  // No auto-sync here — the client drives the initial sync as a
+  // separate phase so the modal can show "Authenticating…" → "Loading
+  // accounts…" instead of a single 20-second mystery spinner. EB
+  // syncs from /api/auth/callback because that flow has no client
+  // mutation to chain off; Avanza has the modal, so the modal does it.
   return { kind: 'complete', connectionId }
 }
 
@@ -143,7 +151,6 @@ function findExistingAvanzaConnection(userId: string, holderId: string | null): 
   if (rows.length === 0) return null
 
   if (holderId === null) {
-    // Match the connection that has zero holder links.
     const linked = db
       .select({ connectionId: connectionHolders.connectionId })
       .from(connectionHolders)
@@ -153,7 +160,6 @@ function findExistingAvanzaConnection(userId: string, holderId: string | null): 
     return rows.find((r) => !linkedSet.has(r.id))?.id ?? null
   }
 
-  // Match the connection linked to this holder.
   const link = db
     .select({ connectionId: connectionHolders.connectionId })
     .from(connectionHolders)

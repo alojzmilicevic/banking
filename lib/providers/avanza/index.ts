@@ -6,21 +6,21 @@ export const avanzaProvider: Provider = {
   id: 'avanza',
   name: 'Avanza',
   capabilities: { cash: true, investments: true, pensions: true },
-  authFlows: ['cookies'],
+  authFlows: ['credentials'],
 
   authFormSchema: (flow) => {
-    if (flow === 'cookies') {
-      return [
-        {
-          name: 'cookies',
-          label: 'Cookie header from your logged-in browser',
-          type: 'text',
-          placeholder: 'csid=...; cstoken=...; AZAHLI=...',
-          required: true,
-        },
-      ]
-    }
-    return []
+    if (flow !== 'credentials') return []
+    return [
+      { name: 'username', label: 'Username', type: 'text', required: true },
+      { name: 'password', label: 'Password', type: 'password', required: true },
+      {
+        name: 'totpSeed',
+        label: 'TOTP seed (base32)',
+        type: 'password',
+        placeholder: 'MXF42B22ORYSEEONOZDCWEMOXVZ24AUQ',
+        required: true,
+      },
+    ]
   },
 
   startAuth: avanzaStartAuth,

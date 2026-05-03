@@ -1,7 +1,7 @@
 // Provider-agnostic shapes used by the sync orchestrator and domain layer.
 // Each provider implementation translates its own API into these.
 
-export type AuthFlow = 'redirect' | 'bankid' | 'credentials' | 'apikey' | 'cookies'
+export type AuthFlow = 'redirect' | 'bankid' | 'credentials' | 'apikey'
 
 // What a provider returns from startAuth / pollAuth — the front end uses
 // `kind` to decide what to render or do next.

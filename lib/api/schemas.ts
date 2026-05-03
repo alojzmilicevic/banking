@@ -3,7 +3,7 @@
 
 import { z } from 'zod'
 
-const AuthFlowSchema = z.enum(['redirect', 'bankid', 'credentials', 'apikey', 'cookies'])
+const AuthFlowSchema = z.enum(['redirect', 'bankid', 'credentials', 'apikey'])
 
 // `holderId` references holders.id (uuid). Server validates the holder
 // belongs to the requesting user before linking. Optional — connections

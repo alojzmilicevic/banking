@@ -156,12 +156,18 @@ export class AvanzaApi {
         allSetCookies.push(...setCookies)
       }
       if (process.env.AVANZA_DEBUG === '1') {
+        // Names + attributes only — never the cookie *value*. Cookie
+        // values are session auth tokens; a leaked value is equivalent
+        // to a leaked login.
         const names = setCookies.map((c) => c.split(';', 1)[0].split('=', 1)[0]).join(',')
         console.log(`[avanza] ${hopMethod} ${url.replace(BASE, '')} → ${res.status} cookies+[${names}]`)
-        // Full Set-Cookie strings (truncated per-cookie) for diagnosing
-        // missing cookies / odd attributes / second values.
         for (const sc of setCookies) {
-          console.log(`[avanza]   set-cookie: ${sc.slice(0, 200)}`)
+          const firstSemi = sc.indexOf(';')
+          const head = firstSemi >= 0 ? sc.slice(0, firstSemi) : sc
+          const eq = head.indexOf('=')
+          const name = eq > 0 ? head.slice(0, eq) : head
+          const attrs = firstSemi >= 0 ? sc.slice(firstSemi) : ''
+          console.log(`[avanza]   set-cookie: ${name}=<redacted>${attrs.slice(0, 200)}`)
         }
       }
       // Manual redirect handling: 301/302/303/307/308.

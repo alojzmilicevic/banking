@@ -1,6 +1,8 @@
 import { AvanzaApi, type AvanzaSession } from './api'
 import { paths } from './constants'
 import { chartDate, fetchChartTimeperiod } from './chart'
+import { loginWithPassword, type AvanzaCredentials } from './auth/login'
+import { loadAvanzaCredentials, saveAvanzaCredentials } from './auth/credentials-store'
 import {
   normalizeAccount,
   normalizeBalances,
@@ -14,42 +16,56 @@ import type {
   SyncResult,
 } from '../types'
 import { AuthExpiredError } from '@/lib/sync/errors'
-
-interface AvanzaConnectionMeta {
-  expiresAt?: number
-  // Legacy: connections created before encryption was wired in held the
-  // full session here in plaintext. Read-only fallback path.
-  session?: AvanzaSession
-}
+import { clearSyncProgress, setSyncProgress } from '@/lib/sync/progress'
 
 export async function avanzaSync(
   connection: ConnectionContext,
   opts: SyncOptions,
 ): Promise<SyncResult> {
-  const meta = JSON.parse(connection.rawJson || '{}') as AvanzaConnectionMeta
+  try {
+    return await doSync(connection, opts)
+  } catch (e) {
+    setSyncProgress(connection.id, { stage: 'error', message: (e as Error).message })
+    throw e
+  } finally {
+    // Hold the terminal state ('done' or 'error') for a beat so the
+    // client's last poll catches it, then clear. Without the delay,
+    // a fast client poll right after the mutation resolves could
+    // race with the clear and see {stage:'idle'} for a single tick.
+    setTimeout(() => clearSyncProgress(connection.id), 5_000)
+  }
+}
 
-  // Preferred path: orchestrator hands us decrypted credentials.
-  // Fallback: legacy plaintext rawJson.session (will be migrated next
-  // time the user re-links).
-  const fromCreds = connection.credentials as
-    | { cookies?: Record<string, string> }
-    | undefined
-  const cookies = fromCreds?.cookies ?? meta.session?.cookies
-
-  if (!cookies || Object.keys(cookies).length === 0) {
+async function doSync(
+  connection: ConnectionContext,
+  opts: SyncOptions,
+): Promise<SyncResult> {
+  // Avanza creds live in the Keychain, not in connection.credentials —
+  // we ignore whatever the orchestrator hands us and read directly so
+  // the plaintext never even touches the orchestrator process briefly.
+  const creds = loadAvanzaCredentials(connection.id)
+  if (!creds) {
     throw new AuthExpiredError(
-      'Avanza connection has no cookies — re-link via Read from Chrome / paste cookies',
+      'Avanza connection has no Keychain credentials — re-link via Add bank',
     )
   }
 
-  // No wall-clock expiry precheck: Avanza's session cookies don't carry a
-  // client-readable lifetime. Let the API call fail naturally if the jar
-  // is stale, and the orchestrator surfaces an auth-shaped error.
-  const session: AvanzaSession = { cookies, expiresAt: 0 }
-  const api = new AvanzaApi(session)
+  // Avanza's session cookies don't carry a client-readable lifetime, so
+  // we don't precheck. Try the first data call with the existing jar; if
+  // that fails with auth-expired, transparently re-auth and retry once.
+  let api = new AvanzaApi({ cookies: creds.cookies, expiresAt: 0 })
 
-  // Account list + current balances.
-  const resp = await api.get<AvanzaCategorizedAccountsResponse>(paths.CATEGORIZED_ACCOUNTS)
+  let resp: AvanzaCategorizedAccountsResponse
+  setSyncProgress(connection.id, { stage: 'fetching-accounts' })
+  try {
+    resp = await api.get<AvanzaCategorizedAccountsResponse>(paths.CATEGORIZED_ACCOUNTS)
+  } catch (e) {
+    if (!(e instanceof AuthExpiredError)) throw e
+    setSyncProgress(connection.id, { stage: 'reauth' })
+    api = await reauth(creds)
+    setSyncProgress(connection.id, { stage: 'fetching-accounts' })
+    resp = await api.get<AvanzaCategorizedAccountsResponse>(paths.CATEGORIZED_ACCOUNTS)
+  }
 
   const accounts = resp.accounts.map(normalizeAccount)
   const balances = resp.accounts.flatMap(normalizeBalances)
@@ -59,7 +75,28 @@ export async function avanzaSync(
   // actually has data for (often less for newer accounts), and rows are
   // UPSERTed into account_value_history so the cache only grows. Asking
   // for a shorter window on incremental syncs would just leave gaps.
-  const dailyValues = await fetchDailyValueSeries(api, resp.accounts, 'ONE_YEAR')
+  const dailyValues = await fetchDailyValueSeries(api, resp.accounts, 'ONE_YEAR', (done, total) =>
+    setSyncProgress(connection.id, {
+      stage: 'fetching-history',
+      completed: done,
+      total,
+    }),
+  )
+
+  setSyncProgress(connection.id, { stage: 'done' })
+
+  // Round-trip the live cookie jar back into the Keychain — AZACSRF in
+  // particular rotates mid-sync, and dropping the new value here would
+  // leave the next sync sending the stale one and tripping CSRF. We
+  // persist directly (no refreshedCredentials in the SyncResult) since
+  // the orchestrator's persist path goes to the encrypted DB blob,
+  // which we've intentionally bypassed for Avanza.
+  saveAvanzaCredentials(connection.id, {
+    cookies: api.cookieMap(),
+    username: creds.username,
+    password: creds.password,
+    totpSeed: creds.totpSeed,
+  })
 
   const dateFrom = opts.since.toISOString().slice(0, 10)
   const dateTo = opts.until.toISOString().slice(0, 10)
@@ -71,22 +108,30 @@ export async function avanzaSync(
     instruments: [],
     positions: [],
     dailyValues,
-    // Round-trip whatever the cookie jar looks like now — AZACSRF in
-    // particular gets refreshed mid-sync, and dropping the new value here
-    // means the next sync would still send the stale one and fail CSRF.
-    refreshedCredentials: { cookies: api.cookieMap() },
     // Successful sync ⇒ session is alive *now*. The UI's "consent
-    // expired" warning should fire ~60min after the last working sync,
-    // which lines up with Avanza's typical idle timeout.
+    // expired" warning fires ~60min after the last working sync, which
+    // lines up with Avanza's typical idle timeout.
     connectionValidUntil: Date.now() + 60 * 60 * 1000,
     syncWindow: { from: dateFrom, to: dateTo },
   }
+}
+
+async function reauth(creds: AvanzaCredentials): Promise<AvanzaApi> {
+  const result = await loginWithPassword(creds.username, creds.password, creds.totpSeed)
+  const session: AvanzaSession = {
+    cookies: result.cookies,
+    authenticationSession: result.authenticationSession,
+    customerId: result.customerId,
+    expiresAt: 0,
+  }
+  return new AvanzaApi(session)
 }
 
 async function fetchDailyValueSeries(
   api: AvanzaApi,
   accounts: AvanzaCategorizedAccount[],
   period: 'ONE_WEEK' | 'ONE_MONTH' | 'THREE_MONTHS' | 'ONE_YEAR',
+  onProgress?: (completed: number, total: number) => void,
 ): Promise<NormalizedDailyValue[]> {
   // urlParameterId is what the chart endpoint expects.
   const idMap = new Map<string, AvanzaCategorizedAccount>()
@@ -95,6 +140,9 @@ async function fetchDailyValueSeries(
   }
   if (idMap.size === 0) return []
 
+  const total = idMap.size
+  onProgress?.(0, total)
+
   let chart
   try {
     chart = await fetchChartTimeperiod(api, Array.from(idMap.keys()), period)
@@ -102,6 +150,7 @@ async function fetchDailyValueSeries(
     // Don't fail the whole sync if the chart endpoint regressed; we still
     // have today's totals. Log and move on.
     console.warn('[avanza] chart/timeperiod failed:', (e as Error).message)
+    onProgress?.(total, total)
     return []
   }
 
@@ -121,11 +170,15 @@ async function fetchDailyValueSeries(
         currency: p.performance.unit,
       })
     }
+    onProgress?.(1, 1)
     return out
   }
 
   // Multi-account: fetch each account's chart separately so we can attribute
-  // daily values per account.
+  // daily values per account. Progress ticks once per resolved fetch
+  // (success OR failure) so the counter never stalls if one account's
+  // chart endpoint flakes.
+  let completed = 0
   const perAccount = await Promise.all(
     Array.from(idMap.entries()).map(async ([scrambledId, account]) => {
       try {
@@ -134,6 +187,9 @@ async function fetchDailyValueSeries(
       } catch (e) {
         console.warn(`[avanza] chart for ${account.id} failed:`, (e as Error).message)
         return { account, series: [] }
+      } finally {
+        completed += 1
+        onProgress?.(completed, total)
       }
     }),
   )

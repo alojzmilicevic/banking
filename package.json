@@ -18,12 +18,13 @@
     "@tailwindcss/postcss": "^4.2.4",
     "@tanstack/react-query": "^5.100.6",
     "@tanstack/react-query-devtools": "^5.100.6",
-    "better-sqlite3": "^11.5.0",
-    "chrome-cookies-secure": "^3.0.2",
+    "better-sqlite3": "^12.9.0",
+    "canvas-confetti": "^1.9.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.36.0",
     "lucide-react": "^1.12.0",
+    "motion": "^11.15.0",
     "next": "^15.0.3",
     "postcss": "^8.5.12",
     "react": "^19.0.0",
@@ -31,9 +32,7 @@
     "recharts": "^2.15.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.4",
-    "zod": "^3.23.0",
-    "motion": "^11.15.0",
-    "canvas-confetti": "^1.9.3"
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
@@ -48,5 +47,13 @@
     "prettier": "^3.3.0",
     "typescript": "^5.6.0",
     "vitest": "^4.1.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }

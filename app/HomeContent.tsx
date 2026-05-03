@@ -8,7 +8,7 @@
 // topbar number/delta; the chart is controlled by the per-account eye
 // toggles + the combined-line toggle in the sidebar.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import AccountSettingsModal from './components/AccountSettingsModal'
 import AddBankModal from './components/AddBankModal'
 import MobileLayout from './components/MobileLayout'
@@ -19,7 +19,6 @@ import SummaryCards, { buildSummaryRows } from './components/SummaryCards'
 import { type Period } from './components/PeriodTabs'
 import { Alert } from '@/components/ui/alert'
 import {
-  useAvanzaPing,
   useDashboard,
   useDisconnect,
   useSyncAll,
@@ -60,15 +59,6 @@ export default function HomeContent({
   const toggleExclude = useToggleExclude()
 
   const data = dashboard.data
-  const hasAvanza = useMemo(() => {
-    if (!data) return false
-    for (const h of data.holders) {
-      if (h.accounts.some((a) => a.connection.providerId === 'avanza')) return true
-    }
-    return data.shared.accounts.some((a) => a.connection.providerId === 'avanza')
-  }, [data])
-  // Background keepalive — only runs when an Avanza connection exists.
-  useAvanzaPing(hasAvanza)
 
   // Fire confetti once if we just landed from a successful OAuth callback.
   useEffect(() => {

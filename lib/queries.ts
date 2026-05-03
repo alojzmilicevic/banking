@@ -67,19 +67,6 @@ export interface AccountTransactionsResponse {
   }[]
 }
 
-export interface ExtractedCookies {
-  cookieHeader: string
-  names: string[]
-  count: number
-  profile: string
-}
-
-export interface ChromeProfile {
-  id: string
-  name: string
-  email: string | null
-}
-
 export interface AuthChallenge {
   kind: 'redirect' | 'polling' | 'pending' | 'complete' | 'error'
   url?: string
@@ -174,6 +161,57 @@ export function useSyncAll() {
   })
 }
 
+// Sync a single connection. The /api/sync route returns 207 with a
+// per-result error field if the underlying syncConnection threw, so we
+// promote that into a thrown Error to keep the mutation's error
+// surface uniform.
+interface SyncOneResponse {
+  results: Array<{ connectionId: string; outcome?: unknown; error?: string }>
+}
+export function useSyncConnection() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (connectionId: string) => {
+      const r = await fetchJson<SyncOneResponse>(
+        `/api/sync?id=${encodeURIComponent(connectionId)}`,
+        { method: 'POST' },
+      )
+      const failed = r.results.find((x) => x.error)
+      if (failed) throw new Error(failed.error)
+      return r
+    },
+    onSuccess: () => invalidateWealth(qc),
+  })
+}
+
+// Poll the in-memory sync progress map while a sync is running for
+// `connectionId`. Set `enabled` to false when the sync mutation is
+// not in flight to stop polling. Mirror of the server-side
+// SyncProgress union — keep these shapes in sync with
+// lib/sync/progress.ts.
+export type SyncProgressUpdate =
+  | { stage: 'idle' }
+  | { stage: 'reauth' }
+  | { stage: 'fetching-accounts' }
+  | { stage: 'fetching-history'; completed: number; total: number }
+  | { stage: 'done' }
+  | { stage: 'error'; message: string }
+
+export function useSyncProgress(connectionId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['sync-progress', connectionId],
+    queryFn: () =>
+      fetchJson<SyncProgressUpdate>(
+        `/api/sync/progress?id=${encodeURIComponent(connectionId!)}`,
+      ),
+    enabled: enabled && !!connectionId,
+    refetchInterval: 500,
+    // Do not cache — every poll is a fresh read of in-memory state.
+    staleTime: 0,
+    gcTime: 0,
+  })
+}
+
 export function useDisconnect() {
   const qc = useQueryClient()
   return useMutation({
@@ -212,73 +250,28 @@ export function useStartEbAuth() {
   })
 }
 
-export function useExtractAvanzaCookies() {
-  return useMutation({
-    mutationFn: (profile?: string) =>
-      fetchJson<ExtractedCookies>(
-        `/api/avanza/extract-cookies${profile ? `?profile=${encodeURIComponent(profile)}` : ''}`,
-      ),
-  })
-}
-
-export function useChromeProfiles() {
-  return useQuery({
-    queryKey: ['chrome-profiles'],
-    queryFn: () =>
-      fetchJson<{ profiles: ChromeProfile[] }>('/api/avanza/extract-cookies?list=1').then(
-        (r) => r.profiles,
-      ),
-    // Profiles rarely change mid-session — cache for the page lifetime.
-    staleTime: Infinity,
-  })
-}
-
-export interface AvanzaPingResult {
-  alive: boolean
-  validUntil?: number
-  reason?: 'no-user' | 'not-linked' | 'no-cookies' | 'auth-expired' | 'error'
-  message?: string
-}
-
-// Background keepalive for Avanza's cookie session (~60min idle timeout).
-// Polls every 25min (well under the timeout) and on window focus, so a user
-// who keeps the dashboard open never silently loses their session. On
-// success the connection's validUntil is bumped server-side and the chip
-// stays green; on auth failure the chip turns red and the re-link prompt
-// surfaces via useDashboard.
-export function useAvanzaPing(enabled: boolean) {
-  const qc = useQueryClient()
-  return useQuery({
-    queryKey: ['avanza-ping'],
-    queryFn: async () => {
-      const r = await fetchJson<AvanzaPingResult>('/api/avanza/ping', { method: 'POST' })
-      // Bank header chip reads validUntil from useDashboard — refresh it
-      // so the "consent expires in N min" pill stays accurate.
-      qc.invalidateQueries({ queryKey: qk.dashboard })
-      return r
-    },
-    enabled,
-    refetchInterval: 25 * 60 * 1000,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-    refetchOnMount: 'always',
-    retry: false,
-    staleTime: 0,
-  })
-}
-
 export function useConnectAvanza() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ cookies, holderId }: { cookies: string; holderId?: string }) =>
+    mutationFn: ({
+      username,
+      password,
+      totpSeed,
+      holderId,
+    }: {
+      username: string
+      password: string
+      totpSeed: string
+      holderId?: string
+    }) =>
       fetchJson<AuthChallenge>('/api/auth/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           providerId: 'avanza',
-          flow: 'cookies',
+          flow: 'credentials',
           holderId,
-          input: { cookies },
+          input: { username, password, totpSeed },
         }),
       }),
     onSuccess: () => invalidateWealth(qc),

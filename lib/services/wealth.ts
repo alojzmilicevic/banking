@@ -23,6 +23,7 @@
 import { eq } from 'drizzle-orm'
 import { accounts, connections, db } from '@/lib/db/client'
 import { rebuildSnapshotsForUser } from '@/lib/sync/snapshots'
+import { deleteAvanzaCredentials } from '@/lib/providers/avanza/auth/credentials-store'
 
 // Re-export the sync entry points so the wealth service is the only
 // import path callers need to know. The implementation lives in
@@ -43,6 +44,12 @@ export interface DisconnectResult {
 export function disconnectConnection(connectionId: string): DisconnectResult | null {
   const row = db.select().from(connections).where(eq(connections.id, connectionId)).get()
   if (!row) return null
+  // For Avanza the encrypted-DB row would never have existed (creds
+  // live in Keychain, not connection_credentials), so the cascade
+  // can't reach them — clear the Keychain item explicitly.
+  if (row.providerId === 'avanza') {
+    deleteAvanzaCredentials(connectionId)
+  }
   db.delete(connections).where(eq(connections.id, connectionId)).run()
   rebuildSnapshotsForUser(row.userId)
   return { removed: connectionId }
