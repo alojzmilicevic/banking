@@ -1,7 +1,7 @@
-'use client'
-import { use } from 'react'
 import Link from 'next/link'
-import { Alert } from '@/components/ui/alert'
+import { notFound } from 'next/navigation'
+import { and, desc, eq } from 'drizzle-orm'
+import { accounts, balances, connections, db, transactions } from '@/lib/db/client'
 import { Card, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -11,7 +11,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useAccount, useAccountTransactions } from '@/lib/queries'
 
 function fmtAmount(amount: number, currency: string) {
   const cls = amount < 0 ? 'text-neg' : amount > 0 ? 'text-pos' : ''
@@ -26,22 +25,27 @@ function fmtAmount(amount: number, currency: string) {
   )
 }
 
-export default function AccountPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
-  const accountQ = useAccount(id)
-  const txQ = useAccountTransactions(id)
+export default async function AccountPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
 
-  const account = accountQ.data?.account
-  const connection = accountQ.data?.connection
-  const balances = accountQ.data?.balances ?? []
-  const transactions = txQ.data?.transactions ?? []
+  const account = db.select().from(accounts).where(eq(accounts.id, id)).get()
+  if (!account) notFound()
 
-  const error =
-    accountQ.error?.message ?? txQ.error?.message ?? null
-  const loading = accountQ.isLoading || txQ.isLoading
+  const connection = db
+    .select()
+    .from(connections)
+    .where(eq(connections.id, account.connectionId))
+    .get()
+  const accountBalances = db.select().from(balances).where(eq(balances.accountId, id)).all()
+  const accountTransactions = db
+    .select()
+    .from(transactions)
+    .where(and(eq(transactions.accountId, id)))
+    .orderBy(desc(transactions.date))
+    .all()
 
   const title =
-    account?.details || account?.product || account?.name || account?.iban || 'Account'
+    account.details || account.product || account.name || account.iban || 'Account'
 
   return (
     <main className="mx-auto max-w-[960px] px-6 pb-16 pt-8">
@@ -49,39 +53,36 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
         <Link href="/">← back</Link>
       </p>
       <h1 className="mb-6 text-[1.6rem] font-semibold">{title}</h1>
-      {error && <Alert>{error}</Alert>}
 
-      {account && (
-        <Card>
-          <CardTitle>Details</CardTitle>
-          {connection?.label && (
-            <p className="my-1 text-sm text-muted-foreground">{connection.label}</p>
-          )}
-          {account.name && (
-            <p className="my-1 text-sm text-muted-foreground">Holder: {account.name}</p>
-          )}
-          {account.product && (
-            <p className="my-1 text-sm text-muted-foreground">Product: {account.product}</p>
-          )}
-          {account.iban && (
-            <p className="my-1 text-sm text-muted-foreground">IBAN: {account.iban}</p>
-          )}
-          {account.bban && (
-            <p className="my-1 text-sm text-muted-foreground">BBAN: {account.bban}</p>
-          )}
-          {account.bic && (
-            <p className="my-1 text-sm text-muted-foreground">BIC: {account.bic}</p>
-          )}
-          {account.currency && (
-            <p className="my-1 text-sm text-muted-foreground">Currency: {account.currency}</p>
-          )}
-          {account.accountType && (
-            <p className="my-1 text-sm text-muted-foreground">Type: {account.accountType}</p>
-          )}
-        </Card>
-      )}
+      <Card>
+        <CardTitle>Details</CardTitle>
+        {connection?.label && (
+          <p className="my-1 text-sm text-muted-foreground">{connection.label}</p>
+        )}
+        {account.name && (
+          <p className="my-1 text-sm text-muted-foreground">Holder: {account.name}</p>
+        )}
+        {account.product && (
+          <p className="my-1 text-sm text-muted-foreground">Product: {account.product}</p>
+        )}
+        {account.iban && (
+          <p className="my-1 text-sm text-muted-foreground">IBAN: {account.iban}</p>
+        )}
+        {account.bban && (
+          <p className="my-1 text-sm text-muted-foreground">BBAN: {account.bban}</p>
+        )}
+        {account.bic && (
+          <p className="my-1 text-sm text-muted-foreground">BIC: {account.bic}</p>
+        )}
+        {account.currency && (
+          <p className="my-1 text-sm text-muted-foreground">Currency: {account.currency}</p>
+        )}
+        {account.accountType && (
+          <p className="my-1 text-sm text-muted-foreground">Type: {account.accountType}</p>
+        )}
+      </Card>
 
-      {balances.length > 0 && (
+      {accountBalances.length > 0 && (
         <Card>
           <CardTitle>Balances</CardTitle>
           <Table>
@@ -93,7 +94,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
               </TableRow>
             </TableHeader>
             <TableBody>
-              {balances.map((b, i) => (
+              {accountBalances.map((b, i) => (
                 <TableRow key={i}>
                   <TableCell>{b.balanceType}</TableCell>
                   <TableCell className="text-muted-foreground">{b.referenceDate ?? '—'}</TableCell>
@@ -110,13 +111,12 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
       <Card>
         <CardTitle>
           Transactions{' '}
-          <span className="font-normal text-muted-foreground">({transactions.length})</span>
+          <span className="font-normal text-muted-foreground">({accountTransactions.length})</span>
         </CardTitle>
-        {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {!loading && transactions.length === 0 && (
+        {accountTransactions.length === 0 && (
           <p className="text-sm text-muted-foreground">No transactions stored yet — try Sync now.</p>
         )}
-        {transactions.length > 0 && (
+        {accountTransactions.length > 0 && (
           <Table>
             <TableHeader>
               <TableRow>
@@ -127,7 +127,7 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
               </TableRow>
             </TableHeader>
             <TableBody>
-              {transactions.map((t) => (
+              {accountTransactions.map((t) => (
                 <TableRow
                   key={t.fingerprint}
                   className={t.status && t.status !== 'BOOK' ? 'opacity-60' : ''}

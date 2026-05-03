@@ -1,4 +1,3 @@
-'use client'
 // The trio (or N+1) of cards under the chart:
 //   ┌────────────┐ ┌────────────┐ ┌────────────┐ ...
 //   │ COMBINED   │ │  Person A  │ │  Person B  │

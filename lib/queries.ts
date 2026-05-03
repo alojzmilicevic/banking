@@ -28,45 +28,6 @@ export interface ASPSP {
   psu_types?: string[]
 }
 
-export interface AccountDetail {
-  account: {
-    id: string
-    name: string | null
-    details: string | null
-    product: string | null
-    accountType: string | null
-    currency: string | null
-    iban: string | null
-    bban: string | null
-    bic: string | null
-  }
-  connection: {
-    id: string
-    providerId: string
-    label: string | null
-    validUntil: number | null
-    lastSyncedAt: number | null
-  } | null
-  balances: {
-    balanceType: string
-    amount: number
-    currency: string
-    referenceDate: string | null
-  }[]
-}
-
-export interface AccountTransactionsResponse {
-  transactions: {
-    fingerprint: string
-    date: string
-    amount: number
-    currency: string
-    status: string | null
-    description: string | null
-    counterparty: string | null
-  }[]
-}
-
 export interface AuthChallenge {
   kind: 'redirect' | 'polling' | 'pending' | 'complete' | 'error'
   url?: string
@@ -91,8 +52,6 @@ export const qk = {
   holders: ['holders'] as const,
   institutions: (country: string) => ['institutions', country] as const,
   timeseries: (period: string) => ['timeseries', period] as const,
-  account: (id: string) => ['account', id] as const,
-  accountTransactions: (id: string) => ['account', id, 'transactions'] as const,
 }
 
 // Anything that changes wealth (sync, disconnect, exclude toggle, new
@@ -133,21 +92,6 @@ export function useTimeseries(period: string) {
   return useQuery({
     queryKey: qk.timeseries(period),
     queryFn: () => fetchJson<TimeseriesResponse>(`/api/timeseries?period=${period}`),
-  })
-}
-
-export function useAccount(id: string) {
-  return useQuery({
-    queryKey: qk.account(id),
-    queryFn: () => fetchJson<AccountDetail>(`/api/accounts/${id}`),
-  })
-}
-
-export function useAccountTransactions(id: string) {
-  return useQuery({
-    queryKey: qk.accountTransactions(id),
-    queryFn: () =>
-      fetchJson<AccountTransactionsResponse>(`/api/accounts/${id}/transactions`),
   })
 }
 

@@ -1,4 +1,3 @@
-'use client'
 // Top of the main panel — the small label, the big number, the +delta
 // pill, and the period pills on the right.
 //
