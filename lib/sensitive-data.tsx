@@ -92,7 +92,10 @@ export function Sensitive({
       }}
       style={{
         display: 'inline-block',
-        filter: blurred ? 'blur(5px)' : undefined,
+        // em-relative so larger text gets a proportionally stronger blur
+        // — a fixed px value let big topbar digits resolve while
+        // over-blurring small chips.
+        filter: blurred ? 'blur(0.4em)' : undefined,
         transition: 'filter 120ms ease',
         cursor: hidden ? 'pointer' : undefined,
         userSelect: hidden ? 'none' : undefined,
