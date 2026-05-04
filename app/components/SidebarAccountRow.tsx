@@ -34,8 +34,8 @@ export function SidebarAccountRow({
       className={cn(
         'group flex items-center rounded-10 border transition-all',
         visible
-          ? 'gap-1.5 border-border-subtle bg-white/3 px-3.5 py-2.5'
-          : 'gap-1 border-transparent bg-transparent px-2.5 py-1.25 opacity-40',
+          ? 'gap-1.5 border-border-subtle bg-white/3 px-3 py-1.5'
+          : 'gap-1 border-transparent bg-transparent px-2.5 py-1 opacity-40',
       )}
     >
       <div
@@ -65,12 +65,7 @@ export function SidebarAccountRow({
           </Link>
         </div>
       </div>
-      <Sensitive
-        className={cn(
-          'ml-1.5 flex shrink-0 flex-col justify-center whitespace-nowrap text-right',
-          visible && 'h-10',
-        )}
-      >
+      <Sensitive className="ml-1.5 flex shrink-0 flex-col justify-center whitespace-nowrap text-right">
         <span className="font-mono text-14 font-normal text-foreground tabular-nums">
           {fmtMoney(account.balance, account.balanceCurrency)}
         </span>

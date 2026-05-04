@@ -102,7 +102,7 @@ export function SharedSection({
       </div>
 
       {/* Visible account rows */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         {visibleAccounts.map((a) => (
           <SidebarAccountRow key={a.id} account={a} color={meta.color} />
         ))}
