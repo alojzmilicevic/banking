@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "rm -rf .next && next dev --experimental-https",
+    "dev": "node scripts/dev-port.mjs",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",

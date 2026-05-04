@@ -8,3 +8,5 @@ certificates
 *.tsbuildinfo
 next-env.d.ts
 .claude/
+.dev-url
+.dev-pid
