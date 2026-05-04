@@ -257,6 +257,8 @@ export function HomeContent({
             showShared={showShared}
             onAddAccount={openAdd}
             onToggleAccount={onToggleAccount}
+            onSyncAll={() => syncAll.mutate()}
+            syncingAll={syncAll.isPending}
             topError={topError}
             onDismissError={() => setPageError(null)}
           />

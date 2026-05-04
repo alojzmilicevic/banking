@@ -84,16 +84,42 @@ export function PersonMenuPopover({
             transition={{ duration: 0.14 }}
             className="z-50 w-[340px] overflow-hidden rounded-14 border border-border bg-popover shadow-aloma-lg outline-none"
           >
-                {/* Bank icons row — each connection is a tile (click to
-                    disconnect) plus a small sync button. The dashed + tile
+                {/* Connection list — one row per linked bank with explicit
+                    Sync and Disconnect buttons. The "+" row at the end
                     opens AddBankModal. */}
-                <div className="flex flex-wrap items-center gap-2.5 border-b border-border-subtle p-[14px]">
+                <div className="flex flex-col border-b border-border-subtle p-[6px]">
                   {groups.map((g) => {
                     const connected = g.connection.status !== 'expired' && !g.connection.lastSyncError
                     const label = g.connection.label ?? g.connection.providerId
                     const syncing = syncingConnectionId === g.connection.id
                     return (
-                      <div key={g.connection.id} className="flex items-center gap-1">
+                      <div
+                        key={g.connection.id}
+                        className="flex items-center gap-2.5 rounded-md px-2 py-1.5"
+                      >
+                        <BankIcon
+                          providerId={g.connection.providerId}
+                          label={g.connection.label}
+                          size="md"
+                          connected={connected}
+                        />
+                        <div className="min-w-0 flex-1 truncate text-13 font-medium text-foreground">
+                          {label}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onSyncConnection(g.connection.id)}
+                          disabled={syncing}
+                          title={`Sync ${label}`}
+                          aria-label={`Sync ${label}`}
+                          className="flex size-7 shrink-0 items-center justify-center rounded-md text-text-faint transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                        >
+                          {syncing ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="size-3.5" />
+                          )}
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -102,32 +128,9 @@ export function PersonMenuPopover({
                           }}
                           title={`Disconnect ${label}`}
                           aria-label={`Disconnect ${label}`}
-                          className="group/bank relative flex shrink-0"
+                          className="flex size-7 shrink-0 items-center justify-center rounded-md text-text-faint transition-colors hover:bg-neg/10 hover:text-neg"
                         >
-                          <BankIcon
-                            providerId={g.connection.providerId}
-                            label={g.connection.label}
-                            size="lg"
-                            connected={connected}
-                            className="transition-opacity group-hover/bank:opacity-30"
-                          />
-                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover/bank:opacity-100">
-                            <Link2Off className="size-4 text-neg" />
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onSyncConnection(g.connection.id)}
-                          disabled={syncing}
-                          title={`Sync ${label}`}
-                          aria-label={`Sync ${label}`}
-                          className="flex size-5 shrink-0 items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6 hover:text-foreground disabled:opacity-50"
-                        >
-                          {syncing ? (
-                            <Loader2 className="size-3 animate-spin" />
-                          ) : (
-                            <RefreshCw className="size-3" />
-                          )}
+                          <Link2Off className="size-3.5" />
                         </button>
                       </div>
                     )
@@ -139,11 +142,14 @@ export function PersonMenuPopover({
                         setOpen(false)
                         onAddAccount()
                       }}
-                      className="flex size-9  shrink-0 items-center justify-center rounded-sm border border-dashed border-[rgba(255,255,255,0.18)] text-text-faint transition-colors hover:border-input-border hover:text-foreground"
                       aria-label="Add bank"
                       title="Add bank"
+                      className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-text-faint transition-colors hover:bg-muted hover:text-foreground"
                     >
-                      <Plus className="size-[14px] " />
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-sm border border-dashed border-white/18">
+                        <Plus className="size-3.5" />
+                      </span>
+                      <span className="text-13 font-medium">Add bank</span>
                     </button>
                   )}
                 </div>

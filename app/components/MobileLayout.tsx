@@ -9,7 +9,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { Eye, EyeOff, Plus, Settings as SettingsIcon } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Plus, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { fmtMoney, fmtMoneyCompact, shortProduct } from '@/lib/format'
 import { Sensitive, SensitiveToggle } from '@/components/sensitive-data'
@@ -47,6 +47,8 @@ export function MobileLayout({
   showShared,
   onAddAccount,
   onToggleAccount,
+  onSyncAll,
+  syncingAll,
   topError,
   onDismissError,
 }: {
@@ -61,6 +63,8 @@ export function MobileLayout({
   showShared: boolean
   onAddAccount: (holderId: string) => void
   onToggleAccount: (a: DashboardAccount) => void
+  onSyncAll: () => void
+  syncingAll: boolean
   topError: string | null
   onDismissError: () => void
 }) {
@@ -114,6 +118,20 @@ export function MobileLayout({
           <span className="font-display text-18 tracking-display">aloma</span>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onSyncAll}
+            disabled={syncingAll}
+            aria-label="Sync all banks"
+            title="Sync all banks"
+            className="flex size-8.5 items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6 hover:text-foreground disabled:opacity-50"
+          >
+            {syncingAll ? (
+              <Loader2 className="size-4.5 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4.5" />
+            )}
+          </button>
           <SensitiveToggle />
           <button
             type="button"
