@@ -151,7 +151,7 @@ export function Sidebar({
                 'flex w-full cursor-pointer items-center gap-2.5 rounded-9 border px-3 py-2.25 text-left text-14 transition-all',
                 active
                   ? 'border-border bg-white/6 font-medium text-foreground'
-                  : 'border-transparent bg-transparent font-normal text-muted-foreground',
+                  : 'border-transparent bg-transparent font-normal text-muted-foreground hover:border-border-subtle hover:bg-white/3 hover:text-foreground',
               )}
             >
               <span

@@ -35,8 +35,8 @@ export function SidebarAccountRow({
       className={cn(
         'group flex h-10.5 items-center rounded-10 border transition-all',
         visible
-          ? 'gap-1.5 border-border-subtle bg-white/3 px-3'
-          : 'gap-1 border-transparent bg-transparent px-2.5 opacity-40',
+          ? 'gap-1.5 border-border-subtle bg-white/3 px-3 hover:border-border hover:bg-white/6'
+          : 'gap-1 border-transparent bg-transparent px-2.5 opacity-40 hover:opacity-70',
       )}
     >
       <div
