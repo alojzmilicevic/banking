@@ -40,34 +40,30 @@ export default function Topbar({
         <div className="mb-0.5 text-[11px] font-medium uppercase tracking-[0.08em] text-text-faint">
           {label}
         </div>
-        <div className="flex items-baseline gap-3">
+        <Sensitive className="flex items-baseline gap-3">
           <span
             className="font-mono text-[32px] font-light text-foreground tabular-nums"
             style={{ letterSpacing: '-0.03em' }}
           >
-            <Sensitive>{total != null ? fmtMoney(total, currency) : '—'}</Sensitive>
+            {total != null ? fmtMoney(total, currency) : '—'}
           </span>
           {delta != null && (
             <span
               className="text-[14px] font-medium"
               style={{ color: positive ? 'var(--color-pos)' : 'var(--color-neg)' }}
             >
-              <Sensitive>
-                {positive ? '+' : ''}
-                {fmtMoney(delta, currency)}
-              </Sensitive>
+              {positive ? '+' : ''}
+              {fmtMoney(delta, currency)}
               {showPct && (
                 <span className="text-text-faint">
                   {' · '}
-                  <Sensitive>
-                    {positive ? '+' : '−'}
-                    {Math.abs(pct!).toFixed(1)}%
-                  </Sensitive>
+                  {positive ? '+' : '−'}
+                  {Math.abs(pct!).toFixed(1)}%
                 </span>
               )}
             </span>
           )}
-        </div>
+        </Sensitive>
       </div>
 
       <div className="flex items-center gap-2">
