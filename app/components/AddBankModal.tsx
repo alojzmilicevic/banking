@@ -33,26 +33,22 @@ import { holderTint } from '@/lib/holders'
 
 type Provider = 'avanza' | 'eb'
 
-type LinkedSlot = { avanza: boolean; eb: string[] }
-
 function key(a: ASPSP) {
   return `${a.name}||${a.country}`
 }
 
 function buildLinkedByHolder(data: DashboardResponse | undefined) {
-  const map = new Map<string, LinkedSlot>()
-  if (!data) return map
-  for (const h of data.holders) {
-    const slot: LinkedSlot = { avanza: false, eb: [] }
-    for (const a of h.accounts) {
-      if (a.connection.providerId === 'avanza') slot.avanza = true
-      else if (a.connection.providerId === 'enable-banking') {
-        slot.eb.push(a.connection.label ?? 'a bank')
-      }
-    }
-    map.set(h.id, slot)
-  }
-  return map
+  return new Map(
+    (data?.holders ?? []).map((h) => [
+      h.id,
+      {
+        avanza: h.accounts.some((a) => a.connection.providerId === 'avanza'),
+        eb: h.accounts
+          .filter((a) => a.connection.providerId === 'enable-banking')
+          .map((a) => a.connection.label ?? 'a bank'),
+      },
+    ]),
+  )
 }
 
 export default function AddBankModal({
