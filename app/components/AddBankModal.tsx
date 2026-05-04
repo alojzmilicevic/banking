@@ -28,12 +28,31 @@ import {
   type HolderListItem,
   type SyncProgressUpdate,
 } from '@/lib/queries'
+import type { DashboardResponse } from '@/lib/api/dashboard'
 import { holderTint } from '@/lib/holders'
 
 type Provider = 'avanza' | 'eb'
 
+type LinkedSlot = { avanza: boolean; eb: string[] }
+
 function key(a: ASPSP) {
   return `${a.name}||${a.country}`
+}
+
+function buildLinkedByHolder(data: DashboardResponse | undefined) {
+  const map = new Map<string, LinkedSlot>()
+  if (!data) return map
+  for (const h of data.holders) {
+    const slot: LinkedSlot = { avanza: false, eb: [] }
+    for (const a of h.accounts) {
+      if (a.connection.providerId === 'avanza') slot.avanza = true
+      else if (a.connection.providerId === 'enable-banking') {
+        slot.eb.push(a.connection.label ?? 'a bank')
+      }
+    }
+    map.set(h.id, slot)
+  }
+  return map
 }
 
 export default function AddBankModal({
@@ -72,21 +91,7 @@ export default function AddBankModal({
   // Per-holder map of which providers already have a connection. Used to
   // dim already-linked provider tiles and warn that picking them will
   // re-link (refresh credentials) rather than add a new bank.
-  const linkedByHolder = (() => {
-    const map = new Map<string, { avanza: boolean; eb: string[] }>()
-    if (!dashboard.data) return map
-    for (const h of dashboard.data.holders) {
-      const slot = { avanza: false, eb: [] as string[] }
-      for (const a of h.accounts) {
-        if (a.connection.providerId === 'avanza') slot.avanza = true
-        else if (a.connection.providerId === 'enable-banking') {
-          slot.eb.push(a.connection.label ?? 'a bank')
-        }
-      }
-      map.set(h.id, slot)
-    }
-    return map
-  })()
+  const linkedByHolder = buildLinkedByHolder(dashboard.data)
 
   const linkedHere = holderId ? linkedByHolder.get(holderId) : undefined
   const avanzaLinked = !!linkedHere?.avanza
