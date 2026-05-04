@@ -28,6 +28,7 @@ export default function SidebarAccountRow({
   const visible = !account.excludedFromTotal
   const pct = account.change30d?.pct
   const positive = (account.change30d?.absolute ?? 0) >= 0
+  const isIsk = account.accountType === 'INVESTERINGSSPARKONTO'
 
   return (
     <div
@@ -82,16 +83,18 @@ export default function SidebarAccountRow({
         <div className="font-mono text-[14px] font-normal text-foreground tabular-nums">
           <Sensitive>{fmtMoney(account.balance, account.balanceCurrency)}</Sensitive>
         </div>
-        <div
-          className="mt-0.5 text-[11px]"
-          style={{ color: positive ? 'var(--color-pos)' : 'var(--color-neg)' }}
-        >
-          {pct != null ? (
-            <Sensitive>{`${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`}</Sensitive>
-          ) : (
-            '—'
-          )}
-        </div>
+        {isIsk && (
+          <div
+            className="mt-0.5 text-[11px]"
+            style={{ color: positive ? 'var(--color-pos)' : 'var(--color-neg)' }}
+          >
+            {pct != null ? (
+              <Sensitive>{`${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`}</Sensitive>
+            ) : (
+              '—'
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
