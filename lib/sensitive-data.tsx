@@ -16,6 +16,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { cn } from '@/lib/utils'
 
 type Ctx = {
   hidden: boolean
@@ -76,7 +77,15 @@ export function Sensitive({
 
   return (
     <span
-      className={className}
+      // Blur radius is em-relative so larger text gets a proportionally
+      // stronger blur — a fixed px let big topbar digits resolve while
+      // over-blurring small chips.
+      className={cn(
+        'inline-block transition-[filter] duration-150 ease-out',
+        hidden && 'cursor-pointer touch-none select-none',
+        blurred && '[filter:blur(0.4em)]',
+        className,
+      )}
       onPointerDown={(e) => {
         if (!hidden) return
         // Don't open the underlying account row / button — the user is
@@ -90,31 +99,13 @@ export function Sensitive({
       onClick={(e) => {
         if (hidden) e.stopPropagation()
       }}
-      style={{
-        display: 'inline-block',
-        // em-relative so larger text gets a proportionally stronger blur
-        // — a fixed px value let big topbar digits resolve while
-        // over-blurring small chips.
-        filter: blurred ? 'blur(0.4em)' : undefined,
-        transition: 'filter 120ms ease',
-        cursor: hidden ? 'pointer' : undefined,
-        userSelect: hidden ? 'none' : undefined,
-        WebkitUserSelect: hidden ? 'none' : undefined,
-        touchAction: hidden ? 'none' : undefined,
-      }}
     >
       {children}
     </span>
   )
 }
 
-export function SensitiveToggle({
-  className,
-  size = 18,
-}: {
-  className?: string
-  size?: number
-}) {
+export function SensitiveToggle({ className }: { className?: string }) {
   const { hidden, toggle } = useSensitiveData()
   const Icon = hidden ? EyeOff : Eye
   return (
@@ -124,12 +115,12 @@ export function SensitiveToggle({
       aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
       title={hidden ? 'Show amounts' : 'Hide amounts'}
       aria-pressed={hidden}
-      className={
-        className ??
-        'flex h-[34px] w-[34px] items-center justify-center rounded-full text-text-faint transition-colors hover:bg-[rgba(255,255,255,0.06)]'
-      }
+      className={cn(
+        'flex h-[34px] w-[34px] items-center justify-center rounded-full text-text-faint transition-colors hover:bg-[rgba(255,255,255,0.06)]',
+        className,
+      )}
     >
-      <Icon style={{ width: size, height: size }} />
+      <Icon className="h-[18px] w-[18px]" />
     </button>
   )
 }
