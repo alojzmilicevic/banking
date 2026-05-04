@@ -8,9 +8,11 @@
 // topbar/summary totals.
 
 import Link from 'next/link'
+import { tracksPerformance } from '@/lib/account-types'
 import type { DashboardAccount } from '@/lib/api/dashboard'
 import { fmtMoney, shortProduct } from '@/lib/format'
 import { Sensitive } from '@/lib/sensitive-data'
+import { cn } from '@/lib/utils'
 
 function accountLabel(a: DashboardAccount): string {
   return a.details || a.product || a.name || a.iban || a.id
@@ -28,6 +30,7 @@ export default function SidebarAccountRow({
   const visible = !account.excludedFromTotal
   const pct = account.change30d?.pct
   const positive = (account.change30d?.absolute ?? 0) >= 0
+  const showPct = tracksPerformance(account.accountType) && pct != null
 
   return (
     <div
@@ -83,13 +86,16 @@ export default function SidebarAccountRow({
           <Sensitive>{fmtMoney(account.balance, account.balanceCurrency)}</Sensitive>
         </div>
         <div
-          className="mt-0.5 text-[11px]"
-          style={{ color: positive ? 'var(--color-pos)' : 'var(--color-neg)' }}
+          className={cn(
+            'mt-0.5 text-[11px]',
+            showPct ? (positive ? 'text-pos' : 'text-neg') : 'text-transparent',
+          )}
+          aria-hidden={!showPct || undefined}
         >
-          {pct != null ? (
+          {showPct ? (
             <Sensitive>{`${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`}</Sensitive>
           ) : (
-            '—'
+            ' '
           )}
         </div>
       </div>

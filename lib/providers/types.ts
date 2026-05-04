@@ -1,6 +1,8 @@
 // Provider-agnostic shapes used by the sync orchestrator and domain layer.
 // Each provider implementation translates its own API into these.
 
+import type { AccountType } from '@/lib/account-types'
+
 export type AuthFlow = 'redirect' | 'bankid' | 'credentials' | 'apikey'
 
 // What a provider returns from startAuth / pollAuth — the front end uses
@@ -55,7 +57,7 @@ export interface NormalizedAccount {
   name?: string | null
   details?: string | null
   product?: string | null
-  accountType?: string | null
+  accountType?: AccountType | null
   currency?: string | null
   iban?: string | null
   bban?: string | null

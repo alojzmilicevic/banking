@@ -5,6 +5,8 @@
 // and totals so components stay dumb (iterate + render). Holders are DB
 // rows, so any household size works.
 
+import type { AccountType } from '@/lib/account-types'
+
 // ─── Holder ──────────────────────────────────────────────────────────────
 
 // Roster entry — what /api/holders returns. Same fields the
@@ -42,7 +44,7 @@ export interface DashboardAccount {
   name: string | null
   details: string | null
   product: string | null
-  accountType: string | null
+  accountType: AccountType | null
   currency: string | null
   iban: string | null
   bban: string | null
