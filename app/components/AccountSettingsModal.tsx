@@ -14,6 +14,7 @@ import { Eye, EyeOff, Link2Off, Loader2 } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { fmtMoney } from '@/lib/format'
+import { Sensitive } from '@/lib/sensitive-data'
 import type { DashboardAccount } from '@/lib/api/dashboard'
 
 function accountLabel(a: DashboardAccount): string {
@@ -68,7 +69,7 @@ export default function AccountSettingsModal({
               Current balance
             </div>
             <div className="mt-1 font-mono text-[20px] font-light tabular-nums">
-              {fmtMoney(account.balance, account.balanceCurrency)}
+              <Sensitive>{fmtMoney(account.balance, account.balanceCurrency)}</Sensitive>
             </div>
           </div>
 

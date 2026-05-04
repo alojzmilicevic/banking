@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { Eye, EyeOff, Plus, Settings as SettingsIcon } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { fmtMoney, fmtMoneyCompact, shortProduct } from '@/lib/format'
+import { Sensitive, SensitiveToggle } from '@/lib/sensitive-data'
 import { COMBINED_META, SHARED_META } from '@/lib/holders'
 import type {
   DashboardAccount,
@@ -122,13 +123,16 @@ export default function MobileLayout({
           <Image src="/logo-icon.svg" alt="Aloma" width={26} height={26} priority />
           <span className="font-display text-[18px] tracking-[-0.02em]">aloma</span>
         </div>
-        <button
-          type="button"
-          aria-label="Settings"
-          className="flex h-[34px] w-[34px] items-center justify-center rounded-full text-text-faint transition-colors hover:bg-[rgba(255,255,255,0.06)]"
-        >
-          <SettingsIcon className="h-[18px] w-[18px]" />
-        </button>
+        <div className="flex items-center gap-1">
+          <SensitiveToggle />
+          <button
+            type="button"
+            aria-label="Settings"
+            className="flex h-[34px] w-[34px] items-center justify-center rounded-full text-text-faint transition-colors hover:bg-[rgba(255,255,255,0.06)]"
+          >
+            <SettingsIcon className="h-[18px] w-[18px]" />
+          </button>
+        </div>
       </div>
 
       {/* ── View tabs ─────────────────────────────────────────────── */}
@@ -185,7 +189,7 @@ export default function MobileLayout({
               className="font-mono text-[34px] font-light text-foreground tabular-nums"
               style={{ letterSpacing: '-0.03em', lineHeight: 1 }}
             >
-              {total != null ? fmtMoney(total, snap.currency) : '—'}
+              <Sensitive>{total != null ? fmtMoney(total, snap.currency) : '—'}</Sensitive>
             </span>
             {showPct && (
               <span
@@ -195,8 +199,10 @@ export default function MobileLayout({
                   color: positive ? 'var(--color-pos)' : 'var(--color-neg)',
                 }}
               >
-                {positive ? '+' : '−'}
-                {Math.abs(pct!).toFixed(2)}%
+                <Sensitive>
+                  {positive ? '+' : '−'}
+                  {Math.abs(pct!).toFixed(2)}%
+                </Sensitive>
               </span>
             )}
           </div>
@@ -208,8 +214,11 @@ export default function MobileLayout({
                 color: positive ? 'var(--color-pos)' : 'var(--color-neg)',
               }}
             >
-              {positive ? '+' : ''}
-              {fmtMoney(delta, snap.currency)} · {period === 'ALL' ? 'All' : period}
+              <Sensitive>
+                {positive ? '+' : ''}
+                {fmtMoney(delta, snap.currency)}
+              </Sensitive>{' '}
+              · {period === 'ALL' ? 'All' : period}
             </div>
           )}
         </div>
@@ -259,7 +268,7 @@ export default function MobileLayout({
                   className="font-mono text-[15px] font-light tabular-nums"
                   style={{ letterSpacing: '-0.02em' }}
                 >
-                  {fmtMoneyCompact(p.val)}
+                  <Sensitive>{fmtMoneyCompact(p.val)}</Sensitive>
                 </div>
               </div>
             ))}
@@ -393,7 +402,7 @@ function MobileAccountRow({
           className="font-mono text-[15px] font-normal text-foreground tabular-nums"
           style={{ letterSpacing: '-0.01em' }}
         >
-          {fmtMoney(account.balance, account.balanceCurrency)}
+          <Sensitive>{fmtMoney(account.balance, account.balanceCurrency)}</Sensitive>
         </div>
         {pct != null && (
           <div
@@ -403,8 +412,10 @@ function MobileAccountRow({
               color: positive ? 'var(--color-pos)' : 'var(--color-neg)',
             }}
           >
-            {positive ? '+' : '−'}
-            {Math.abs(pct).toFixed(1)}%
+            <Sensitive>
+              {positive ? '+' : '−'}
+              {Math.abs(pct).toFixed(1)}%
+            </Sensitive>
           </div>
         )}
       </div>

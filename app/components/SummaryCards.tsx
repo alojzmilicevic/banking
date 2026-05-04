@@ -9,6 +9,7 @@
 // from the dashboard API; adding a person grows the row automatically.
 
 import { fmtMoney } from '@/lib/format'
+import { Sensitive } from '@/lib/sensitive-data'
 import { COMBINED_META, holderBg, holderBorder } from '@/lib/holders'
 import type { DashboardHolder } from '@/lib/api/dashboard'
 import type { Period } from './PeriodTabs'
@@ -90,15 +91,20 @@ export default function SummaryCards({
               className="font-mono text-[24px] font-light text-foreground tabular-nums"
               style={{ letterSpacing: '-0.02em' }}
             >
-              {fmtMoney(s.total, currency)}
+              <Sensitive>{fmtMoney(s.total, currency)}</Sensitive>
             </div>
             <div
               className="mt-1 text-[12px]"
               style={{ color: showPct && !positive ? 'var(--color-neg)' : 'var(--color-pos)' }}
             >
-              {showPct
-                ? `${positive ? '+' : ''}${s.pct!.toFixed(1)}% · ${period}`
-                : `— · ${period}`}
+              {showPct ? (
+                <>
+                  <Sensitive>{`${positive ? '+' : ''}${s.pct!.toFixed(1)}%`}</Sensitive>
+                  {` · ${period}`}
+                </>
+              ) : (
+                `— · ${period}`
+              )}
             </div>
           </div>
         )
