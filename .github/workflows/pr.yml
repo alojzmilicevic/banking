@@ -1,0 +1,46 @@
+name: PR
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      # Non-blocking: surfaces compiler skips inline on the PR diff (yellow
+      # warnings) for files this PR touches. Script exits 0 even with skips —
+      # only fails if the babel transform itself crashes.
+      - name: React Compiler check (changed files)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=$(gh pr view ${{ github.event.pull_request.number }} \
+            --json files -q '[.files[] | select(.additions > 0) | .path] | .[]' \
+            | grep -E '^(app|lib)/.*\.tsx?$' || true)
+          if [ -n "$files" ]; then
+            pnpm compiler:check $files
+          else
+            echo "No changed app/lib .ts(x) files; skipping compiler check."
+          fi
