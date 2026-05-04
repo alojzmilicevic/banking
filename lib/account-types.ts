@@ -1,28 +1,16 @@
 // Account-type codes that flow through `accountType` on accounts. Providers
 // emit raw strings (Avanza's product codes, EB's ISO 20022 cash account
-// types), so the field stays an open union — but listing the codes we know
-// gives autocomplete on assignment and lets callers compare via
-// `ACCOUNT_TYPE.X` for typo-safety instead of bare string literals.
+// types), so the field stays an open union. `ACCOUNT_TYPE` lists only the
+// codes we compare against by name — comparing via `ACCOUNT_TYPE.X` makes
+// a typo a property-access error instead of a silently-false comparison.
+// Add a code here when you need to branch on it.
 
 export const ACCOUNT_TYPE = {
-  // Avanza
-  SPARKONTO: 'SPARKONTO',
-  CREDIT_ACCOUNT: 'CREDIT_ACCOUNT',
-  AKTIEFONDKONTO: 'AKTIEFONDKONTO',
   ISK: 'INVESTERINGSSPARKONTO',
-  KAPITALFORSAKRING: 'KAPITALFORSAKRING',
-  KAPITAL_PENSION: 'KAPITAL_PENSION',
-  TJANSTEPENSION: 'TJANSTEPENSION',
-  IPS: 'IPS',
-  PPM: 'PPM',
-  // Enable Banking (ISO 20022 cash account types)
-  CACC: 'CACC',
-  SVGS: 'SVGS',
-  CARD: 'CARD',
 } as const
 
 export type KnownAccountType = (typeof ACCOUNT_TYPE)[keyof typeof ACCOUNT_TYPE]
 
-// `(string & {})` keeps the union open: known codes get autocomplete, but
-// arbitrary provider strings still satisfy the type without a cast.
+// `(string & {})` keeps the union open so arbitrary provider strings still
+// satisfy the type without a cast.
 export type AccountType = KnownAccountType | (string & {})
