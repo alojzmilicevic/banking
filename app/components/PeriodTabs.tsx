@@ -42,7 +42,7 @@ export function PeriodTabs({
       {pill && (
         <motion.div
           aria-hidden
-          className="pointer-events-none absolute top-0.75 bottom-0.75 left-0 rounded-7 border border-border bg-overlay"
+          className="pointer-events-none absolute inset-y-0.75 left-0 rounded-7 border border-border bg-overlay"
           initial={false}
           animate={{ x: pill.x, width: pill.width }}
           transition={{ type: 'spring', stiffness: 500, damping: 35 }}

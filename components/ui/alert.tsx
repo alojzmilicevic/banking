@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const alertVariants = cva(
-  'mb-4 rounded-md border px-4 py-3 text-sm break-words',
+  'mb-4 rounded-md border px-4 py-3 text-sm wrap-break-word',
   {
     variants: {
       variant: {

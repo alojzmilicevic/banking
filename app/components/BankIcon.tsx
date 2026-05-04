@@ -62,14 +62,14 @@ export function BankIcon({
       aria-label={label ?? providerId}
     >
       {showFallback ? (
-        <Building2 className="size-[60%]  text-text-faint" />
+        <Building2 className="size-[60%] text-text-faint" />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={src}
           alt=""
           onError={() => setErrored(true)}
-          className="block size-full  object-contain"
+          className="block size-full object-contain"
         />
       )}
     </span>

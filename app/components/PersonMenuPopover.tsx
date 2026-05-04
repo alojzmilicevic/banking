@@ -67,7 +67,7 @@ export function PersonMenuPopover({
           title={triggerLabel}
           className="ml-1 flex size-[28px] shrink-0 cursor-pointer items-center justify-center rounded-7 border border-border bg-[rgba(255,255,255,0.05)] text-muted-foreground transition-colors hover:bg-[rgba(255,255,255,0.09)] hover:text-foreground"
         >
-          <MoreVertical className="size-[15px] " />
+          <MoreVertical className="size-[15px]" />
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -163,9 +163,9 @@ export function PersonMenuPopover({
                       className="flex w-full items-center gap-2 rounded-md px-[10px] py-[8px] text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       {allHidden ? (
-                        <Eye className="size-[14px] " />
+                        <Eye className="size-[14px]" />
                       ) : (
-                        <EyeOff className="size-[14px] " />
+                        <EyeOff className="size-[14px]" />
                       )}
                       {allHidden ? 'Show all in totals' : 'Hide all from totals'}
                     </button>
@@ -202,11 +202,11 @@ export function PersonMenuPopover({
                           <Sensitive className="shrink-0 whitespace-nowrap font-mono text-12 text-text-faint tabular-nums">
                             {fmtMoney(a.balance, a.balanceCurrency)}
                           </Sensitive>
-                          <span className="ml-1 flex size-[24px]  shrink-0 items-center justify-center rounded-sm text-text-faint transition-colors group-hover:text-foreground">
+                          <span className="ml-1 flex size-[24px] shrink-0 items-center justify-center rounded-sm text-text-faint transition-colors group-hover:text-foreground">
                             {visible ? (
-                              <Eye className="size-[14px] " />
+                              <Eye className="size-[14px]" />
                             ) : (
-                              <EyeOff className="size-[14px] " />
+                              <EyeOff className="size-[14px]" />
                             )}
                           </span>
                         </button>
