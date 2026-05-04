@@ -65,9 +65,9 @@ export function PersonMenuPopover({
           type="button"
           aria-label={triggerLabel}
           title={triggerLabel}
-          className="ml-1 flex size-[28px] shrink-0 cursor-pointer items-center justify-center rounded-7 border border-border bg-[rgba(255,255,255,0.05)] text-muted-foreground transition-colors hover:bg-[rgba(255,255,255,0.09)] hover:text-foreground"
+          className="ml-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-7 border border-border bg-[rgba(255,255,255,0.05)] text-muted-foreground transition-colors hover:bg-[rgba(255,255,255,0.09)] hover:text-foreground"
         >
-          <MoreVertical className="size-[15px]" />
+          <MoreVertical className="size-3.75" />
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -82,12 +82,12 @@ export function PersonMenuPopover({
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.14 }}
-            className="z-50 w-[340px] overflow-hidden rounded-14 border border-border bg-popover shadow-aloma-lg outline-none"
+            className="z-50 w-85 overflow-hidden rounded-14 border border-border bg-popover shadow-aloma-lg outline-none"
           >
                 {/* Connection list — one row per linked bank with explicit
                     Sync and Disconnect buttons. The "+" row at the end
                     opens AddBankModal. */}
-                <div className="flex flex-col border-b border-border-subtle p-[6px]">
+                <div className="flex flex-col border-b border-border-subtle p-1.5">
                   {groups.map((g) => {
                     const connected = g.connection.status !== 'expired' && !g.connection.lastSyncError
                     const label = g.connection.label ?? g.connection.providerId
@@ -156,16 +156,16 @@ export function PersonMenuPopover({
 
                 {/* Bulk hide/show */}
                 {hasAccounts && (
-                  <div className="border-b border-border-subtle p-[10px]">
+                  <div className="border-b border-border-subtle p-2.5">
                     <button
                       type="button"
                       onClick={onToggleAll}
-                      className="flex w-full items-center gap-2 rounded-md px-[10px] py-[8px] text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       {allHidden ? (
-                        <Eye className="size-[14px]" />
+                        <Eye className="size-3.5" />
                       ) : (
-                        <EyeOff className="size-[14px]" />
+                        <EyeOff className="size-3.5" />
                       )}
                       {allHidden ? 'Show all in totals' : 'Hide all from totals'}
                     </button>
@@ -174,7 +174,7 @@ export function PersonMenuPopover({
 
                 {/* Per-account list */}
                 {hasAccounts && (
-                  <div className="max-h-[220px] overflow-y-auto p-[8px]">
+                  <div className="max-h-55 overflow-y-auto p-2">
                     {accounts.map((a) => {
                       const visible = !a.excludedFromTotal
                       return (
@@ -183,7 +183,7 @@ export function PersonMenuPopover({
                           type="button"
                           onClick={() => onToggleAccount(a)}
                           className={cn(
-                            'group flex w-full items-center gap-2 rounded-md px-[8px] py-[7px] text-left transition-colors hover:bg-muted',
+                            'group flex w-full items-center gap-2 rounded-md px-2 py-1.75 text-left transition-colors hover:bg-muted',
                             !visible && 'opacity-60',
                           )}
                           title={visible ? 'Hide from totals' : 'Show in totals'}
@@ -202,11 +202,11 @@ export function PersonMenuPopover({
                           <Sensitive className="shrink-0 whitespace-nowrap font-mono text-12 text-text-faint tabular-nums">
                             {fmtMoney(a.balance, a.balanceCurrency)}
                           </Sensitive>
-                          <span className="ml-1 flex size-[24px] shrink-0 items-center justify-center rounded-sm text-text-faint transition-colors group-hover:text-foreground">
+                          <span className="ml-1 flex size-6 shrink-0 items-center justify-center rounded-sm text-text-faint transition-colors group-hover:text-foreground">
                             {visible ? (
-                              <Eye className="size-[14px]" />
+                              <Eye className="size-3.5" />
                             ) : (
-                              <EyeOff className="size-[14px]" />
+                              <EyeOff className="size-3.5" />
                             )}
                           </span>
                         </button>
