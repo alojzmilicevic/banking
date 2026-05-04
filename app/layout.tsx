@@ -25,7 +25,9 @@ const dmMono = DM_Mono({
   variable: '--font-aloma-mono',
 })
 
-export const metadata = { title: 'aloma' }
+export const metadata = {
+  title: process.env.WORKTREE_NAME ? `aloma · ${process.env.WORKTREE_NAME}` : 'aloma',
+}
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

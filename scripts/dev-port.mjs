@@ -58,7 +58,7 @@ console.log(`[dev] ${url}`)
 
 const child = spawn('next', ['dev', '--experimental-https', '-p', String(port)], {
   stdio: 'inherit',
-  env: process.env,
+  env: { ...process.env, ...(isMain ? {} : { WORKTREE_NAME: name }) },
 })
 // Sidecar PID lets /open-app detect SIGKILL'd runs that bypass cleanup below.
 writeFileSync(pidFile, String(child.pid) + '\n')
