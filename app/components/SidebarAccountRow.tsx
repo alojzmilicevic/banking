@@ -1,10 +1,10 @@
 // One row inside a sidebar PersonSection — avatar (product short label),
 // account name, current balance, 30d delta %.
 //
-// Clicking the row opens the AccountSettingsModal where Hide/Show and
-// Disconnect live. Visibility maps to the existing `excludedFromTotal`
-// state — hiding pulls the account out of the wealth chart and the
-// topbar/summary totals.
+// Visibility maps to the existing `excludedFromTotal` state — hiding pulls
+// the account out of the wealth chart and the topbar/summary totals. The
+// row itself isn't clickable; per-account hide/show + disconnect live in
+// the parent's PersonMenuPopover.
 
 import Link from 'next/link'
 import { tracksPerformance } from '@/lib/account-types'
@@ -20,11 +20,9 @@ function accountLabel(a: DashboardAccount): string {
 export function SidebarAccountRow({
   account,
   color,
-  onOpenSettings,
 }: {
   account: DashboardAccount
   color: string
-  onOpenSettings?: () => void
 }) {
   const visible = !account.excludedFromTotal
   const pct = account.change30d?.pct
@@ -33,17 +31,8 @@ export function SidebarAccountRow({
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onOpenSettings}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onOpenSettings?.()
-        }
-      }}
       className={cn(
-        'group flex cursor-pointer items-center rounded-10 border transition-all',
+        'group flex items-center rounded-10 border transition-all',
         visible
           ? 'gap-1.5 border-border-subtle bg-white/3 px-3.5 py-2.5'
           : 'gap-1 border-transparent bg-transparent px-2.5 py-1.25 opacity-40',
@@ -71,11 +60,7 @@ export function SidebarAccountRow({
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-14 font-medium text-foreground">
-          <Link
-            href={`/account/${account.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="text-foreground hover:underline"
-          >
+          <Link href={`/account/${account.id}`} className="text-foreground hover:underline">
             {accountLabel(account)}
           </Link>
         </div>

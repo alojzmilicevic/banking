@@ -178,6 +178,29 @@ export function useToggleExclude() {
   })
 }
 
+// Bulk variant — fires all PATCHes in parallel and invalidates wealth
+// queries ONCE at the end. Calling useToggleExclude in a loop would
+// trigger N invalidations and N dashboard refetches racing each other,
+// which is visibly slow with more than a couple of accounts.
+export function useBulkToggleExclude() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (items: { id: string; exclude: boolean }[]) => {
+      if (items.length === 0) return
+      await Promise.all(
+        items.map(({ id, exclude }) =>
+          fetchJson(`/api/accounts/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ excludedFromTotal: exclude }),
+          }),
+        ),
+      )
+    },
+    onSuccess: () => invalidateWealth(qc),
+  })
+}
+
 export function useStartEbAuth() {
   return useMutation({
     mutationFn: (input: { aspspName: string; aspspCountry: string; holderId?: string }) =>

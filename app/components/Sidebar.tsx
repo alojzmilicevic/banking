@@ -43,7 +43,8 @@ export function Sidebar({
   onToggleAllForHolder,
   onToggleAllShared,
   onAddAccount,
-  onOpenAccountSettings,
+  onToggleAccount,
+  onDisconnectConnection,
   initialWidth,
 }: {
   dashboard: DashboardResponse
@@ -54,7 +55,8 @@ export function Sidebar({
   onToggleAllForHolder: (holderId: string) => void
   onToggleAllShared: () => void
   onAddAccount: (holderId: string) => void
-  onOpenAccountSettings?: (a: DashboardAccount) => void
+  onToggleAccount: (a: DashboardAccount) => void
+  onDisconnectConnection: (connectionId: string, label: string) => void
   // Comes from the server via the cookie read in app/page.tsx, so the
   // SSR'd HTML already has the correct width on first paint.
   initialWidth: number
@@ -177,14 +179,16 @@ export function Sidebar({
           holder={h}
           onToggleAll={() => onToggleAllForHolder(h.id)}
           onAddAccount={() => onAddAccount(h.id)}
-          onOpenAccountSettings={onOpenAccountSettings}
+          onToggleAccount={onToggleAccount}
+          onDisconnectConnection={onDisconnectConnection}
         />
       ))}
 
       <SharedSection
         accounts={dashboard.shared.accounts}
         onToggleAll={onToggleAllShared}
-        onOpenAccountSettings={onOpenAccountSettings}
+        onToggleAccount={onToggleAccount}
+        onDisconnectConnection={onDisconnectConnection}
       />
 
       {/* Combined toggle */}

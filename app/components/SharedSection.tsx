@@ -18,16 +18,19 @@ import { fmtMoneyCompact } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { SHARED_META } from '@/lib/holders'
 import { cn } from '@/lib/utils'
+import { PersonMenuPopover } from './PersonMenuPopover'
 import { SidebarAccountRow } from './SidebarAccountRow'
 
 export function SharedSection({
   accounts,
   onToggleAll,
-  onOpenAccountSettings,
+  onToggleAccount,
+  onDisconnectConnection,
 }: {
   accounts: DashboardAccount[]
   onToggleAll: () => void
-  onOpenAccountSettings?: (a: DashboardAccount) => void
+  onToggleAccount: (a: DashboardAccount) => void
+  onDisconnectConnection: (connectionId: string, label: string) => void
 }) {
   const meta = SHARED_META
   // Server bucket includes the dupe copies of joint accounts (so the
@@ -82,29 +85,20 @@ export function SharedSection({
             </Sensitive>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onToggleAll}
-          aria-label={allHidden ? 'Show all shared accounts' : 'Hide all shared accounts'}
-          title={allHidden ? 'Show all' : 'Hide all'}
-          className={cn(
-            'ml-1 shrink-0 rounded-7 border border-border bg-white/5 px-2 py-1.25 text-11 transition-colors',
-            allHidden ? 'text-text-faint' : 'text-muted-foreground',
-          )}
-        >
-          {allHidden ? 'Show' : 'Hide'}
-        </button>
+        <PersonMenuPopover
+          triggerLabel="Shared accounts options"
+          accounts={canonicals}
+          allHidden={allHidden}
+          onToggleAll={onToggleAll}
+          onToggleAccount={onToggleAccount}
+          onDisconnectConnection={onDisconnectConnection}
+        />
       </div>
 
       {/* Visible account rows */}
       <div className="flex flex-col gap-1">
         {visibleAccounts.map((a) => (
-          <SidebarAccountRow
-            key={a.id}
-            account={a}
-            color={meta.color}
-            onOpenSettings={onOpenAccountSettings ? () => onOpenAccountSettings(a) : undefined}
-          />
+          <SidebarAccountRow key={a.id} account={a} color={meta.color} />
         ))}
         {visibleAccounts.length === 0 && hiddenAccounts.length > 0 && (
           <p className="px-1 py-2 text-12 text-text-faint">All shared accounts hidden.</p>
@@ -137,14 +131,7 @@ export function SharedSection({
               >
                 <div className="mt-1 flex flex-col">
                   {hiddenAccounts.map((a) => (
-                    <SidebarAccountRow
-                      key={a.id}
-                      account={a}
-                      color={meta.color}
-                                onOpenSettings={
-                        onOpenAccountSettings ? () => onOpenAccountSettings(a) : undefined
-                      }
-                    />
+                    <SidebarAccountRow key={a.id} account={a} color={meta.color} />
                   ))}
                 </div>
               </motion.div>

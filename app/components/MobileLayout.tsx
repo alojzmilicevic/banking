@@ -46,7 +46,7 @@ export function MobileLayout({
   visibleHolderIds,
   showShared,
   onAddAccount,
-  onOpenAccountSettings,
+  onToggleAccount,
   topError,
   onDismissError,
 }: {
@@ -60,7 +60,7 @@ export function MobileLayout({
   visibleHolderIds: string[]
   showShared: boolean
   onAddAccount: (holderId: string) => void
-  onOpenAccountSettings: (account: DashboardAccount) => void
+  onToggleAccount: (a: DashboardAccount) => void
   topError: string | null
   onDismissError: () => void
 }) {
@@ -270,7 +270,7 @@ export function MobileLayout({
                 account={account}
                 connectionLabel={account.connection.label ?? account.connection.providerId}
                 color={bucketColor(account, holderColorById)}
-                onOpenSettings={() => onOpenAccountSettings(account)}
+                onToggleVisibility={() => onToggleAccount(account)}
               />
             ))
           )}
@@ -316,12 +316,12 @@ function MobileAccountRow({
   account,
   connectionLabel,
   color,
-  onOpenSettings,
+  onToggleVisibility,
 }: {
   account: DashboardAccount
   connectionLabel: string
   color: string
-  onOpenSettings: () => void
+  onToggleVisibility: () => void
 }) {
   const visible = !account.excludedFromTotal
   const pct = account.change30d?.pct
@@ -330,17 +330,8 @@ function MobileAccountRow({
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onOpenSettings}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onOpenSettings()
-        }
-      }}
       className={cn(
-        'flex cursor-pointer items-center gap-3 border-b border-border-subtle px-5 py-3.25 transition-opacity',
+        'flex items-center gap-3 border-b border-border-subtle px-5 py-3.25 transition-opacity',
         !visible && 'opacity-40',
       )}
     >
@@ -351,11 +342,8 @@ function MobileAccountRow({
       />
       <div className="min-w-0 flex-1">
         <div className="truncate text-14 font-medium leading-[1.2] text-foreground">
-          <Link
-            href={`/account/${account.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="text-foreground hover:underline"
-          >
+          <Link href={`/account/${account.id}`} className="text-foreground hover:underline">
+
             {accountLabel(account)}
           </Link>
         </div>
@@ -385,10 +373,7 @@ function MobileAccountRow({
       </div>
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          onOpenSettings()
-        }}
+        onClick={onToggleVisibility}
         aria-label={visible ? 'Hide account' : 'Show account'}
         className="flex size-7 shrink-0 items-center justify-center rounded-6 text-text-faint"
       >

@@ -9,7 +9,6 @@
 // toggles + the combined-line toggle in the sidebar.
 
 import { useEffect, useState } from 'react'
-import { AccountSettingsModal } from './components/AccountSettingsModal'
 import { AddBankModal } from './components/AddBankModal'
 import { DashboardSkeleton } from './components/DashboardSkeleton'
 import { MobileDashboardSkeleton } from './components/MobileDashboardSkeleton'
@@ -21,6 +20,7 @@ import { SummaryCards, buildSummaryRows } from './components/SummaryCards'
 import { type Period } from './components/PeriodTabs'
 import { Alert } from '@/components/ui/alert'
 import {
+  useBulkToggleExclude,
   useDashboard,
   useDisconnect,
   useSyncAll,
@@ -53,12 +53,12 @@ export function HomeContent({
   const [snap, setSnap] = useState<TimelineSnapshot>(EMPTY_SNAP)
   const [addOpen, setAddOpen] = useState(false)
   const [addHolderId, setAddHolderId] = useState<string | undefined>(undefined)
-  const [activeAccount, setActiveAccount] = useState<DashboardAccount | null>(null)
 
   const dashboard = useDashboard()
   const syncAll = useSyncAll()
   const disconnect = useDisconnect()
   const toggleExclude = useToggleExclude()
+  const bulkToggleExclude = useBulkToggleExclude()
 
   const data = dashboard.data
 
@@ -83,17 +83,14 @@ export function HomeContent({
     toggleExclude.mutate({ id: a.id, exclude: !a.excludedFromTotal })
   }
 
-  function onDisconnectActive() {
-    if (!activeAccount) return
-    const c = activeAccount.connection
+  function onDisconnectConnection(connectionId: string, label: string) {
     if (
       !confirm(
-        `Disconnect ${c.label ?? c.providerId}?\n\nThis deletes its accounts, transactions and history. Snapshot history is recomputed on next sync.`,
+        `Disconnect ${label}?\n\nThis deletes its accounts, transactions and history. Snapshot history is recomputed on next sync.`,
       )
     )
       return
-    disconnect.mutate(c.id)
-    setActiveAccount(null)
+    disconnect.mutate(connectionId)
   }
 
   function bulkToggle(predicate: (a: DashboardAccount) => boolean) {
@@ -104,12 +101,12 @@ export function HomeContent({
     }
     for (const a of data.shared.accounts) if (predicate(a)) owned.push(a)
 
-    const anyVisible = owned.some((a) => !a.excludedFromTotal)
-    for (const a of owned) {
-      const shouldExclude = anyVisible
-      if (a.excludedFromTotal === shouldExclude) continue
-      toggleExclude.mutate({ id: a.id, exclude: shouldExclude })
-    }
+    const shouldExclude = owned.some((a) => !a.excludedFromTotal)
+    const items = owned
+      .filter((a) => a.excludedFromTotal !== shouldExclude)
+      .map((a) => ({ id: a.id, exclude: shouldExclude }))
+    if (items.length === 0) return
+    bulkToggleExclude.mutate(items)
   }
 
   function onToggleAllForHolder(holderId: string) {
@@ -166,6 +163,7 @@ export function HomeContent({
     syncAll.error?.message ??
     disconnect.error?.message ??
     toggleExclude.error?.message ??
+    bulkToggleExclude.error?.message ??
     null
 
   return (
@@ -183,8 +181,9 @@ export function HomeContent({
               onToggleAllForHolder={onToggleAllForHolder}
               onToggleAllShared={onToggleAllShared}
               onAddAccount={openAdd}
+              onToggleAccount={onToggleAccount}
+              onDisconnectConnection={onDisconnectConnection}
               initialWidth={initialSidebarWidth}
-              onOpenAccountSettings={(account) => setActiveAccount(account)}
             />
 
             <main className="flex flex-1 flex-col overflow-hidden">
@@ -239,7 +238,7 @@ export function HomeContent({
             visibleHolderIds={visibleHolderIds}
             showShared={showShared}
             onAddAccount={openAdd}
-            onOpenAccountSettings={(account) => setActiveAccount(account)}
+            onToggleAccount={onToggleAccount}
             topError={topError}
             onDismissError={() => setPageError(null)}
           />
@@ -274,19 +273,6 @@ export function HomeContent({
         onClose={() => setAddOpen(false)}
         onConnected={() => celebrate()}
         initialHolderId={addHolderId}
-      />
-
-      <AccountSettingsModal
-        account={activeAccount}
-        onClose={() => setActiveAccount(null)}
-        onToggleHide={() => {
-          if (!activeAccount) return
-          onToggleAccount(activeAccount)
-          setActiveAccount(null)
-        }}
-        onDisconnect={onDisconnectActive}
-        toggling={toggleExclude.isPending}
-        disconnecting={disconnect.isPending}
       />
     </>
   )
