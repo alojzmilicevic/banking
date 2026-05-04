@@ -2,7 +2,7 @@
 // Visual add-bank flow. Holder chips at the top come from the API now,
 // so adding a household member doesn't require code changes here.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   ArrowRight,
@@ -28,12 +28,27 @@ import {
   type HolderListItem,
   type SyncProgressUpdate,
 } from '@/lib/queries'
+import type { DashboardResponse } from '@/lib/api/dashboard'
 import { holderTint } from '@/lib/holders'
 
 type Provider = 'avanza' | 'eb'
 
 function key(a: ASPSP) {
   return `${a.name}||${a.country}`
+}
+
+function buildLinkedByHolder(data: DashboardResponse | undefined) {
+  return new Map(
+    (data?.holders ?? []).map((h) => [
+      h.id,
+      {
+        avanza: h.accounts.some((a) => a.connection.providerId === 'avanza'),
+        eb: h.accounts
+          .filter((a) => a.connection.providerId === 'enable-banking')
+          .map((a) => a.connection.label ?? 'a bank'),
+      },
+    ]),
+  )
 }
 
 export default function AddBankModal({
@@ -48,7 +63,7 @@ export default function AddBankModal({
   initialHolderId?: string
 }) {
   const holdersQ = useHolders()
-  const holders = useMemo(() => holdersQ.data ?? [], [holdersQ.data])
+  const holders = holdersQ.data ?? []
   const dashboard = useDashboard()
 
   const [holderId, setHolderId] = useState<string | undefined>(initialHolderId)
@@ -72,21 +87,7 @@ export default function AddBankModal({
   // Per-holder map of which providers already have a connection. Used to
   // dim already-linked provider tiles and warn that picking them will
   // re-link (refresh credentials) rather than add a new bank.
-  const linkedByHolder = useMemo(() => {
-    const map = new Map<string, { avanza: boolean; eb: string[] }>()
-    if (!dashboard.data) return map
-    for (const h of dashboard.data.holders) {
-      const slot = { avanza: false, eb: [] as string[] }
-      for (const a of h.accounts) {
-        if (a.connection.providerId === 'avanza') slot.avanza = true
-        else if (a.connection.providerId === 'enable-banking') {
-          slot.eb.push(a.connection.label ?? 'a bank')
-        }
-      }
-      map.set(h.id, slot)
-    }
-    return map
-  }, [dashboard.data])
+  const linkedByHolder = buildLinkedByHolder(dashboard.data)
 
   const linkedHere = holderId ? linkedByHolder.get(holderId) : undefined
   const avanzaLinked = !!linkedHere?.avanza

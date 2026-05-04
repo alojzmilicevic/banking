@@ -1,16 +1,15 @@
-// Flat config bridging eslint-config-next (still legacy-format) onto
-// ESLint 9 via FlatCompat. Drop the bridge once eslint-config-next ships
-// a native flat config.
-import { FlatCompat } from '@eslint/eslintrc'
-import { dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const compat = new FlatCompat({ baseDirectory: __dirname })
+// Flat config wired directly against the Next + React plugins. Bypasses
+// eslint-config-next's @rushstack/eslint-patch shim, which doesn't recognise
+// ESLint 9 and breaks `pnpm lint`.
+import nextPlugin from '@next/eslint-plugin-next'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactCompiler from 'eslint-plugin-react-compiler'
 
 const config = [
   { ignores: ['.next/**', 'node_modules/**', 'lib/db/migrations/**', 'data/**'] },
-  ...compat.extends('next/core-web-vitals'),
+  nextPlugin.flatConfig.coreWebVitals,
+  reactHooks.configs['recommended-latest'],
+  reactCompiler.configs.recommended,
 ]
 
 export default config

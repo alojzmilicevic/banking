@@ -8,7 +8,7 @@
 // components iterate over `dashboard.holders[]` and `dashboard.shared`.
 
 import Image from 'next/image'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
 import { Sensitive } from '@/lib/sensitive-data'
@@ -75,15 +75,12 @@ export default function Sidebar({
   const widthAtDragStart = useRef(width)
   const xAtDragStart = useRef(0)
 
-  const onResizePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      e.preventDefault()
-      widthAtDragStart.current = width
-      xAtDragStart.current = e.clientX
-      setIsResizing(true)
-    },
-    [width],
-  )
+  function onResizePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault()
+    widthAtDragStart.current = width
+    xAtDragStart.current = e.clientX
+    setIsResizing(true)
+  }
 
   // Window-level pointer listeners for the duration of a drag — beats
   // attaching to the handle because the cursor leaves it the moment you
