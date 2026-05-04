@@ -19,7 +19,7 @@ import { Alert } from '@/components/ui/alert'
 import { useTimeseries } from '@/lib/queries'
 import { SHARED_META } from '@/lib/holders'
 import type { DashboardHolder } from '@/lib/api/dashboard'
-import { ChartShape } from './DashboardSkeleton'
+import { ChartShape } from './skeleton-shapes'
 import type { Period } from './PeriodTabs'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

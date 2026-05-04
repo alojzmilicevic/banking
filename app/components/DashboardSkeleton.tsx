@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ChartShape, PeriodTabsShape } from './skeleton-shapes'
 
 export default function DashboardSkeleton({ sidebarWidth }: { sidebarWidth: number }) {
   return (
@@ -21,7 +22,7 @@ export default function DashboardSkeleton({ sidebarWidth }: { sidebarWidth: numb
 function SidebarSkeleton({ width }: { width: number }) {
   return (
     <aside
-      className="relative flex shrink-0 flex-col overflow-hidden border-r p-[20px_16px]"
+      className="relative flex shrink-0 flex-col overflow-y-auto border-r p-[20px_16px]"
       style={{
         width,
         background: 'var(--color-card)',
@@ -42,11 +43,12 @@ function SidebarSkeleton({ width }: { width: number }) {
         View
       </div>
 
-      {/* View switcher rows — 3 generic rows. Wrap each in the same
-          border+padding container as the real button so total row height
-          matches and there's no jump on data arrival. */}
+      {/* View switcher rows — All + 1 holder + Shared mirrors the
+          single-user default (the app's documented common case). Wrap
+          each in the same border+padding container as the real button so
+          total row height matches and there's no jump on data arrival. */}
       <div className="mb-1 flex flex-col gap-[3px]">
-        {[0, 1, 2, 3].map((i) => (
+        {[0, 1, 2].map((i) => (
           <div
             key={i}
             className="flex w-full items-center gap-[10px] rounded-[9px] border border-transparent px-[12px] py-[9px] text-[14px]"
@@ -65,12 +67,31 @@ function SidebarSkeleton({ width }: { width: number }) {
         Accounts
       </div>
 
-      {/* Two PersonSections + Shared mirrors the typical loaded layout
-          (≥1 holder + Shared bucket). Sized so the sidebar reaches the
-          same overall height once data lands — no jump. */}
-      <PersonSectionSkeleton accountRows={4} withHidden withAdd />
-      <PersonSectionSkeleton accountRows={2} withAdd />
+      {/* 1 PersonSection + Shared mirrors the single-user default (per
+          MEMORY/CLAUDE.md: this app is a single-user wealth aggregator).
+          Hidden-toggle is data-dependent so we don't reserve space for
+          it — most users have no hidden accounts. */}
+      <PersonSectionSkeleton accountRows={3} withAdd />
       <PersonSectionSkeleton accountRows={2} sharedHeader />
+
+      {/* "Combined line" toggle — always rendered by Sidebar, so reserve
+          the row to avoid a downward jump when data lands. Static label,
+          shimmer for the On/Off pill. */}
+      <div
+        className="mt-1 flex w-full items-center gap-[10px] rounded-[9px] border px-[12px] py-[9px] text-[13px] text-text-faint"
+        style={{ borderColor: 'var(--color-border-subtle)' }}
+      >
+        <span
+          className="h-[2px] w-[16px] shrink-0 rounded-[1px]"
+          style={{ background: 'var(--color-primary)' }}
+        />
+        Combined line
+        <Skeleton className="ml-auto h-[11px] w-[20px]" />
+      </div>
+
+      {/* Mirrors Sidebar.tsx — fills remaining vertical space so scroll
+          behaviour matches the loaded layout. */}
+      <div className="flex-1" />
     </aside>
   )
 }
@@ -182,27 +203,6 @@ function TopbarSkeleton() {
   )
 }
 
-// Static, non-interactive copy of PeriodTabs — same dimensions, no motion,
-// no onClick. Used in skeleton states where we want the layout locked but
-// no clickability.
-function PeriodTabsShape() {
-  return (
-    <div
-      className="inline-flex items-center gap-0.5 rounded-[9px] border border-border-subtle p-[3px]"
-      style={{ background: 'var(--color-elevated)' }}
-    >
-      {['1W', '1M', '3M', '1Y', 'All'].map((label) => (
-        <span
-          key={label}
-          className="rounded-[7px] px-[13px] py-[5px] text-xs font-medium text-text-faint"
-        >
-          {label}
-        </span>
-      ))}
-    </div>
-  )
-}
-
 function TimelineSkeleton() {
   return (
     <div
@@ -257,46 +257,3 @@ function SummaryCardsSkeleton() {
   )
 }
 
-// Reusable chart-shape skeleton (legend-less). Used both by the full
-// Dashboard skeleton and by Timeline's period-switch loading state.
-export function ChartShape() {
-  return (
-    <div className="relative h-full w-full overflow-hidden">
-      <svg
-        className="absolute inset-0 h-full w-full animate-pulse"
-        preserveAspectRatio="none"
-        viewBox="0 0 400 200"
-      >
-        <defs>
-          <linearGradient id="skeleton-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(255,255,255,0.10)" />
-            <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-          </linearGradient>
-        </defs>
-        {[40, 80, 120, 160].map((y) => (
-          <line
-            key={y}
-            x1="0"
-            x2="400"
-            y1={y}
-            y2={y}
-            stroke="rgba(255,255,255,0.05)"
-            strokeDasharray="2 4"
-          />
-        ))}
-        <path
-          d="M0,140 C40,120 80,150 120,110 C160,75 200,95 240,70 C280,50 320,80 360,40 L400,30 L400,200 L0,200 Z"
-          fill="url(#skeleton-area)"
-        />
-        <path
-          d="M0,140 C40,120 80,150 120,110 C160,75 200,95 240,70 C280,50 320,80 360,40 L400,30"
-          fill="none"
-          stroke="rgba(255,255,255,0.18)"
-          strokeWidth="1.5"
-        />
-      </svg>
-    </div>
-  )
-}
-
-export { PeriodTabsShape }

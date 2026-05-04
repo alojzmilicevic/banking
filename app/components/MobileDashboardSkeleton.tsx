@@ -1,7 +1,7 @@
 import Image from 'next/image'
 import { Settings as SettingsIcon } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ChartShape, PeriodTabsShape } from './DashboardSkeleton'
+import { ChartShape, PeriodTabsShape } from './skeleton-shapes'
 
 export default function MobileDashboardSkeleton() {
   return (
@@ -75,18 +75,20 @@ export default function MobileDashboardSkeleton() {
           </div>
         </div>
 
-        {/* Sub-totals row — labels are dynamic holder names, keep shimmer */}
+        {/* Sub-totals row — one cell per holder + Shared. Single-user
+            default = 1 holder + Shared = 2 cells, matching MobileLayout's
+            subTotals array on the "All" view. */}
         <div
           className="mt-[12px] flex shrink-0 border-y"
           style={{ borderColor: 'var(--color-border-subtle)' }}
         >
-          {[0, 1, 2].map((i) => (
+          {[0, 1].map((i) => (
             <div
               key={i}
               className="flex-1 px-[16px] py-[12px]"
               style={{
                 borderRight:
-                  i < 2 ? '1px solid var(--color-border-subtle)' : 'none',
+                  i < 1 ? '1px solid var(--color-border-subtle)' : 'none',
               }}
             >
               <div className="mb-[6px] flex items-center gap-[6px]">
