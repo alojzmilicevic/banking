@@ -30,7 +30,7 @@ export default function SidebarAccountRow({
   const visible = !account.excludedFromTotal
   const pct = account.change30d?.pct
   const positive = (account.change30d?.absolute ?? 0) >= 0
-  const isIsk = account.accountType === ACCOUNT_TYPE.INVESTERINGSSPARKONTO
+  const isIsk = account.accountType === ACCOUNT_TYPE.ISK
   const showPct = isIsk && pct != null
 
   return (
