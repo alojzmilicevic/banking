@@ -11,6 +11,8 @@
 import { useEffect, useState } from 'react'
 import AccountSettingsModal from './components/AccountSettingsModal'
 import AddBankModal from './components/AddBankModal'
+import DashboardSkeleton from './components/DashboardSkeleton'
+import MobileDashboardSkeleton from './components/MobileDashboardSkeleton'
 import MobileLayout from './components/MobileLayout'
 import Sidebar, { type ViewSelection } from './components/Sidebar'
 import Timeline, { type TimelineSnapshot } from './components/Timeline'
@@ -166,56 +168,51 @@ export default function HomeContent({
     toggleExclude.error?.message ??
     null
 
-  // Empty placeholder until the first /api/dashboard fetch resolves.
-  const empty = !data
-
   return (
     <>
-      {/* Desktop: sidebar + main panel. Hidden below `lg` (1024px). */}
-      <div className="hidden h-screen w-screen overflow-hidden lg:flex">
-        {data && (
-          <Sidebar
-            dashboard={data}
-            view={view}
-            onChangeView={setView}
-            showCombined={showCombined}
-            onToggleCombined={() => setShowCombined((v) => !v)}
-            onToggleAllForHolder={onToggleAllForHolder}
-            onToggleAllShared={onToggleAllShared}
-            onAddAccount={openAdd}
-            initialWidth={initialSidebarWidth}
-            onOpenAccountSettings={(account) => setActiveAccount(account)}
-          />
-        )}
+      {data ? (
+        <>
+          {/* Desktop: sidebar + main panel. Hidden below `lg` (1024px). */}
+          <div className="hidden h-screen w-screen overflow-hidden lg:flex">
+            <Sidebar
+              dashboard={data}
+              view={view}
+              onChangeView={setView}
+              showCombined={showCombined}
+              onToggleCombined={() => setShowCombined((v) => !v)}
+              onToggleAllForHolder={onToggleAllForHolder}
+              onToggleAllShared={onToggleAllShared}
+              onAddAccount={openAdd}
+              initialWidth={initialSidebarWidth}
+              onOpenAccountSettings={(account) => setActiveAccount(account)}
+            />
 
-        <main className="flex flex-1 flex-col overflow-hidden">
-          <Topbar
-            label={topbarLabel}
-            total={topbarTotal}
-            delta={topbarDelta}
-            pct={topbarPct}
-            currency={snap.currency}
-            period={period}
-            onPeriodChange={setPeriod}
-          />
+            <main className="flex flex-1 flex-col overflow-hidden">
+              <Topbar
+                label={topbarLabel}
+                total={topbarTotal}
+                delta={topbarDelta}
+                pct={topbarPct}
+                currency={snap.currency}
+                period={period}
+                onPeriodChange={setPeriod}
+              />
 
-          <div className="flex flex-1 flex-col gap-5 overflow-hidden p-[24px_28px]">
-            {topError && (
-              <Alert>
-                <button
-                  type="button"
-                  className="float-right -mr-1 -mt-0.5 text-xs opacity-60 hover:opacity-100"
-                  onClick={() => setPageError(null)}
-                  aria-label="Dismiss"
-                >
-                  ✕
-                </button>
-                {topError}
-              </Alert>
-            )}
+              <div className="flex flex-1 flex-col gap-5 overflow-hidden p-[24px_28px]">
+                {topError && (
+                  <Alert>
+                    <button
+                      type="button"
+                      className="float-right -mr-1 -mt-0.5 text-xs opacity-60 hover:opacity-100"
+                      onClick={() => setPageError(null)}
+                      aria-label="Dismiss"
+                    >
+                      ✕
+                    </button>
+                    {topError}
+                  </Alert>
+                )}
 
-            {data && (
-              <>
                 <Timeline
                   period={period}
                   holders={data.holders}
@@ -226,33 +223,32 @@ export default function HomeContent({
                 />
 
                 <SummaryCards rows={summaryRows} period={period} currency={snap.currency} />
-              </>
-            )}
-
-            {empty && (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            )}
+              </div>
+            </main>
           </div>
-        </main>
-      </div>
 
-      {/* Mobile + tablet: stacked layout matching the Aloma mobile UI kit. */}
-      {data && (
-        <MobileLayout
-          dashboard={data}
-          view={view}
-          onChangeView={setView}
-          period={period}
-          onPeriodChange={setPeriod}
-          snap={snap}
-          showCombined={showCombined}
-          visibleHolderIds={visibleHolderIds}
-          showShared={showShared}
-          onAddAccount={openAdd}
-          onOpenAccountSettings={(account) => setActiveAccount(account)}
-          topError={topError}
-          onDismissError={() => setPageError(null)}
-        />
+          {/* Mobile + tablet: stacked layout matching the Aloma mobile UI kit. */}
+          <MobileLayout
+            dashboard={data}
+            view={view}
+            onChangeView={setView}
+            period={period}
+            onPeriodChange={setPeriod}
+            snap={snap}
+            showCombined={showCombined}
+            visibleHolderIds={visibleHolderIds}
+            showShared={showShared}
+            onAddAccount={openAdd}
+            onOpenAccountSettings={(account) => setActiveAccount(account)}
+            topError={topError}
+            onDismissError={() => setPageError(null)}
+          />
+        </>
+      ) : (
+        <>
+          <DashboardSkeleton sidebarWidth={initialSidebarWidth} />
+          <MobileDashboardSkeleton />
+        </>
       )}
 
       <AddBankModal
