@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import { motion } from 'motion/react'
-import { Eye, EyeOff, Link2Off, MoreVertical, Plus } from 'lucide-react'
+import { Eye, EyeOff, Link2Off, Loader2, MoreVertical, Plus, RefreshCw } from 'lucide-react'
 import type { DashboardAccount, DashboardAccountConnection } from '@/lib/api/dashboard'
 import { fmtMoney } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
@@ -41,6 +41,8 @@ export function PersonMenuPopover({
   onToggleAll,
   onToggleAccount,
   onDisconnectConnection,
+  onSyncConnection,
+  syncingConnectionId,
 }: {
   triggerLabel: string
   accounts: DashboardAccount[]
@@ -49,6 +51,8 @@ export function PersonMenuPopover({
   onToggleAll: () => void
   onToggleAccount: (a: DashboardAccount) => void
   onDisconnectConnection: (connectionId: string, label: string) => void
+  onSyncConnection: (connectionId: string) => void
+  syncingConnectionId: string | null
 }) {
   const [open, setOpen] = useState(false)
   const groups = useMemo(() => groupByConnection(accounts), [accounts])
@@ -80,35 +84,52 @@ export function PersonMenuPopover({
             transition={{ duration: 0.14 }}
             className="z-50 w-[340px] overflow-hidden rounded-14 border border-border bg-popover shadow-aloma-lg outline-none"
           >
-                {/* Bank icons row — click an icon to disconnect that bank,
-                    click the dashed + tile to add a new one. */}
-                <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle p-[14px]">
+                {/* Bank icons row — each connection is a tile (click to
+                    disconnect) plus a small sync button. The dashed + tile
+                    opens AddBankModal. */}
+                <div className="flex flex-wrap items-center gap-2.5 border-b border-border-subtle p-[14px]">
                   {groups.map((g) => {
                     const connected = g.connection.status !== 'expired' && !g.connection.lastSyncError
                     const label = g.connection.label ?? g.connection.providerId
+                    const syncing = syncingConnectionId === g.connection.id
                     return (
-                      <button
-                        key={g.connection.id}
-                        type="button"
-                        onClick={() => {
-                          setOpen(false)
-                          onDisconnectConnection(g.connection.id, label)
-                        }}
-                        title={`Disconnect ${label}`}
-                        aria-label={`Disconnect ${label}`}
-                        className="group/bank relative flex shrink-0"
-                      >
-                        <BankIcon
-                          providerId={g.connection.providerId}
-                          label={g.connection.label}
-                          size="lg"
-                          connected={connected}
-                          className="transition-opacity group-hover/bank:opacity-30"
-                        />
-                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover/bank:opacity-100">
-                          <Link2Off className="size-[16px]  text-neg" />
-                        </span>
-                      </button>
+                      <div key={g.connection.id} className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpen(false)
+                            onDisconnectConnection(g.connection.id, label)
+                          }}
+                          title={`Disconnect ${label}`}
+                          aria-label={`Disconnect ${label}`}
+                          className="group/bank relative flex shrink-0"
+                        >
+                          <BankIcon
+                            providerId={g.connection.providerId}
+                            label={g.connection.label}
+                            size="lg"
+                            connected={connected}
+                            className="transition-opacity group-hover/bank:opacity-30"
+                          />
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover/bank:opacity-100">
+                            <Link2Off className="size-4 text-neg" />
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onSyncConnection(g.connection.id)}
+                          disabled={syncing}
+                          title={`Sync ${label}`}
+                          aria-label={`Sync ${label}`}
+                          className="flex size-5 shrink-0 items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6 hover:text-foreground disabled:opacity-50"
+                        >
+                          {syncing ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : (
+                            <RefreshCw className="size-3" />
+                          )}
+                        </button>
+                      </div>
                     )
                   })}
                   {onAddAccount && (

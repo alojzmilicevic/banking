@@ -24,6 +24,7 @@ import {
   useDashboard,
   useDisconnect,
   useSyncAll,
+  useSyncConnection,
   useToggleExclude,
 } from '@/lib/queries'
 import type { DashboardAccount } from '@/lib/api/dashboard'
@@ -56,9 +57,14 @@ export function HomeContent({
 
   const dashboard = useDashboard()
   const syncAll = useSyncAll()
+  const syncConnection = useSyncConnection()
   const disconnect = useDisconnect()
   const toggleExclude = useToggleExclude()
   const bulkToggleExclude = useBulkToggleExclude()
+  // Track which connection we're currently syncing so the popover row
+  // can show a spinner. The mutation only exposes a single isPending
+  // bool, so we stash the in-flight ID alongside it.
+  const [syncingConnectionId, setSyncingConnectionId] = useState<string | null>(null)
 
   const data = dashboard.data
 
@@ -91,6 +97,13 @@ export function HomeContent({
     )
       return
     disconnect.mutate(connectionId)
+  }
+
+  function onSyncConnection(connectionId: string) {
+    setSyncingConnectionId(connectionId)
+    syncConnection.mutate(connectionId, {
+      onSettled: () => setSyncingConnectionId(null),
+    })
   }
 
   function bulkToggle(predicate: (a: DashboardAccount) => boolean) {
@@ -161,6 +174,7 @@ export function HomeContent({
     pageError ??
     dashboard.error?.message ??
     syncAll.error?.message ??
+    syncConnection.error?.message ??
     disconnect.error?.message ??
     toggleExclude.error?.message ??
     bulkToggleExclude.error?.message ??
@@ -183,6 +197,8 @@ export function HomeContent({
               onAddAccount={openAdd}
               onToggleAccount={onToggleAccount}
               onDisconnectConnection={onDisconnectConnection}
+              onSyncConnection={onSyncConnection}
+              syncingConnectionId={syncingConnectionId}
               initialWidth={initialSidebarWidth}
             />
 
@@ -195,6 +211,8 @@ export function HomeContent({
                 currency={snap.currency}
                 period={period}
                 onPeriodChange={setPeriod}
+                onSyncAll={() => syncAll.mutate()}
+                syncingAll={syncAll.isPending}
               />
 
               <div className="flex flex-1 flex-col gap-5 overflow-hidden px-7 py-6">
