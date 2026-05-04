@@ -13,7 +13,7 @@
 // live in the PersonMenuPopover hung off the ⋮ trigger.
 //
 // Sums + delta come straight from the API (server already filtered by
-// holder, deduped joints, and computed change30d). Hidden accounts
+// holder, deduped joints, and computed change for the active period).
 // collapse under an expandable so the user can unhide without leaving
 // the sidebar.
 
@@ -88,15 +88,15 @@ export function PersonSection({
           <span className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
             {fmtMoneyCompact(holder.total)}
           </span>
-          {holder.change30d && (
+          {holder.change && (
             <span
               className={cn(
                 'mt-px text-11',
-                holder.change30d.absolute >= 0 ? 'text-pos' : 'text-neg',
+                holder.change.absolute >= 0 ? 'text-pos' : 'text-neg',
               )}
             >
-              {holder.change30d.absolute >= 0 ? '+' : ''}
-              {fmtMoneyCompact(Math.abs(holder.change30d.absolute))}
+              {holder.change.absolute >= 0 ? '+' : ''}
+              {fmtMoneyCompact(Math.abs(holder.change.absolute))}
             </span>
           )}
         </Sensitive>
@@ -133,7 +133,7 @@ export function PersonSection({
             type="button"
             onClick={() => setShowHidden((v) => !v)}
             aria-expanded={showHidden}
-            className="flex w-full items-center gap-1.5 rounded-8 px-2.5 py-1.5 text-left text-11 text-text-faint transition-colors hover:bg-white/4 hover:text-muted-foreground"
+            className="flex w-full cursor-pointer items-center gap-1.5 rounded-8 px-2.5 py-1.5 text-left text-11 text-text-faint transition-colors hover:bg-white/4 hover:text-muted-foreground"
           >
             <ChevronDown
               className={cn('size-3.5 transition-transform', showHidden ? '' : '-rotate-90')}

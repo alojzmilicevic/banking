@@ -25,8 +25,8 @@ export function SidebarAccountRow({
   color: string
 }) {
   const visible = !account.excludedFromTotal
-  const pct = account.change30d?.pct
-  const positive = (account.change30d?.absolute ?? 0) >= 0
+  const pct = account.change?.pct
+  const positive = (account.change?.absolute ?? 0) >= 0
   const showPct = tracksPerformance(account.accountType) && pct != null
 
   return (

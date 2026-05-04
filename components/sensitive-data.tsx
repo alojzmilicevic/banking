@@ -92,7 +92,7 @@ export function SensitiveToggle({ className }: { className?: string }) {
       title={hidden ? 'Show amounts' : 'Hide amounts'}
       aria-pressed={hidden}
       className={cn(
-        'flex size-8.5 items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6',
+        'flex size-8.5 cursor-pointer items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6',
         className,
       )}
     >

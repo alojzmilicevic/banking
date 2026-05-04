@@ -67,7 +67,7 @@ export function Topbar({
           disabled={syncingAll}
           aria-label="Sync all banks"
           title="Sync all banks"
-          className="flex size-9 items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6 hover:text-foreground disabled:opacity-50"
+          className="flex size-9 cursor-pointer items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           {syncingAll ? (
             <Loader2 className="size-4 animate-spin" />

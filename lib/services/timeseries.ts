@@ -40,6 +40,25 @@ function fromDateForPeriod(period: Period, today: Date, userId: string): string 
   }
 }
 
+// How many days of history the dashboard's per-account change pill should
+// look back to match the active period. ALL → days since earliest snapshot.
+export function daysForPeriod(period: Period, userId: string): number {
+  switch (period) {
+    case '1W': return 7
+    case '1M': return 30
+    case '3M': return 90
+    case '1Y': return 365
+    case 'ALL': {
+      const earliest = getEarliestSnapshotDate(userId)
+      if (!earliest) return 30
+      const today = new Date()
+      today.setUTCHours(0, 0, 0, 0)
+      const start = new Date(earliest)
+      return Math.max(1, Math.round((today.getTime() - start.getTime()) / MS_DAY))
+    }
+  }
+}
+
 export function getTimeseries(userId: string, period: Period): TimeseriesResponse {
   const today = computeTodaySnapshot(userId)
   const fromIso = fromDateForPeriod(period, new Date(), userId)

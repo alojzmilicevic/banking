@@ -65,7 +65,7 @@ export function PersonMenuPopover({
           type="button"
           aria-label={triggerLabel}
           title={triggerLabel}
-          className="ml-1 flex size-[28px]  shrink-0 items-center justify-center rounded-7 border border-border bg-[rgba(255,255,255,0.05)] text-muted-foreground transition-colors hover:bg-[rgba(255,255,255,0.09)] hover:text-foreground"
+          className="ml-1 flex size-[28px] shrink-0 cursor-pointer items-center justify-center rounded-7 border border-border bg-[rgba(255,255,255,0.05)] text-muted-foreground transition-colors hover:bg-[rgba(255,255,255,0.09)] hover:text-foreground"
         >
           <MoreVertical className="size-[15px] " />
         </button>

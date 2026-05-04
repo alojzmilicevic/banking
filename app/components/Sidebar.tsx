@@ -148,7 +148,7 @@ export function Sidebar({
               type="button"
               onClick={() => onChangeView(v.key)}
               className={cn(
-                'flex w-full items-center gap-2.5 rounded-9 border px-3 py-2.25 text-left text-14 transition-all',
+                'flex w-full cursor-pointer items-center gap-2.5 rounded-9 border px-3 py-2.25 text-left text-14 transition-all',
                 active
                   ? 'border-border bg-white/6 font-medium text-foreground'
                   : 'border-transparent bg-transparent font-normal text-muted-foreground',
@@ -204,7 +204,7 @@ export function Sidebar({
         type="button"
         onClick={onToggleCombined}
         className={cn(
-          'mt-1 flex w-full items-center gap-2.5 rounded-9 border border-border-subtle bg-transparent px-3 py-2.25 text-14 transition-colors',
+          'mt-1 flex w-full cursor-pointer items-center gap-2.5 rounded-9 border border-border-subtle bg-transparent px-3 py-2.25 text-14 transition-colors',
           showCombined ? 'text-primary' : 'text-text-faint',
         )}
       >

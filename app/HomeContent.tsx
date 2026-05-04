@@ -55,7 +55,7 @@ export function HomeContent({
   const [addOpen, setAddOpen] = useState(false)
   const [addHolderId, setAddHolderId] = useState<string | undefined>(undefined)
 
-  const dashboard = useDashboard()
+  const dashboard = useDashboard(period)
   const syncAll = useSyncAll()
   const syncConnection = useSyncConnection()
   const disconnect = useDisconnect()
@@ -293,6 +293,7 @@ export function HomeContent({
         onClose={() => setAddOpen(false)}
         onConnected={() => celebrate()}
         initialHolderId={addHolderId}
+        period={period}
       />
     </>
   )

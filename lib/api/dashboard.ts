@@ -1,7 +1,7 @@
 // Dashboard view-model contract — types only, importable from both client
 // and server. The implementation lives in lib/services/dashboard.ts.
 //
-// Server does ALL the bucketing, dedup, joint detection, change30d math,
+// Server does ALL the bucketing, dedup, joint detection, change math,
 // and totals so components stay dumb (iterate + render). Holders are DB
 // rows, so any household size works.
 
@@ -22,7 +22,7 @@ export interface HolderListItem {
 
 export interface DashboardHolder extends HolderListItem {
   total: number
-  change30d: ChangePill | null
+  change: ChangePill | null
   accounts: DashboardAccount[]
 }
 
@@ -54,7 +54,7 @@ export interface DashboardAccount {
   balance: number | null
   balanceCurrency: string | null
   sparkline: { date: string; value: number }[] | null
-  change30d: ChangePill | null
+  change: ChangePill | null
   bucket: DashboardBucket
   // The secondary copy of a joint account that's also linked under another
   // holder — UI hides these so the account appears exactly once. Set on
@@ -77,7 +77,7 @@ export interface DashboardAccountConnection {
 
 export interface DashboardSharedBucket {
   total: number
-  change30d: ChangePill | null
+  change: ChangePill | null
   accounts: DashboardAccount[]
 }
 
@@ -92,7 +92,7 @@ export interface DashboardTotals {
   total: number
   cash: number
   investment: number
-  change30d: ChangePill | null
+  change: ChangePill | null
 }
 
 export interface ChangePill {

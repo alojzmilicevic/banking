@@ -342,8 +342,8 @@ function MobileAccountRow({
   onToggleVisibility: () => void
 }) {
   const visible = !account.excludedFromTotal
-  const pct = account.change30d?.pct
-  const positive = (account.change30d?.absolute ?? 0) >= 0
+  const pct = account.change?.pct
+  const positive = (account.change?.absolute ?? 0) >= 0
   const Icon = visible ? Eye : EyeOff
 
   return (

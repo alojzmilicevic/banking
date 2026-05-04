@@ -1,5 +1,5 @@
-// Per-account 30-day daily value series. Used by the dashboard tiles for
-// sparklines and the period-change pill.
+// Per-account daily value series for the requested lookback window. Used
+// by the dashboard tiles for sparklines and the period-change pill.
 //
 // Investment accounts (Avanza): read from `account_value_history` — that's
 // the chart endpoint's snapshot of daily total value. Captures real market
@@ -22,7 +22,6 @@ import {
 import { balanceIncludesInvestments, pickBalance } from '@/lib/balance'
 
 const MS_DAY = 86400_000
-const DAYS = 30
 
 const WEALTH_AFFECTING_KINDS = new Set([
   'cash_in',
@@ -39,17 +38,20 @@ function isoDay(d: Date): string {
 
 export interface AccountSparkline {
   accountId: string
-  // [today, today-1, ..., today-(DAYS-1)] — DAYS+1 entries newest-first.
+  // [today, today-1, ..., today-days] — days+1 entries newest-first.
   values: number[]
   // Convenience: same series oldest-first as `{ date, value }[]` for charts.
   series: { date: string; value: number }[]
 }
 
-export function buildAccountSparklines(userId: string): Map<string, AccountSparkline> {
+export function buildAccountSparklines(
+  userId: string,
+  days: number,
+): Map<string, AccountSparkline> {
   const out = new Map<string, AccountSparkline>()
   const today = new Date()
   today.setUTCHours(0, 0, 0, 0)
-  const sinceIso = isoDay(new Date(today.getTime() - DAYS * MS_DAY))
+  const sinceIso = isoDay(new Date(today.getTime() - days * MS_DAY))
 
   const userAccounts = db
     .select({
@@ -145,7 +147,7 @@ export function buildAccountSparklines(userId: string): Map<string, AccountSpark
     let running = startingTotal
     let cursor = 0
     const newestFirst: number[] = []
-    for (let d = 0; d <= DAYS; d++) {
+    for (let d = 0; d <= days; d++) {
       const day = new Date(today.getTime() - d * MS_DAY)
       const dayIso = isoDay(day)
       while (cursor < accTxs.length && accTxs[cursor].date > dayIso) {
@@ -158,7 +160,7 @@ export function buildAccountSparklines(userId: string): Map<string, AccountSpark
 
     const oldestFirst = newestFirst.slice().reverse()
     const series = oldestFirst.map((value, i) => {
-      const day = new Date(today.getTime() - (DAYS - i) * MS_DAY)
+      const day = new Date(today.getTime() - (days - i) * MS_DAY)
       return { date: isoDay(day), value: Math.round(value * 100) / 100 }
     })
 

@@ -55,15 +55,17 @@ export function AddBankModal({
   onClose,
   onConnected,
   initialHolderId,
+  period,
 }: {
   open: boolean
   onClose: () => void
   onConnected?: () => void
   initialHolderId?: string
+  period: string
 }) {
   const holdersQ = useHolders()
   const holders = useMemo(() => holdersQ.data ?? [], [holdersQ.data])
-  const dashboard = useDashboard()
+  const dashboard = useDashboard(period)
 
   const [holderId, setHolderId] = useState<string | undefined>(initialHolderId)
   const [provider, setProvider] = useState<Provider | null>(null)

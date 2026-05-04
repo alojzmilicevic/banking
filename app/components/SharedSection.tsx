@@ -44,7 +44,7 @@ export function SharedSection({
   const visibleAccounts = canonicals.filter((a) => !a.excludedFromTotal)
   const hiddenAccounts = canonicals.filter((a) => a.excludedFromTotal)
   const total = visibleAccounts.reduce((s, a) => s + (a.balance ?? 0), 0)
-  const delta30 = visibleAccounts.reduce((s, a) => s + (a.change30d?.absolute ?? 0), 0)
+  const delta = visibleAccounts.reduce((s, a) => s + (a.change?.absolute ?? 0), 0)
   const allHidden = canonicals.length > 0 && visibleAccounts.length === 0
 
   const [showHidden, setShowHidden] = useState(false)
@@ -82,10 +82,10 @@ export function SharedSection({
           <div className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
             <Sensitive>{fmtMoneyCompact(total)}</Sensitive>
           </div>
-          <div className={cn('mt-px text-11', delta30 >= 0 ? 'text-pos' : 'text-neg')}>
+          <div className={cn('mt-px text-11', delta >= 0 ? 'text-pos' : 'text-neg')}>
             <Sensitive>
-              {delta30 >= 0 ? '+' : ''}
-              {fmtMoneyCompact(Math.abs(delta30))}
+              {delta >= 0 ? '+' : ''}
+              {fmtMoneyCompact(Math.abs(delta))}
             </Sensitive>
           </div>
         </div>
@@ -118,7 +118,7 @@ export function SharedSection({
             type="button"
             onClick={() => setShowHidden((v) => !v)}
             aria-expanded={showHidden}
-            className="flex w-full items-center gap-1.5 rounded-8 px-2.5 py-1.5 text-left text-11 text-text-faint transition-colors hover:bg-white/4 hover:text-muted-foreground"
+            className="flex w-full cursor-pointer items-center gap-1.5 rounded-8 px-2.5 py-1.5 text-left text-11 text-text-faint transition-colors hover:bg-white/4 hover:text-muted-foreground"
           >
             <ChevronDown
               className={`size-3.5 transition-transform ${showHidden ? '' : '-rotate-90'}`}
