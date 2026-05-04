@@ -32,21 +32,20 @@ export function SidebarAccountRow({
   return (
     <div
       className={cn(
-        'group flex min-h-10 items-center rounded-10 border transition-all',
+        'group flex h-10.5 items-center rounded-10 border transition-all',
         visible
-          ? 'gap-1.5 border-border-subtle bg-white/3 px-3 py-1.5'
-          : 'gap-1 border-transparent bg-transparent px-2.5 py-1 opacity-40',
+          ? 'gap-1.5 border-border-subtle bg-white/3 px-3'
+          : 'gap-1 border-transparent bg-transparent px-2.5 opacity-40',
       )}
     >
       <div
         style={
           {
-            '--avatar-bg': `${color}22`,
+            '--avatar-bg': color.replace(/\)$/, ' / 0.2)'),
             '--avatar-color': color,
-            '--avatar-border': `${color}55`,
           } as React.CSSProperties
         }
-        className="flex size-6.5 shrink-0 items-center justify-center rounded-full border-thin border-(--avatar-border) bg-(--avatar-bg) text-11 font-semibold tracking-2 text-(--avatar-color) tabular-nums"
+        className="flex size-7 shrink-0 items-center justify-center rounded-full bg-(--avatar-bg) text-9 font-semibold uppercase tracking-4 text-(--avatar-color) tabular-nums"
         aria-hidden
         title={account.product ?? account.accountType ?? account.kind ?? ''}
       >
@@ -70,7 +69,7 @@ export function SidebarAccountRow({
           {fmtMoney(account.balance, account.balanceCurrency)}
         </span>
         {showPct && (
-          <span className={cn('mt-0.5 text-11 leading-none', positive ? 'text-pos' : 'text-neg')}>
+          <span className={`mt-0.5 text-11 leading-none ${positive ? 'text-pos' : 'text-neg'}`}>
             {`${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`}
           </span>
         )}
