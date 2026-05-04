@@ -2,7 +2,7 @@
 // Visual add-bank flow. Holder chips at the top come from the API now,
 // so adding a household member doesn't require code changes here.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   ArrowRight,
@@ -48,7 +48,7 @@ export default function AddBankModal({
   initialHolderId?: string
 }) {
   const holdersQ = useHolders()
-  const holders = useMemo(() => holdersQ.data ?? [], [holdersQ.data])
+  const holders = holdersQ.data ?? []
   const dashboard = useDashboard()
 
   const [holderId, setHolderId] = useState<string | undefined>(initialHolderId)
@@ -72,7 +72,7 @@ export default function AddBankModal({
   // Per-holder map of which providers already have a connection. Used to
   // dim already-linked provider tiles and warn that picking them will
   // re-link (refresh credentials) rather than add a new bank.
-  const linkedByHolder = useMemo(() => {
+  const linkedByHolder = (() => {
     const map = new Map<string, { avanza: boolean; eb: string[] }>()
     if (!dashboard.data) return map
     for (const h of dashboard.data.holders) {
@@ -86,7 +86,7 @@ export default function AddBankModal({
       map.set(h.id, slot)
     }
     return map
-  }, [dashboard.data])
+  })()
 
   const linkedHere = holderId ? linkedByHolder.get(holderId) : undefined
   const avanzaLinked = !!linkedHere?.avanza
