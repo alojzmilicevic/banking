@@ -32,7 +32,7 @@ export function SidebarAccountRow({
   return (
     <div
       className={cn(
-        'group flex items-center rounded-10 border transition-all',
+        'group flex min-h-10 items-center rounded-10 border transition-all',
         visible
           ? 'gap-1.5 border-border-subtle bg-white/3 px-3 py-1.5'
           : 'gap-1 border-transparent bg-transparent px-2.5 py-1 opacity-40',
@@ -66,11 +66,11 @@ export function SidebarAccountRow({
         </div>
       </div>
       <Sensitive className="ml-1.5 flex shrink-0 flex-col justify-center whitespace-nowrap text-right">
-        <span className="font-mono text-14 font-normal text-foreground tabular-nums">
+        <span className="font-mono text-14 font-normal leading-none text-foreground tabular-nums">
           {fmtMoney(account.balance, account.balanceCurrency)}
         </span>
         {showPct && (
-          <span className={cn('mt-0.5 text-11', positive ? 'text-pos' : 'text-neg')}>
+          <span className={cn('mt-0.5 text-11 leading-none', positive ? 'text-pos' : 'text-neg')}>
             {`${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`}
           </span>
         )}
