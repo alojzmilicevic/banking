@@ -2,8 +2,12 @@
 // one Line for the Shared bucket. The series come from /api/timeseries
 // which now keys by holderId, so the chart configuration is a loop —
 // adding a household member doesn't require a code change here.
+//
+// Pure render: snapshot computation + the timeseries fetch live in
+// useTimelineSnapshot, called once at the page level. Both the desktop
+// and mobile mounts get the same data via props instead of each
+// recomputing the snapshot.
 
-import { useEffect, useRef } from 'react'
 import {
   Area,
   CartesianGrid,
@@ -15,11 +19,13 @@ import {
   YAxis,
 } from 'recharts'
 import { Alert } from '@/components/ui/alert'
-import { useTimeseries } from '@/lib/queries'
 import { SHARED_META } from '@/lib/holders'
 import type { DashboardHolder } from '@/lib/api/dashboard'
 import { ChartShape } from './skeleton-shapes'
 import type { Period } from './PeriodTabs'
+import type { ChartPoint } from '@/hooks/use-timeline-snapshot'
+
+export type { TimelineSnapshot } from '@/hooks/use-timeline-snapshot'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -31,107 +37,29 @@ function fmtCompact(v: number): string {
   return String(v)
 }
 
-// Snapshot of "current period" totals + change pill, by view key. Driven
-// up to HomeContent so the topbar and SummaryCards can render without
-// re-running the chart math.
-export interface TimelineSnapshot {
-  total: number | null
-  shared: number | null
-  // 'all' | <holderId> | 'shared' → amount for that view at the latest
-  // datapoint. Mirrors the topbar's view-selector keys.
-  byHolder: Record<string, number | null>
-  changeByKey: Record<string, { absolute: number | null; pct: number | null } | null>
-  currency: string | null
-  changeAbsolute: number | null
-  changePct: number | null
-}
-
-function deltaPct(now: number | null, then: number | null): number | null {
-  if (now == null || then == null || then === 0 || !Number.isFinite((now - then) / then)) return null
-  return Math.round(((now - then) / Math.abs(then)) * 10000) / 100
-}
-
 export function Timeline({
   period,
   holders,
   showCombined,
   visibleHolderIds,
   showShared,
-  onSnapshotChange,
+  chartData,
+  currency,
+  isLoading,
+  error,
+  errors,
 }: {
   period: Period
   holders: DashboardHolder[]
   showCombined: boolean
   visibleHolderIds: string[]
   showShared: boolean
-  onSnapshotChange?: (snap: TimelineSnapshot) => void
+  chartData: ChartPoint[]
+  currency: string | null
+  isLoading: boolean
+  error: Error | null
+  errors: string[]
 }) {
-  const { data, error, isLoading } = useTimeseries(period)
-
-  const series = data?.series ?? []
-  const last = series.length > 0 ? series[series.length - 1] : null
-  const first = series.length > 0 ? series[0] : null
-
-  const total = last?.total ?? null
-  const startTotal = first?.total ?? null
-  const shared = last?.shared ?? null
-  const startShared = first?.shared ?? null
-  const currency = data?.currency ?? null
-
-  const changeAbsolute =
-    total != null && startTotal != null ? Math.round((total - startTotal) * 100) / 100 : null
-  const changePct = deltaPct(total, startTotal)
-
-  // Per-holder current + change pills, keyed by holderId. 'shared' and
-  // 'all' get folded into changeByKey so MobileLayout / Topbar can index
-  // by ViewSelection directly.
-  const byHolder: Record<string, number | null> = {}
-  const changeByKey: Record<string, { absolute: number | null; pct: number | null } | null> = {
-    all: { absolute: changeAbsolute, pct: changePct },
-    shared:
-      shared != null && startShared != null
-        ? {
-            absolute: Math.round((shared - startShared) * 100) / 100,
-            pct: deltaPct(shared, startShared),
-          }
-        : null,
-  }
-  for (const h of holders) {
-    const now = last?.byHolder[h.id] ?? null
-    const then = first?.byHolder[h.id] ?? null
-    byHolder[h.id] = now
-    changeByKey[h.id] =
-      now != null && then != null
-        ? { absolute: Math.round((now - then) * 100) / 100, pct: deltaPct(now, then) }
-        : null
-  }
-
-  // Push the snapshot upward whenever the relevant inputs change. The
-  // dynamic-key maps are rebuilt every render (new refs), so we dep on
-  // their JSON signatures and rehydrate inside the effect — keeps the
-  // effect body free of references that exhaustive-deps would flag, and
-  // avoids ref-mutation-during-render that the React Compiler skips.
-  const onSnapshotChangeRef = useRef(onSnapshotChange)
-  useEffect(() => {
-    onSnapshotChangeRef.current = onSnapshotChange
-  }, [onSnapshotChange])
-  const byHolderKey = JSON.stringify(byHolder)
-  const changeByKeyKey = JSON.stringify(changeByKey)
-  useEffect(() => {
-    onSnapshotChangeRef.current?.({
-      total,
-      shared,
-      byHolder: JSON.parse(byHolderKey) as Record<string, number | null>,
-      changeByKey: JSON.parse(changeByKeyKey) as Record<
-        string,
-        { absolute: number | null; pct: number | null } | null
-      >,
-      currency,
-      changeAbsolute,
-      changePct,
-    })
-  }, [total, shared, currency, changeAbsolute, changePct, byHolderKey, changeByKeyKey])
-
   if (error) {
     return (
       <div className="rounded-16 border border-border-subtle bg-card/40 p-5">
@@ -147,18 +75,6 @@ export function Timeline({
     }
     return `${MONTHS[d.getUTCMonth()]} '${String(d.getUTCFullYear()).slice(2)}`
   }
-
-  // Recharts wants flat-keyed data; flatten the byHolder map into top-level
-  // keys (one per holder id) so dataKey={holderId} works.
-  const chartData = series.map((p) => ({
-    date: p.date,
-    total: p.total,
-    cash: p.cash,
-    investment: p.investment,
-    shared: p.shared,
-    unassigned: p.unassigned,
-    ...p.byHolder,
-  }))
 
   return (
     <div className="flex min-w-0 flex-1 flex-col rounded-16 border border-border-subtle bg-white/2 px-4 py-3.5 lg:px-6 lg:py-5">
@@ -178,9 +94,9 @@ export function Timeline({
       </div>
 
       <div className="min-h-0 flex-1">
-        {isLoading && series.length === 0 ? (
+        {isLoading && chartData.length === 0 ? (
           <ChartShape />
-        ) : series.length === 0 ? (
+        ) : chartData.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             No history yet — connect a bank to see the chart.
           </div>
@@ -276,9 +192,9 @@ export function Timeline({
         )}
       </div>
 
-      {data?.errors?.length ? (
+      {errors.length > 0 ? (
         <p className="mt-2 text-xs text-neg">
-          {data.errors.length} account(s) errored: {data.errors.join('; ')}
+          {errors.length} account(s) errored: {errors.join('; ')}
         </p>
       ) : null}
     </div>

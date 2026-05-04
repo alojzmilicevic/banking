@@ -16,14 +16,11 @@
 // collapse under an expandable so the user can unhide without leaving
 // the sidebar.
 
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
-import { ChevronDown, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import type { DashboardAccount, DashboardHolder } from '@/lib/api/dashboard'
-import { fmtMoneyCompact } from '@/lib/format'
-import { Sensitive } from '@/components/sensitive-data'
 import { holderBg, holderBorder } from '@/lib/holders'
-import { cn } from '@/lib/utils'
+import { BucketCard } from './BucketCard'
+import { HiddenAccountsCollapsible } from './HiddenAccountsCollapsible'
 import { SidebarAccountRow } from './SidebarAccountRow'
 
 export function PersonSection({
@@ -40,72 +37,46 @@ export function PersonSection({
   // Server has already deduped joint accounts (each appears in exactly
   // one bucket), but we still hide possibleDuplicateOf rows in case the
   // server ever returns them in a holder bucket — defence in depth.
-  const visibleAccounts = holder.accounts.filter((a) => !a.excludedFromTotal && !a.possibleDuplicateOf)
-  const hiddenAccounts = holder.accounts.filter((a) => a.excludedFromTotal && !a.possibleDuplicateOf)
+  const visibleAccounts = holder.accounts.filter(
+    (a) => !a.excludedFromTotal && !a.possibleDuplicateOf,
+  )
+  const hiddenAccounts = holder.accounts.filter(
+    (a) => a.excludedFromTotal && !a.possibleDuplicateOf,
+  )
   const allHidden = holder.accounts.length > 0 && visibleAccounts.length === 0
 
-  const [showHidden, setShowHidden] = useState(false)
-
-  const bg = holderBg(holder.color)
-  const border = holderBorder(holder.color)
+  const avatar = (
+    <div
+      style={
+        {
+          '--avatar-bg': `${holder.color}22`,
+          '--avatar-color': holder.color,
+          '--avatar-border': `${holder.color}55`,
+        } as React.CSSProperties
+      }
+      className="flex size-8.5 shrink-0 items-center justify-center rounded-full border-thin border-(--avatar-border) bg-(--avatar-bg) text-14 font-semibold text-(--avatar-color)"
+    >
+      {holder.initials ?? holder.label.slice(0, 2).toUpperCase()}
+    </div>
+  )
 
   return (
-    <div
-      style={{ '--hldr-bg': bg, '--hldr-border': border } as React.CSSProperties}
-      className="mb-3 rounded-14 border border-(--hldr-border) bg-(--hldr-bg) px-4.5 py-4"
+    <BucketCard
+      bg={holderBg(holder.color)}
+      border={holderBorder(holder.color)}
+      avatar={avatar}
+      label={holder.label}
+      visibleCount={visibleAccounts.length}
+      totalCount={visibleAccounts.length + hiddenAccounts.length}
+      total={holder.total}
+      deltaAbsolute={holder.change30d?.absolute ?? null}
+      allHidden={allHidden}
+      onToggleAll={onToggleAll}
+      toggleAriaLabel={{
+        hide: 'Hide all accounts',
+        show: 'Show all accounts',
+      }}
     >
-      {/* Header */}
-      <div className="mb-3.5 flex items-center gap-2.5">
-        <div
-          style={
-            {
-              '--avatar-bg': `${holder.color}22`,
-              '--avatar-color': holder.color,
-              '--avatar-border': `${holder.color}55`,
-            } as React.CSSProperties
-          }
-          className="flex size-8.5 shrink-0 items-center justify-center rounded-full border-thin border-(--avatar-border) bg-(--avatar-bg) text-14 font-semibold text-(--avatar-color)"
-        >
-          {holder.initials ?? holder.label.slice(0, 2).toUpperCase()}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-14 font-medium text-foreground">{holder.label}</div>
-          <div className="mt-px text-11 text-text-faint">
-            {visibleAccounts.length}
-            {hiddenAccounts.length > 0 ? ` of ${visibleAccounts.length + hiddenAccounts.length}` : ''}{' '}
-            {visibleAccounts.length + hiddenAccounts.length === 1 ? 'account' : 'accounts'}
-          </div>
-        </div>
-        <Sensitive className="flex shrink-0 flex-col whitespace-nowrap text-right">
-          <span className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
-            {fmtMoneyCompact(holder.total)}
-          </span>
-          {holder.change30d && (
-            <span
-              className={cn(
-                'mt-px text-11',
-                holder.change30d.absolute >= 0 ? 'text-pos' : 'text-neg',
-              )}
-            >
-              {holder.change30d.absolute >= 0 ? '+' : ''}
-              {fmtMoneyCompact(Math.abs(holder.change30d.absolute))}
-            </span>
-          )}
-        </Sensitive>
-        <button
-          type="button"
-          onClick={onToggleAll}
-          aria-label={allHidden ? 'Show all accounts' : 'Hide all accounts'}
-          title={allHidden ? 'Show all' : 'Hide all'}
-          className={cn(
-            'ml-1 shrink-0 rounded-7 border border-border bg-white/5 px-2 py-1.25 text-11 transition-colors',
-            allHidden ? 'text-text-faint' : 'text-muted-foreground',
-          )}
-        >
-          {allHidden ? 'Show' : 'Hide'}
-        </button>
-      </div>
-
       {/* Visible account rows */}
       <div className="flex flex-col gap-1">
         {visibleAccounts.map((a) => (
@@ -124,47 +95,11 @@ export function PersonSection({
         )}
       </div>
 
-      {/* Hidden accounts — collapsible */}
-      {hiddenAccounts.length > 0 && (
-        <div className="mt-2">
-          <button
-            type="button"
-            onClick={() => setShowHidden((v) => !v)}
-            aria-expanded={showHidden}
-            className="flex w-full items-center gap-1.5 rounded-8 px-2.5 py-1.5 text-left text-11 text-text-faint transition-colors hover:bg-white/4 hover:text-muted-foreground"
-          >
-            <ChevronDown
-              className={`size-3.5 transition-transform ${showHidden ? '' : '-rotate-90'}`}
-            />
-            Hidden ({hiddenAccounts.length})
-          </button>
-          <AnimatePresence initial={false}>
-            {showHidden && (
-              <motion.div
-                key="hidden-rows"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                <div className="mt-1 flex flex-col">
-                  {hiddenAccounts.map((a) => (
-                    <SidebarAccountRow
-                      key={a.id}
-                      account={a}
-                      color={holder.color}
-                      onOpenSettings={
-                        onOpenAccountSettings ? () => onOpenAccountSettings(a) : undefined
-                      }
-                    />
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
+      <HiddenAccountsCollapsible
+        accounts={hiddenAccounts}
+        color={holder.color}
+        onOpenAccountSettings={onOpenAccountSettings}
+      />
 
       {/* Add account */}
       <button
@@ -175,6 +110,6 @@ export function PersonSection({
         <Plus className="size-3.5" />
         Add account
       </button>
-    </div>
+    </BucketCard>
   )
 }

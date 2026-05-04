@@ -8,36 +8,29 @@
 // topbar number/delta; the chart is controlled by the per-account eye
 // toggles + the combined-line toggle in the sidebar.
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { AccountSettingsModal } from './components/AccountSettingsModal'
 import { AddBankModal } from './components/AddBankModal'
 import { DashboardSkeleton } from './components/DashboardSkeleton'
+import { DismissibleAlert } from './components/DismissibleAlert'
 import { MobileDashboardSkeleton } from './components/MobileDashboardSkeleton'
 import { MobileLayout } from './components/MobileLayout'
 import { Sidebar, type ViewSelection } from './components/Sidebar'
-import { Timeline, type TimelineSnapshot } from './components/Timeline'
+import { Timeline } from './components/Timeline'
 import { Topbar } from './components/Topbar'
 import { SummaryCards, buildSummaryRows } from './components/SummaryCards'
 import { type Period } from './components/PeriodTabs'
-import { Alert } from '@/components/ui/alert'
 import {
   useDashboard,
   useDisconnect,
   useSyncAll,
   useToggleExclude,
 } from '@/lib/queries'
+import { useTimelineSnapshot } from '@/hooks/use-timeline-snapshot'
+import { useTopbarSlice } from '@/hooks/use-topbar-slice'
+import { useConnectedConfetti } from '@/hooks/use-connected-confetti'
 import type { DashboardAccount } from '@/lib/api/dashboard'
 import { celebrate } from '@/lib/animation/confetti'
-
-const EMPTY_SNAP: TimelineSnapshot = {
-  total: null,
-  shared: null,
-  byHolder: {},
-  changeByKey: {},
-  currency: null,
-  changeAbsolute: null,
-  changePct: null,
-}
 
 export function HomeContent({
   initialError,
@@ -50,7 +43,6 @@ export function HomeContent({
   const [view, setView] = useState<ViewSelection>('all')
   const [showCombined, setShowCombined] = useState(true)
   const [pageError, setPageError] = useState<string | null>(initialError)
-  const [snap, setSnap] = useState<TimelineSnapshot>(EMPTY_SNAP)
   const [addOpen, setAddOpen] = useState(false)
   const [addHolderId, setAddHolderId] = useState<string | undefined>(undefined)
   const [activeAccount, setActiveAccount] = useState<DashboardAccount | null>(null)
@@ -61,18 +53,14 @@ export function HomeContent({
   const toggleExclude = useToggleExclude()
 
   const data = dashboard.data
+  const holders = data?.holders ?? []
 
-  // Fire confetti once if we just landed from a successful OAuth callback.
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const sp = new URLSearchParams(window.location.search)
-    if (sp.get('connected')) {
-      celebrate()
-      const url = new URL(window.location.href)
-      url.searchParams.delete('connected')
-      window.history.replaceState({}, '', url.toString())
-    }
-  }, [])
+  // Single source of truth for the snapshot + chart data — both desktop
+  // and mobile Timelines render from the same precomputed values.
+  const tl = useTimelineSnapshot(period, holders)
+  const slice = useTopbarSlice(tl.snap, view, holders)
+
+  useConnectedConfetti()
 
   function openAdd(holderId?: string) {
     setAddHolderId(holderId)
@@ -120,30 +108,13 @@ export function HomeContent({
     bulkToggle((a) => a.bucket.kind === 'shared' && !a.possibleDuplicateOf)
   }
 
-  // Topbar values: pick the slice that matches the current view.
-  const topbarTotal =
-    view === 'all'
-      ? snap.total
-      : view === 'shared'
-        ? snap.shared
-        : snap.byHolder[view] ?? null
-  const topbarChange = snap.changeByKey[view] ?? null
-  const topbarDelta = topbarChange?.absolute ?? null
-  const topbarPct = topbarChange?.pct ?? null
-  const topbarLabel =
-    view === 'all'
-      ? 'All Accounts'
-      : view === 'shared'
-        ? 'Shared'
-        : data?.holders.find((h) => h.id === view)?.label ?? 'Total balance'
-
   const summaryRows = data
     ? buildSummaryRows({
-        totalAll: snap.total ?? data.totals.total,
-        pctAll: snap.changePct,
+        totalAll: tl.snap.total ?? data.totals.total,
+        pctAll: tl.snap.changePct,
         holders: data.holders,
         pctByHolder: Object.fromEntries(
-          data.holders.map((h) => [h.id, snap.changeByKey[h.id]?.pct ?? null]),
+          data.holders.map((h) => [h.id, tl.snap.changeByKey[h.id]?.pct ?? null]),
         ),
       })
     : []
@@ -189,28 +160,18 @@ export function HomeContent({
 
             <main className="flex flex-1 flex-col overflow-hidden">
               <Topbar
-                label={topbarLabel}
-                total={topbarTotal}
-                delta={topbarDelta}
-                pct={topbarPct}
-                currency={snap.currency}
+                label={slice.label}
+                total={slice.total}
+                delta={slice.delta}
+                pct={slice.pct}
+                currency={tl.snap.currency}
                 period={period}
                 onPeriodChange={setPeriod}
               />
 
               <div className="flex flex-1 flex-col gap-5 overflow-hidden px-7 py-6">
                 {topError && (
-                  <Alert>
-                    <button
-                      type="button"
-                      className="float-right -mr-1 -mt-0.5 text-xs opacity-60 hover:opacity-100"
-                      onClick={() => setPageError(null)}
-                      aria-label="Dismiss"
-                    >
-                      ✕
-                    </button>
-                    {topError}
-                  </Alert>
+                  <DismissibleAlert message={topError} onDismiss={() => setPageError(null)} />
                 )}
 
                 <Timeline
@@ -219,10 +180,14 @@ export function HomeContent({
                   showCombined={showCombined}
                   visibleHolderIds={visibleHolderIds}
                   showShared={showShared}
-                  onSnapshotChange={setSnap}
+                  chartData={tl.chartData}
+                  currency={tl.snap.currency}
+                  isLoading={tl.isLoading}
+                  error={tl.error}
+                  errors={tl.errors}
                 />
 
-                <SummaryCards rows={summaryRows} period={period} currency={snap.currency} />
+                <SummaryCards rows={summaryRows} period={period} currency={tl.snap.currency} />
               </div>
             </main>
           </div>
@@ -234,7 +199,7 @@ export function HomeContent({
             onChangeView={setView}
             period={period}
             onPeriodChange={setPeriod}
-            snap={snap}
+            snap={tl.snap}
             showCombined={showCombined}
             visibleHolderIds={visibleHolderIds}
             showShared={showShared}
@@ -242,6 +207,10 @@ export function HomeContent({
             onOpenAccountSettings={(account) => setActiveAccount(account)}
             topError={topError}
             onDismissError={() => setPageError(null)}
+            chartData={tl.chartData}
+            chartIsLoading={tl.isLoading}
+            chartError={tl.error}
+            chartErrors={tl.errors}
           />
         </>
       ) : (
@@ -251,17 +220,7 @@ export function HomeContent({
               staring at an infinite shimmer with no way to recover. */}
           {topError && (
             <div className="fixed left-1/2 top-4 z-50 w-[min(35rem,calc(100%-2rem))] -translate-x-1/2">
-              <Alert>
-                <button
-                  type="button"
-                  className="float-right -mr-1 -mt-0.5 text-xs opacity-60 hover:opacity-100"
-                  onClick={() => setPageError(null)}
-                  aria-label="Dismiss"
-                >
-                  ✕
-                </button>
-                {topError}
-              </Alert>
+              <DismissibleAlert message={topError} onDismiss={() => setPageError(null)} />
             </div>
           )}
           <DashboardSkeleton sidebarWidth={initialSidebarWidth} />

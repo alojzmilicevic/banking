@@ -10,15 +10,23 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { Eye, EyeOff, Plus, Settings as SettingsIcon } from 'lucide-react'
-import { Alert } from '@/components/ui/alert'
 import { fmtMoney, fmtMoneyCompact, shortProduct } from '@/lib/format'
 import { Sensitive, SensitiveToggle } from '@/components/sensitive-data'
 import { COMBINED_META, SHARED_META } from '@/lib/holders'
 import { cn } from '@/lib/utils'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
+import type { ChartPoint } from '@/hooks/use-timeline-snapshot'
+import { useTopbarSlice } from '@/hooks/use-topbar-slice'
+import { BalanceHero } from './BalanceHero'
+import { DismissibleAlert } from './DismissibleAlert'
 import { PeriodTabs, type Period } from './PeriodTabs'
 import type { ViewSelection } from './Sidebar'
 import { Timeline, type TimelineSnapshot } from './Timeline'
+import {
+  ViewSwitcherDots,
+  ViewSwitcherTabs,
+  buildViewOptions,
+} from './ViewSwitcher'
 
 function accountLabel(a: DashboardAccount): string {
   return a.details || a.product || a.name || a.iban || a.id
@@ -49,6 +57,10 @@ export function MobileLayout({
   onOpenAccountSettings,
   topError,
   onDismissError,
+  chartData,
+  chartIsLoading,
+  chartError,
+  chartErrors,
 }: {
   dashboard: DashboardResponse
   view: ViewSelection
@@ -63,14 +75,12 @@ export function MobileLayout({
   onOpenAccountSettings: (account: DashboardAccount) => void
   topError: string | null
   onDismissError: () => void
+  chartData: ChartPoint[]
+  chartIsLoading: boolean
+  chartError: Error | null
+  chartErrors: string[]
 }) {
-  // Tabs: All + each holder + Shared. Server already ordered holders by
-  // displayOrder.
-  const tabs: { key: ViewSelection; label: string; color: string }[] = [
-    { key: 'all', label: 'All', color: COMBINED_META.color },
-    ...dashboard.holders.map((h) => ({ key: h.id, label: h.label, color: h.color })),
-    { key: 'shared', label: SHARED_META.label, color: SHARED_META.color },
-  ]
+  const options = buildViewOptions(dashboard)
   const holderColorById = new Map(dashboard.holders.map((h) => [h.id, h.color]))
 
   // Account list filtered by active tab.
@@ -84,15 +94,7 @@ export function MobileLayout({
         ? dashboard.shared.accounts.filter((a) => !a.possibleDuplicateOf)
         : (dashboard.holders.find((h) => h.id === view)?.accounts ?? [])
 
-  // Topbar values: pick the slice that matches the current view.
-  const total =
-    view === 'all' ? snap.total : view === 'shared' ? snap.shared : (snap.byHolder[view] ?? null)
-  const change = snap.changeByKey[view] ?? null
-  const delta = change?.absolute ?? null
-  const pct = change?.pct ?? null
-
-  const positive = (delta ?? 0) >= 0
-  const showPct = pct != null && Number.isFinite(pct) && Math.abs(pct) <= 500
+  const slice = useTopbarSlice(snap, view, dashboard.holders)
 
   // Sub-totals row (only for the "All" view) — one chip per holder + Shared.
   const subTotals = [
@@ -126,83 +128,29 @@ export function MobileLayout({
       </div>
 
       {/* ── View tabs ─────────────────────────────────────────────── */}
-      <div className="flex shrink-0 border-b border-border-subtle px-5">
-        {tabs.map((v) => {
-          const active = view === v.key
-          return (
-            <button
-              key={v.key}
-              type="button"
-              onClick={() => onChangeView(v.key)}
-              style={{ '--tab-color': v.color } as React.CSSProperties}
-              className={cn(
-                '-mb-px flex-1 border-b-2 pb-2.5 pt-2 text-14 transition-all',
-                active
-                  ? 'border-(--tab-color) font-semibold text-(--tab-color)'
-                  : 'border-transparent font-normal text-text-faint',
-              )}
-            >
-              {v.label}
-            </button>
-          )
-        })}
+      <div className="shrink-0">
+        <ViewSwitcherTabs options={options} value={view} onChange={onChangeView} />
       </div>
 
       {/* ── Scroll area ───────────────────────────────────────────── */}
       <div className="flex flex-1 flex-col overflow-y-auto">
         {topError && (
           <div className="px-5 pt-3">
-            <Alert>
-              <button
-                type="button"
-                className="float-right -mr-1 -mt-0.5 text-xs opacity-60 hover:opacity-100"
-                onClick={onDismissError}
-                aria-label="Dismiss"
-              >
-                ✕
-              </button>
-              {topError}
-            </Alert>
+            <DismissibleAlert message={topError} onDismiss={onDismissError} />
           </div>
         )}
 
         {/* ── Balance hero ────────────────────────────────────────── */}
         <div className="shrink-0 px-5 pt-4.5">
-          <div className="mb-1.5 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
-            Total balance
-          </div>
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="font-mono text-30 font-light leading-none tracking-hero text-foreground tabular-nums">
-              <Sensitive>{total != null ? fmtMoney(total, snap.currency) : '—'}</Sensitive>
-            </span>
-            {showPct && (
-              <span
-                className={cn(
-                  'rounded-full px-2.5 py-0.75 text-14 font-semibold',
-                  positive ? 'bg-pos-bg text-pos' : 'bg-white/6 text-neg',
-                )}
-              >
-                <Sensitive>
-                  {positive ? '+' : '−'}
-                  {Math.abs(pct!).toFixed(2)}%
-                </Sensitive>
-              </span>
-            )}
-          </div>
-          {delta != null && (
-            <div
-              className={cn(
-                'mt-1.5 font-mono text-14 font-light tracking-tight tabular-nums',
-                positive ? 'text-pos' : 'text-neg',
-              )}
-            >
-              <Sensitive>
-                {positive ? '+' : ''}
-                {fmtMoney(delta, snap.currency)}
-              </Sensitive>{' '}
-              · {period === 'ALL' ? 'All' : period}
-            </div>
-          )}
+          <BalanceHero
+            variant="mobile"
+            label={slice.label}
+            total={slice.total}
+            delta={slice.delta}
+            pct={slice.pct}
+            currency={snap.currency}
+            period={period}
+          />
         </div>
 
         {/* ── Range pills ─────────────────────────────────────────── */}
@@ -218,6 +166,11 @@ export function MobileLayout({
             showCombined={showCombined}
             visibleHolderIds={visibleHolderIds}
             showShared={showShared}
+            chartData={chartData}
+            currency={snap.currency}
+            isLoading={chartIsLoading}
+            error={chartError}
+            errors={chartErrors}
           />
         </div>
 
@@ -290,23 +243,8 @@ export function MobileLayout({
       </div>
 
       {/* ── View dots ─────────────────────────────────────────────── */}
-      <div className="flex shrink-0 items-center justify-center gap-1.5 border-t border-border-subtle py-2.5">
-        {tabs.map((v) => {
-          const active = view === v.key
-          return (
-            <button
-              key={v.key}
-              type="button"
-              onClick={() => onChangeView(v.key)}
-              aria-label={v.label}
-              style={{ '--dot': v.color } as React.CSSProperties}
-              className={cn(
-                'h-1.5 rounded-full transition-all',
-                active ? 'w-4 bg-(--dot)' : 'w-1.5 bg-white/15',
-              )}
-            />
-          )
-        })}
+      <div className="shrink-0 border-t border-border-subtle">
+        <ViewSwitcherDots options={options} value={view} onChange={onChangeView} />
       </div>
     </div>
   )
