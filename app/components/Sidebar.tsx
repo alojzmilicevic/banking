@@ -1,4 +1,3 @@
-'use client'
 // Left rail of the dashboard. Logo, view switcher, person sections,
 // shared section, combined-line toggle. The view switcher only re-labels
 // and re-totals the topbar/summary — the chart is controlled by the
@@ -11,10 +10,11 @@ import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
-import { Sensitive } from '@/lib/sensitive-data'
+import { Sensitive } from '@/components/sensitive-data'
 import { COMBINED_META, SHARED_META } from '@/lib/holders'
-import PersonSection from './PersonSection'
-import SharedSection from './SharedSection'
+import { cn } from '@/lib/utils'
+import { PersonSection } from './PersonSection'
+import { SharedSection } from './SharedSection'
 import {
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_WIDTH_COOKIE,
@@ -34,7 +34,7 @@ function persistWidth(w: number) {
   document.cookie = `${SIDEBAR_WIDTH_COOKIE}=${w}; path=/; max-age=${COOKIE_MAX_AGE_SEC}; SameSite=Lax`
 }
 
-export default function Sidebar({
+export function Sidebar({
   dashboard,
   view,
   onChangeView,
@@ -120,27 +120,20 @@ export default function Sidebar({
 
   return (
     <aside
-      className="relative flex shrink-0 flex-col overflow-y-auto border-r p-[20px_16px]"
-      style={{
-        width,
-        background: 'var(--color-card)',
-        borderColor: 'var(--color-border-subtle)',
-      }}
+      style={{ '--sb-width': `${width}px` } as React.CSSProperties}
+      className="relative flex w-(--sb-width) shrink-0 flex-col overflow-y-auto border-r border-border-subtle bg-card px-4 py-5"
     >
       {/* Logo */}
-      <div
-        className="mb-[28px] flex items-center gap-[10px] border-b pb-[20px]"
-        style={{ borderColor: 'var(--color-border-subtle)' }}
-      >
+      <div className="mb-7 flex items-center gap-2.5 border-b border-border-subtle pb-5">
         <Image src="/logo-icon.svg" alt="Aloma" width={30} height={30} priority />
-        <span className="font-display text-[20px] tracking-[-0.02em]">aloma</span>
+        <span className="font-display text-20 tracking-display">aloma</span>
       </div>
 
       {/* View switcher */}
-      <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-text-faint">
+      <div className="mb-2 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
         View
       </div>
-      <div className="mb-1 flex flex-col gap-[3px]">
+      <div className="mb-1 flex flex-col gap-0.75">
         {switcher.map((v) => {
           const active = view === v.key
           return (
@@ -148,22 +141,21 @@ export default function Sidebar({
               key={v.key}
               type="button"
               onClick={() => onChangeView(v.key)}
-              className="flex w-full items-center gap-[10px] rounded-[9px] border px-[12px] py-[9px] text-left text-[14px] transition-all"
-              style={{
-                background: active ? 'rgba(255,255,255,0.06)' : 'transparent',
-                borderColor: active ? 'var(--color-border)' : 'transparent',
-                color: active ? 'var(--color-foreground)' : 'var(--color-muted-foreground)',
-                fontWeight: active ? 500 : 400,
-              }}
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-9 border px-3 py-2.25 text-left text-14 transition-all',
+                active
+                  ? 'border-border bg-white/6 font-medium text-foreground'
+                  : 'border-transparent bg-transparent font-normal text-muted-foreground',
+              )}
             >
               <span
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ background: v.color }}
+                style={{ '--dot': v.color } as React.CSSProperties}
+                className="size-2 shrink-0 rounded-full bg-(--dot)"
                 aria-hidden
               />
               {v.label}
               {v.key !== 'all' && (
-                <span className="ml-auto font-mono text-[12px] text-text-faint">
+                <span className="ml-auto font-mono text-12 text-text-faint">
                   <Sensitive>{fmtMoneyCompact(v.total)}</Sensitive>
                 </span>
               )}
@@ -172,10 +164,10 @@ export default function Sidebar({
         })}
       </div>
 
-      <div className="my-4 h-px" style={{ background: 'var(--color-border-subtle)' }} />
+      <div className="my-4 h-px bg-border-subtle" />
 
       {/* Accounts label */}
-      <div className="mb-[10px] text-[11px] font-medium uppercase tracking-[0.08em] text-text-faint">
+      <div className="mb-2.5 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
         Accounts
       </div>
 
@@ -199,19 +191,14 @@ export default function Sidebar({
       <button
         type="button"
         onClick={onToggleCombined}
-        className="mt-1 flex w-full items-center gap-[10px] rounded-[9px] border px-[12px] py-[9px] text-[13px] transition-colors"
-        style={{
-          background: 'transparent',
-          borderColor: 'var(--color-border-subtle)',
-          color: showCombined ? 'var(--color-primary)' : 'var(--color-text-faint)',
-        }}
+        className={cn(
+          'mt-1 flex w-full items-center gap-2.5 rounded-9 border border-border-subtle bg-transparent px-3 py-2.25 text-14 transition-colors',
+          showCombined ? 'text-primary' : 'text-text-faint',
+        )}
       >
-        <span
-          className="h-[2px] w-[16px] shrink-0 rounded-[1px]"
-          style={{ background: 'var(--color-primary)' }}
-        />
+        <span className="h-0.5 w-4 shrink-0 rounded-1 bg-primary" />
         Combined line
-        <span className="ml-auto text-[11px]">{showCombined ? 'On' : 'Off'}</span>
+        <span className="ml-auto text-11">{showCombined ? 'On' : 'Off'}</span>
       </button>
 
       <div className="flex-1" />
@@ -225,11 +212,10 @@ export default function Sidebar({
         aria-label="Resize sidebar"
         onPointerDown={onResizePointerDown}
         onDoubleClick={() => setWidth(SIDEBAR_DEFAULT_WIDTH)}
-        className="group/resize absolute inset-y-0 right-0 z-20 flex w-[6px] -translate-x-[2px] cursor-col-resize items-center justify-center"
-        style={{ touchAction: 'none' }}
+        className="group/resize absolute inset-y-0 right-0 z-20 flex w-1.5 -translate-x-0.5 cursor-col-resize touch-none items-center justify-center"
       >
         <span
-          className={`h-full w-[2px] transition-colors ${
+          className={`h-full w-0.5 transition-colors ${
             isResizing ? 'bg-primary' : 'bg-transparent group-hover/resize:bg-primary/40'
           }`}
           aria-hidden

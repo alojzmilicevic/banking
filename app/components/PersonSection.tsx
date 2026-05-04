@@ -1,4 +1,3 @@
-'use client'
 // One household member's section in the sidebar:
 //   ┌──────────────────────────────────────────────┐
 //   │ [AM]  Alojz                  571k    +13k    │
@@ -22,11 +21,12 @@ import { motion, AnimatePresence } from 'motion/react'
 import { ChevronDown, Plus } from 'lucide-react'
 import type { DashboardAccount, DashboardHolder } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
-import { Sensitive } from '@/lib/sensitive-data'
+import { Sensitive } from '@/components/sensitive-data'
 import { holderBg, holderBorder } from '@/lib/holders'
-import SidebarAccountRow from './SidebarAccountRow'
+import { cn } from '@/lib/utils'
+import { SidebarAccountRow } from './SidebarAccountRow'
 
-export default function PersonSection({
+export function PersonSection({
   holder,
   onToggleAll,
   onAddAccount,
@@ -51,40 +51,41 @@ export default function PersonSection({
 
   return (
     <div
-      className="mb-3 rounded-[14px] border p-[16px_18px]"
-      style={{ background: bg, borderColor: border }}
+      style={{ '--hldr-bg': bg, '--hldr-border': border } as React.CSSProperties}
+      className="mb-3 rounded-14 border border-(--hldr-border) bg-(--hldr-bg) px-4.5 py-4"
     >
       {/* Header */}
-      <div className="mb-[14px] flex items-center gap-[10px]">
+      <div className="mb-3.5 flex items-center gap-2.5">
         <div
-          className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-semibold"
-          style={{
-            background: `${holder.color}22`,
-            color: holder.color,
-            border: `1.5px solid ${holder.color}55`,
-          }}
+          style={
+            {
+              '--avatar-bg': `${holder.color}22`,
+              '--avatar-color': holder.color,
+              '--avatar-border': `${holder.color}55`,
+            } as React.CSSProperties
+          }
+          className="flex size-8.5 shrink-0 items-center justify-center rounded-full border-thin border-(--avatar-border) bg-(--avatar-bg) text-14 font-semibold text-(--avatar-color)"
         >
           {holder.initials ?? holder.label.slice(0, 2).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-medium text-foreground">{holder.label}</div>
-          <div className="mt-px text-[11px] text-text-faint">
+          <div className="truncate text-14 font-medium text-foreground">{holder.label}</div>
+          <div className="mt-px text-11 text-text-faint">
             {visibleAccounts.length}
             {hiddenAccounts.length > 0 ? ` of ${visibleAccounts.length + hiddenAccounts.length}` : ''}{' '}
             {visibleAccounts.length + hiddenAccounts.length === 1 ? 'account' : 'accounts'}
           </div>
         </div>
         <Sensitive className="flex shrink-0 flex-col whitespace-nowrap text-right">
-          <span
-            className="font-mono text-[16px] font-light text-foreground tabular-nums"
-            style={{ letterSpacing: '-0.02em' }}
-          >
+          <span className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
             {fmtMoneyCompact(holder.total)}
           </span>
           {holder.change30d && (
             <span
-              className="mt-px text-[11px]"
-              style={{ color: holder.change30d.absolute >= 0 ? 'var(--color-pos)' : 'var(--color-neg)' }}
+              className={cn(
+                'mt-px text-11',
+                holder.change30d.absolute >= 0 ? 'text-pos' : 'text-neg',
+              )}
             >
               {holder.change30d.absolute >= 0 ? '+' : ''}
               {fmtMoneyCompact(Math.abs(holder.change30d.absolute))}
@@ -96,12 +97,10 @@ export default function PersonSection({
           onClick={onToggleAll}
           aria-label={allHidden ? 'Show all accounts' : 'Hide all accounts'}
           title={allHidden ? 'Show all' : 'Hide all'}
-          className="ml-1 shrink-0 rounded-[7px] border px-[8px] py-[5px] text-[11px] transition-colors"
-          style={{
-            background: 'rgba(255,255,255,0.05)',
-            borderColor: 'var(--color-border)',
-            color: allHidden ? 'var(--color-text-faint)' : 'var(--color-muted-foreground)',
-          }}
+          className={cn(
+            'ml-1 shrink-0 rounded-7 border border-border bg-white/5 px-2 py-1.25 text-11 transition-colors',
+            allHidden ? 'text-text-faint' : 'text-muted-foreground',
+          )}
         >
           {allHidden ? 'Show' : 'Hide'}
         </button>
@@ -118,10 +117,10 @@ export default function PersonSection({
           />
         ))}
         {holder.accounts.length === 0 && (
-          <p className="px-1 py-2 text-[12px] text-text-faint">No accounts linked yet.</p>
+          <p className="px-1 py-2 text-12 text-text-faint">No accounts linked yet.</p>
         )}
         {visibleAccounts.length === 0 && hiddenAccounts.length > 0 && (
-          <p className="px-1 py-2 text-[12px] text-text-faint">All accounts hidden.</p>
+          <p className="px-1 py-2 text-12 text-text-faint">All accounts hidden.</p>
         )}
       </div>
 
@@ -132,10 +131,10 @@ export default function PersonSection({
             type="button"
             onClick={() => setShowHidden((v) => !v)}
             aria-expanded={showHidden}
-            className="flex w-full items-center gap-1.5 rounded-[8px] px-[10px] py-[6px] text-left text-[11px] text-text-faint transition-colors hover:bg-[rgba(255,255,255,0.04)] hover:text-muted-foreground"
+            className="flex w-full items-center gap-1.5 rounded-8 px-2.5 py-1.5 text-left text-11 text-text-faint transition-colors hover:bg-white/4 hover:text-muted-foreground"
           >
             <ChevronDown
-              className={`h-[14px] w-[14px] transition-transform ${showHidden ? '' : '-rotate-90'}`}
+              className={`size-3.5 transition-transform ${showHidden ? '' : '-rotate-90'}`}
             />
             Hidden ({hiddenAccounts.length})
           </button>
@@ -171,10 +170,9 @@ export default function PersonSection({
       <button
         type="button"
         onClick={onAddAccount}
-        className="mt-[10px] flex w-full items-center gap-2 rounded-[10px] border border-dashed px-[14px] py-[9px] text-[13px] text-text-faint transition-colors hover:border-input-border hover:text-foreground"
-        style={{ borderColor: 'rgba(255,255,255,0.12)' }}
+        className="mt-2.5 flex w-full items-center gap-2 rounded-10 border border-dashed border-white/12 px-3.5 py-2.25 text-14 text-text-faint transition-colors hover:border-input-border hover:text-foreground"
       >
-        <Plus className="h-[14px] w-[14px]" />
+        <Plus className="size-3.5" />
         Add account
       </button>
     </div>

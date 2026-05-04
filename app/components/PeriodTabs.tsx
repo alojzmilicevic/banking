@@ -1,4 +1,3 @@
-'use client'
 // Segmented period control. Aloma desktop set: 1W / 1M / 3M / 1Y / All.
 // Active pill animates between options via motion's `layoutId` — the pill
 // is a shared element across siblings.
@@ -15,7 +14,7 @@ const ITEMS: { id: Period; label: string }[] = [
   { id: 'ALL', label: 'All' },
 ]
 
-export default function PeriodTabs({
+export function PeriodTabs({
   value,
   onChange,
 }: {
@@ -23,10 +22,7 @@ export default function PeriodTabs({
   onChange: (p: Period) => void
 }) {
   return (
-    <div
-      className="inline-flex items-center gap-0.5 rounded-[9px] border border-border-subtle p-[3px]"
-      style={{ background: 'var(--color-elevated)' }}
-    >
+    <div className="inline-flex items-center gap-0.5 rounded-9 border border-border-subtle bg-elevated p-0.75">
       {ITEMS.map((p) => {
         const active = value === p.id
         return (
@@ -34,15 +30,14 @@ export default function PeriodTabs({
             key={p.id}
             type="button"
             onClick={() => onChange(p.id)}
-            className={`relative z-10 rounded-[7px] px-[13px] py-[5px] text-xs font-medium transition-colors ${
+            className={`relative z-10 rounded-7 px-3.25 py-1.25 text-xs font-medium transition-colors ${
               active ? 'text-foreground' : 'text-text-faint hover:text-foreground'
             }`}
           >
             {active && (
               <motion.span
                 layoutId="period-pill"
-                className="absolute inset-0 -z-10 rounded-[7px] border border-border"
-                style={{ background: 'var(--color-overlay)' }}
+                className="absolute inset-0 -z-10 rounded-7 border border-border bg-overlay"
                 transition={{ type: 'spring', stiffness: 500, damping: 35 }}
               />
             )}

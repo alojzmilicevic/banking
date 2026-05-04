@@ -55,7 +55,9 @@ export const db = new Proxy({} as Drizzle, {
   get(_t, prop) {
     const inst = getInstance() as unknown as Record<string | symbol, unknown>
     const value = inst[prop]
-    return typeof value === 'function' ? (value as Function).bind(inst) : value
+    return typeof value === 'function'
+      ? (value as (...args: unknown[]) => unknown).bind(inst)
+      : value
   },
 })
 

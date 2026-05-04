@@ -125,11 +125,11 @@ export class AvanzaApi {
     // lost — and that's exactly the chain Avanza's BankID login uses.
     let url = path.startsWith('http') ? path : `${BASE}${path}`
     let res: Response
-    let allSetCookies: string[] = []
+    const allSetCookies: string[] = []
     let hopBody: string | undefined =
       body !== undefined ? JSON.stringify(body) : undefined
     let hopMethod = method
-    let hopHeaders = { ...headers }
+    const hopHeaders = { ...headers }
     if (this.cookies.size > 0) {
       hopHeaders.Cookie = Array.from(this.cookies.entries())
         .map(([k, v]) => `${k}=${v}`)

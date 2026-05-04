@@ -43,6 +43,7 @@
 
   /* ── Status surfaces ────────────────────────────────────────── */
   --color-error-bg: oklch(28% 0.10 25);
+  --color-error-bg-soft: rgba(255, 140, 140, 0.04);
   --color-error-border: oklch(50% 0.13 25);
   --color-error-foreground: oklch(85% 0.06 25);
 
@@ -70,12 +71,27 @@
   --color-text-disabled: rgba(240, 244, 255, 0.22);
 
   /* ── Radii ──────────────────────────────────────────────────── */
+  /* Numeric tokens (rounded-1, rounded-7, …) for the values used in the
+     UI. The `--radius-{sm,md,lg,xl,2xl}` aliases are kept so shadcn-style
+     components and `--radius` consumers keep working. */
   --radius: 0.5rem;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-2xl: 24px;
+  --radius-1: 0.0625rem;
+  --radius-2: 0.125rem;
+  --radius-3: 0.1875rem;
+  --radius-6: 0.375rem;
+  --radius-7: 0.4375rem;
+  --radius-8: 0.5rem;
+  --radius-9: 0.5625rem;
+  --radius-10: 0.625rem;
+  --radius-12: 0.75rem;
+  --radius-14: 0.875rem;
+  --radius-16: 1rem;
+  --radius-20: 1.25rem;
+  --radius-sm: 0.375rem; /* 6px — alias for --radius-6 */
+  --radius-md: 0.5rem;   /* 8px — alias for --radius-8 */
+  --radius-lg: 0.75rem;  /* 12px — alias for --radius-12 */
+  --radius-xl: 1rem;     /* 16px — alias for --radius-16 */
+  --radius-2xl: 1.5rem;  /* 24px */
 
   /* ── Shadows ────────────────────────────────────────────────── */
   --shadow-aloma-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -88,6 +104,54 @@
   --font-sans: var(--font-aloma-sans), system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --font-display: var(--font-aloma-display), Georgia, serif;
   --font-mono: var(--font-aloma-mono), "SF Mono", Menlo, monospace;
+
+  /* ── Font sizes ─────────────────────────────────────────────── */
+  /* Numeric scale ported from the GeoGuessr design system. Each size
+     pairs a font-size with its line-height via Tailwind v4's
+     `--<name>--line-height` modifier syntax — `text-14` then sets
+     both in one utility. Off-scale sizes (10/13/15/22/26/28/32/34)
+     are intentionally excluded; pick the nearest blessed step. */
+  --text-9: 0.5625rem;
+  --text-9--line-height: 0.6875rem;
+  --text-11: 0.6875rem;
+  --text-11--line-height: 0.875rem;
+  --text-12: 0.75rem;
+  --text-12--line-height: 0.875rem;
+  --text-14: 0.875rem;
+  --text-14--line-height: 1rem;
+  --text-16: 1rem;
+  --text-16--line-height: 1.25rem;
+  --text-18: 1.125rem;
+  --text-18--line-height: 1.375rem;
+  --text-20: 1.25rem;
+  --text-20--line-height: 1.5rem;
+  --text-24: 1.5rem;
+  --text-24--line-height: 1.625rem;
+  --text-30: 1.875rem;
+  --text-30--line-height: 2rem;
+  --text-36: 2.25rem;
+  --text-36--line-height: 2.375rem;
+  --text-48: 3rem;
+  --text-48--line-height: 3.25rem;
+  --text-60: 3.75rem;
+  --text-60--line-height: 3.875rem;
+  --text-72: 4.5rem;
+  --text-72--line-height: 4.5rem;
+  --text-96: 6rem;
+  --text-96--line-height: 6rem;
+
+  /* ── Letter spacing ─────────────────────────────────────────── */
+  /* Semantic tokens cover the dominant patterns; numeric tokens fill
+     the granularity gaps (matches GeoGuessr, which uses 0.02/0.04/0.06
+     em values across various component-level tweaks). */
+  --tracking-eyebrow: 0.08em;     /* uppercase eyebrow labels */
+  --tracking-caps: 0.18em;        /* extra-wide all-caps */
+  --tracking-tight: -0.01em;      /* slightly tight body numbers */
+  --tracking-display: -0.02em;    /* display numbers */
+  --tracking-hero: -0.03em;       /* hero-size display numbers */
+  --tracking-2: 0.02em;
+  --tracking-4: 0.04em;
+  --tracking-6: 0.06em;
 }
 
 html,
@@ -117,4 +181,10 @@ a:hover {
 /* Tabular numerals for any DM Mono usage */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+/* Custom utility: 1.5px ring used on avatar circles. Tailwind v4 doesn't
+   expose a `--border-*` namespace, so it lives as an `@utility` declaration. */
+@utility border-thin {
+  border-width: 1.5px;
 }

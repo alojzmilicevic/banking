@@ -16,30 +16,13 @@ export default function GlobalError({
 
   return (
     <html lang="en">
-      <body
-        style={{
-          padding: '32px',
-          fontFamily: 'system-ui, sans-serif',
-          background: '#0c0e11',
-          color: '#e6e6e6',
-        }}
-      >
-        <h1 style={{ fontSize: '1.4rem', marginBottom: '12px' }}>Banking — fatal error</h1>
-        <p style={{ color: '#ff6e6e' }}>{error.message || 'Unknown error'}</p>
-        {error.digest && (
-          <p style={{ color: '#888', fontSize: '0.8rem' }}>digest: {error.digest}</p>
-        )}
+      <body className="bg-background p-8 font-sans text-foreground">
+        <h1 className="mb-3 text-24 font-medium">Banking — fatal error</h1>
+        <p className="text-neg">{error.message || 'Unknown error'}</p>
+        {error.digest && <p className="text-12 text-text-faint">digest: {error.digest}</p>}
         <button
           onClick={reset}
-          style={{
-            marginTop: '16px',
-            padding: '8px 14px',
-            background: '#1f242a',
-            color: '#e6e6e6',
-            border: '1px solid #2a2f36',
-            borderRadius: '6px',
-            cursor: 'pointer',
-          }}
+          className="mt-4 cursor-pointer rounded-6 border border-border-strong bg-overlay px-3.5 py-2 text-foreground"
         >
           Try again
         </button>

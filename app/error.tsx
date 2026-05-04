@@ -18,7 +18,7 @@ export default function ErrorBoundary({
   }, [error])
 
   return (
-    <main className="mx-auto max-w-[960px] px-6 pb-16 pt-8">
+    <main className="mx-auto max-w-240 px-6 pb-16 pt-8">
       <Card>
         <CardTitle>Something went wrong</CardTitle>
         <Alert className="mt-3">{error.message || 'Unknown error'}</Alert>

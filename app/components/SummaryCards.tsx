@@ -9,8 +9,9 @@
 // from the dashboard API; adding a person grows the row automatically.
 
 import { fmtMoney } from '@/lib/format'
-import { Sensitive } from '@/lib/sensitive-data'
+import { Sensitive } from '@/components/sensitive-data'
 import { COMBINED_META, holderBg, holderBorder } from '@/lib/holders'
+import { cn } from '@/lib/utils'
 import type { DashboardHolder } from '@/lib/api/dashboard'
 import type { Period } from './PeriodTabs'
 
@@ -54,7 +55,7 @@ export function buildSummaryRows({
   ]
 }
 
-export default function SummaryCards({
+export function SummaryCards({
   rows,
   period,
   currency,
@@ -66,8 +67,8 @@ export default function SummaryCards({
   // Grid auto-fits — fixed grid-cols-3 broke when there were >2 holders.
   return (
     <div
-      className="grid shrink-0 gap-[14px]"
-      style={{ gridTemplateColumns: `repeat(${rows.length}, minmax(0, 1fr))` }}
+      style={{ '--cols': rows.length } as React.CSSProperties}
+      className="grid shrink-0 grid-cols-[repeat(var(--cols),minmax(0,1fr))] gap-3.5"
     >
       {rows.map((s) => {
         const positive = (s.pct ?? 0) >= 0
@@ -78,25 +79,18 @@ export default function SummaryCards({
         return (
           <div
             key={s.label}
-            className="rounded-[14px] border p-[16px_20px]"
-            style={{ background: s.bg, borderColor: s.border }}
+            style={
+              { '--card-bg': s.bg, '--card-border': s.border, '--card-color': s.color } as React.CSSProperties
+            }
+            className="rounded-14 border border-(--card-border) bg-(--card-bg) px-5 py-4"
           >
-            <div
-              className="mb-[6px] text-[11px] font-medium uppercase tracking-[0.08em]"
-              style={{ color: s.color }}
-            >
+            <div className="mb-1.5 text-11 font-medium uppercase tracking-eyebrow text-(--card-color)">
               {s.label}
             </div>
-            <div
-              className="font-mono text-[24px] font-light text-foreground tabular-nums"
-              style={{ letterSpacing: '-0.02em' }}
-            >
+            <div className="font-mono text-24 font-light tracking-display text-foreground tabular-nums">
               <Sensitive>{fmtMoney(s.total, currency)}</Sensitive>
             </div>
-            <div
-              className="mt-1 text-[12px]"
-              style={{ color: showPct && !positive ? 'var(--color-neg)' : 'var(--color-pos)' }}
-            >
+            <div className={cn('mt-1 text-12', showPct && !positive ? 'text-neg' : 'text-pos')}>
               {showPct ? (
                 <>
                   <Sensitive>{`${positive ? '+' : ''}${s.pct!.toFixed(1)}%`}</Sensitive>

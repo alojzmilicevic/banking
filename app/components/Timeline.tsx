@@ -1,4 +1,3 @@
-'use client'
 // Aloma growth chart. Renders a Combined area + one Line per holder +
 // one Line for the Shared bucket. The series come from /api/timeseries
 // which now keys by holderId, so the chart configuration is a loop —
@@ -52,7 +51,7 @@ function deltaPct(now: number | null, then: number | null): number | null {
   return Math.round(((now - then) / Math.abs(then)) * 10000) / 100
 }
 
-export default function Timeline({
+export function Timeline({
   period,
   holders,
   showCombined,
@@ -107,32 +106,35 @@ export default function Timeline({
         : null
   }
 
-  // Push the snapshot upward whenever the relevant inputs change. We
-  // serialize the dynamic-key maps so the dep-array can compare values
-  // (React diffs by reference, which would re-fire on every render).
-  const cbRef = useRef(onSnapshotChange)
-  cbRef.current = onSnapshotChange
+  // Push the snapshot upward whenever the relevant inputs change. The
+  // dynamic-key maps are rebuilt every render (new refs), so we dep on
+  // their JSON signatures and rehydrate inside the effect — keeps the
+  // effect body free of references that exhaustive-deps would flag, and
+  // avoids ref-mutation-during-render that the React Compiler skips.
+  const onSnapshotChangeRef = useRef(onSnapshotChange)
+  useEffect(() => {
+    onSnapshotChangeRef.current = onSnapshotChange
+  }, [onSnapshotChange])
   const byHolderKey = JSON.stringify(byHolder)
   const changeByKeyKey = JSON.stringify(changeByKey)
   useEffect(() => {
-    cbRef.current?.({
+    onSnapshotChangeRef.current?.({
       total,
       shared,
-      byHolder,
-      changeByKey,
+      byHolder: JSON.parse(byHolderKey) as Record<string, number | null>,
+      changeByKey: JSON.parse(changeByKeyKey) as Record<
+        string,
+        { absolute: number | null; pct: number | null } | null
+      >,
       currency,
       changeAbsolute,
       changePct,
     })
-    // byHolder / changeByKey are intentionally referenced via their JSON
-    // signatures (byHolderKey / changeByKeyKey) — React's dep array
-    // compares by reference and these maps are rebuilt every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [total, shared, currency, changeAbsolute, changePct, byHolderKey, changeByKeyKey])
 
   if (error) {
     return (
-      <div className="rounded-[16px] border border-border-subtle bg-card/40 p-5">
+      <div className="rounded-16 border border-border-subtle bg-card/40 p-5">
         <Alert>{error.message}</Alert>
       </div>
     )
@@ -159,15 +161,9 @@ export default function Timeline({
   }))
 
   return (
-    <div
-      className="flex min-w-0 flex-1 flex-col rounded-[16px] border p-[14px_16px] lg:p-[20px_24px]"
-      style={{
-        background: 'rgba(255,255,255,0.02)',
-        borderColor: 'var(--color-border-subtle)',
-      }}
-    >
+    <div className="flex min-w-0 flex-1 flex-col rounded-16 border border-border-subtle bg-white/2 px-4 py-3.5 lg:px-6 lg:py-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 lg:mb-4">
-        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-faint">
+        <span className="text-11 font-medium uppercase tracking-eyebrow text-text-faint">
           Growth · {period === 'ALL' ? 'All' : period}
         </span>
         <div className="flex flex-wrap gap-x-3 gap-y-1 lg:gap-4">
@@ -291,13 +287,13 @@ export default function Timeline({
 
 function LegendDot({ color, label }: { color: string; label: string }) {
   return (
-    <div className="flex items-center gap-[6px]">
+    <div className="flex items-center gap-1.5">
       <span
-        className="h-[2px] w-[18px] rounded-[1px]"
-        style={{ background: color }}
+        style={{ '--dot': color } as React.CSSProperties}
+        className="h-0.5 w-4.5 rounded-1 bg-(--dot)"
         aria-hidden
       />
-      <span className="text-[12px] text-text-faint">{label}</span>
+      <span className="text-12 text-text-faint">{label}</span>
     </div>
   )
 }

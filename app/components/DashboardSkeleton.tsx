@@ -2,7 +2,7 @@ import Image from 'next/image'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChartShape, PeriodTabsShape } from './skeleton-shapes'
 
-export default function DashboardSkeleton({ sidebarWidth }: { sidebarWidth: number }) {
+export function DashboardSkeleton({ sidebarWidth }: { sidebarWidth: number }) {
   return (
     <div className="hidden h-screen w-screen overflow-hidden lg:flex">
       <SidebarSkeleton width={sidebarWidth} />
@@ -10,7 +10,7 @@ export default function DashboardSkeleton({ sidebarWidth }: { sidebarWidth: numb
       <main className="flex flex-1 flex-col overflow-hidden">
         <TopbarSkeleton />
 
-        <div className="flex flex-1 flex-col gap-5 overflow-hidden p-[24px_28px]">
+        <div className="flex flex-1 flex-col gap-5 overflow-hidden px-7 py-6">
           <TimelineSkeleton />
           <SummaryCardsSkeleton />
         </div>
@@ -22,24 +22,17 @@ export default function DashboardSkeleton({ sidebarWidth }: { sidebarWidth: numb
 function SidebarSkeleton({ width }: { width: number }) {
   return (
     <aside
-      className="relative flex shrink-0 flex-col overflow-y-auto border-r p-[20px_16px]"
-      style={{
-        width,
-        background: 'var(--color-card)',
-        borderColor: 'var(--color-border-subtle)',
-      }}
+      style={{ '--sb-width': `${width}px` } as React.CSSProperties}
+      className="relative flex w-(--sb-width) shrink-0 flex-col overflow-y-auto border-r border-border-subtle bg-card px-4 py-5"
     >
       {/* Logo — static UI chrome, render as-is */}
-      <div
-        className="mb-[28px] flex items-center gap-[10px] border-b pb-[20px]"
-        style={{ borderColor: 'var(--color-border-subtle)' }}
-      >
+      <div className="mb-7 flex items-center gap-2.5 border-b border-border-subtle pb-5">
         <Image src="/logo-icon.svg" alt="Aloma" width={30} height={30} priority />
-        <span className="font-display text-[20px] tracking-[-0.02em]">aloma</span>
+        <span className="font-display text-20 tracking-display">aloma</span>
       </div>
 
       {/* "View" label — static text, mirrors Sidebar.tsx */}
-      <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-text-faint">
+      <div className="mb-2 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
         View
       </div>
 
@@ -47,23 +40,23 @@ function SidebarSkeleton({ width }: { width: number }) {
           single-user default (the app's documented common case). Wrap
           each in the same border+padding container as the real button so
           total row height matches and there's no jump on data arrival. */}
-      <div className="mb-1 flex flex-col gap-[3px]">
+      <div className="mb-1 flex flex-col gap-0.75">
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="flex w-full items-center gap-[10px] rounded-[9px] border border-transparent px-[12px] py-[9px] text-[14px]"
+            className="flex w-full items-center gap-2.5 rounded-9 border border-transparent px-3 py-2.25 text-14"
           >
-            <Skeleton className="h-2 w-2 rounded-full" />
-            <Skeleton className="h-[14px] w-[80px]" />
-            {i > 0 && <Skeleton className="ml-auto h-[12px] w-[44px]" />}
+            <Skeleton className="size-2 rounded-full" />
+            <Skeleton className="h-3.5 w-20" />
+            {i > 0 && <Skeleton className="ml-auto h-3 w-11" />}
           </div>
         ))}
       </div>
 
-      <div className="my-4 h-px" style={{ background: 'var(--color-border-subtle)' }} />
+      <div className="my-4 h-px bg-border-subtle" />
 
       {/* "Accounts" label — static text */}
-      <div className="mb-[10px] text-[11px] font-medium uppercase tracking-[0.08em] text-text-faint">
+      <div className="mb-2.5 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
         Accounts
       </div>
 
@@ -77,16 +70,10 @@ function SidebarSkeleton({ width }: { width: number }) {
       {/* "Combined line" toggle — always rendered by Sidebar, so reserve
           the row to avoid a downward jump when data lands. Static label,
           shimmer for the On/Off pill. */}
-      <div
-        className="mt-1 flex w-full items-center gap-[10px] rounded-[9px] border px-[12px] py-[9px] text-[13px] text-text-faint"
-        style={{ borderColor: 'var(--color-border-subtle)' }}
-      >
-        <span
-          className="h-[2px] w-[16px] shrink-0 rounded-[1px]"
-          style={{ background: 'var(--color-primary)' }}
-        />
+      <div className="mt-1 flex w-full items-center gap-2.5 rounded-9 border border-border-subtle px-3 py-2.25 text-14 text-text-faint">
+        <span className="h-0.5 w-4 shrink-0 rounded-1 bg-primary" />
         Combined line
-        <Skeleton className="ml-auto h-[11px] w-[20px]" />
+        <Skeleton className="ml-auto h-2.75 w-5" />
       </div>
 
       {/* Mirrors Sidebar.tsx — fills remaining vertical space so scroll
@@ -108,29 +95,21 @@ function PersonSectionSkeleton({
   sharedHeader?: boolean
 }) {
   return (
-    <div
-      className="mb-3 rounded-[14px] border p-[16px_18px]"
-      style={{
-        background: 'rgba(255,255,255,0.02)',
-        borderColor: 'var(--color-border-subtle)',
-      }}
-    >
-      {/* Header — matches PersonSection: mb-[14px] gap-[10px] */}
-      <div className="mb-[14px] flex items-center gap-[10px]">
-        <Skeleton className="h-[34px] w-[34px] rounded-full" />
+    <div className="mb-3 rounded-14 border border-border-subtle bg-white/2 px-4.5 py-4">
+      {/* Header — matches PersonSection: mb-3.5 gap-2.5 */}
+      <div className="mb-3.5 flex items-center gap-2.5">
+        <Skeleton className="size-8.5 rounded-full" />
         <div className="min-w-0 flex-1">
-          <Skeleton className="h-[15px] w-[88px]" />
-          <Skeleton className="mt-[4px] h-[11px] w-[68px]" />
+          <Skeleton className="h-3.75 w-22" />
+          <Skeleton className="mt-1 h-2.75 w-17" />
         </div>
         <div className="text-right">
-          <Skeleton className="ml-auto h-[16px] w-[60px]" />
-          <Skeleton className="mt-[4px] ml-auto h-[11px] w-[42px]" />
+          <Skeleton className="ml-auto h-4 w-15" />
+          <Skeleton className="mt-1 ml-auto h-2.75 w-10.5" />
         </div>
-        {/* Hide button: real is px-[8px] py-[5px] text-[11px] ≈ 24px tall.
+        {/* Hide button: real is px-2 py-1.25 text-11 ≈ 24px tall.
             Shared section has no Hide button per SharedSection.tsx, so omit. */}
-        {!sharedHeader && (
-          <Skeleton className="ml-1 h-[24px] w-[42px] rounded-[7px]" />
-        )}
+        {!sharedHeader && <Skeleton className="ml-1 h-6 w-10.5 rounded-7" />}
       </div>
 
       {/* Account rows — replicate SidebarAccountRow shell exactly */}
@@ -138,40 +117,33 @@ function PersonSectionSkeleton({
         {Array.from({ length: accountRows }).map((_, i) => (
           <div
             key={i}
-            className="flex items-center gap-1.5 rounded-[10px] border px-[14px] py-[10px]"
-            style={{
-              background: 'rgba(255,255,255,0.03)',
-              borderColor: 'var(--color-border-subtle)',
-            }}
+            className="flex items-center gap-1.5 rounded-10 border border-border-subtle bg-white/3 px-3.5 py-2.5"
           >
-            <Skeleton className="h-[26px] w-[26px] rounded-full" />
+            <Skeleton className="size-6.5 rounded-full" />
             <div className="min-w-0 flex-1">
-              <Skeleton className="h-[14px] w-[70%]" />
+              <Skeleton className="h-3.5 w-7/10" />
             </div>
             <div className="ml-1.5 text-right">
-              <Skeleton className="ml-auto h-[14px] w-[64px]" />
-              <Skeleton className="mt-[4px] ml-auto h-[11px] w-[40px]" />
+              <Skeleton className="ml-auto h-3.5 w-16" />
+              <Skeleton className="mt-1 ml-auto h-2.75 w-10" />
             </div>
           </div>
         ))}
       </div>
 
-      {/* "Hidden (N)" toggle — real is px-[10px] py-[6px] text-[11px] ≈ 26px */}
+      {/* "Hidden (N)" toggle — real is px-2.5 py-1.5 text-11 ≈ 26px */}
       {withHidden && (
-        <div className="mt-2 flex items-center gap-1.5 rounded-[8px] px-[10px] py-[6px]">
-          <Skeleton className="h-[14px] w-[14px] rounded-[3px]" />
-          <Skeleton className="h-[11px] w-[64px]" />
+        <div className="mt-2 flex items-center gap-1.5 rounded-8 px-2.5 py-1.5">
+          <Skeleton className="size-3.5 rounded-3" />
+          <Skeleton className="h-2.75 w-16" />
         </div>
       )}
 
       {/* Add account — render as the actual dashed button shell to lock layout */}
       {withAdd && (
-        <div
-          className="mt-[10px] flex w-full items-center justify-center gap-2 rounded-[10px] border border-dashed px-[14px] py-[9px] text-[13px]"
-          style={{ borderColor: 'rgba(255,255,255,0.12)' }}
-        >
-          <Skeleton className="h-[14px] w-[14px] rounded-[3px]" />
-          <Skeleton className="h-[13px] w-[80px]" />
+        <div className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-10 border border-dashed border-white/12 px-3.5 py-2.25 text-14">
+          <Skeleton className="size-3.5 rounded-3" />
+          <Skeleton className="h-3.25 w-20" />
         </div>
       )}
     </div>
@@ -180,21 +152,15 @@ function PersonSectionSkeleton({
 
 function TopbarSkeleton() {
   return (
-    <div
-      className="flex shrink-0 items-center justify-between border-b px-[28px] py-[16px]"
-      style={{
-        background: 'var(--color-background)',
-        borderColor: 'var(--color-border-subtle)',
-      }}
-    >
+    <div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-background px-7 py-4">
       <div>
         {/* Default view is "All Accounts" — render as static text */}
-        <div className="mb-0.5 text-[11px] font-medium uppercase tracking-[0.08em] text-text-faint">
+        <div className="mb-0.5 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
           All Accounts
         </div>
         <div className="flex items-baseline gap-3">
-          <Skeleton className="h-[32px] w-[200px]" />
-          <Skeleton className="h-[14px] w-[120px]" />
+          <Skeleton className="h-8 w-50" />
+          <Skeleton className="h-3.5 w-30" />
         </div>
       </div>
 
@@ -205,22 +171,16 @@ function TopbarSkeleton() {
 
 function TimelineSkeleton() {
   return (
-    <div
-      className="flex min-w-0 flex-1 flex-col rounded-[16px] border p-[20px_24px]"
-      style={{
-        background: 'rgba(255,255,255,0.02)',
-        borderColor: 'var(--color-border-subtle)',
-      }}
-    >
+    <div className="flex min-w-0 flex-1 flex-col rounded-16 border border-border-subtle bg-white/2 px-6 py-5">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-faint">
+        <span className="text-11 font-medium uppercase tracking-eyebrow text-text-faint">
           Growth · 1Y
         </span>
         <div className="flex gap-4">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="flex items-center gap-[6px]">
-              <Skeleton className="h-[2px] w-[18px]" />
-              <Skeleton className="h-[12px] w-[60px]" />
+            <div key={i} className="flex items-center gap-1.5">
+              <Skeleton className="h-0.5 w-4.5" />
+              <Skeleton className="h-3 w-15" />
             </div>
           ))}
         </div>
@@ -235,25 +195,14 @@ function TimelineSkeleton() {
 
 function SummaryCardsSkeleton() {
   return (
-    <div
-      className="grid shrink-0 gap-[14px]"
-      style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}
-    >
+    <div className="grid shrink-0 grid-cols-3 gap-3.5">
       {[0, 1, 2].map((i) => (
-        <div
-          key={i}
-          className="rounded-[14px] border p-[16px_20px]"
-          style={{
-            background: 'rgba(255,255,255,0.02)',
-            borderColor: 'var(--color-border-subtle)',
-          }}
-        >
-          <Skeleton className="mb-[8px] h-[11px] w-[72px]" />
-          <Skeleton className="h-[24px] w-[140px]" />
-          <Skeleton className="mt-[6px] h-[12px] w-[88px]" />
+        <div key={i} className="rounded-14 border border-border-subtle bg-white/2 px-5 py-4">
+          <Skeleton className="mb-2 h-2.75 w-18" />
+          <Skeleton className="h-6 w-35" />
+          <Skeleton className="mt-1.5 h-3 w-22" />
         </div>
       ))}
     </div>
   )
 }
-

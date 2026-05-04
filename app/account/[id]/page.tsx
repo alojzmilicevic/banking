@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, desc, eq } from 'drizzle-orm'
 import { accounts, balances, connections, db, transactions } from '@/lib/db/client'
-import { Sensitive } from '@/lib/sensitive-data'
+import { Sensitive } from '@/components/sensitive-data'
 import { Card, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -47,15 +47,14 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
     .orderBy(desc(transactions.date))
     .all()
 
-  const title =
-    account.details || account.product || account.name || account.iban || 'Account'
+  const title = account.details || account.product || account.name || account.iban || 'Account'
 
   return (
-    <main className="mx-auto max-w-[960px] px-6 pb-16 pt-8">
+    <main className="mx-auto max-w-240 px-6 pb-16 pt-8">
       <p className="mt-0">
         <Link href="/">← back</Link>
       </p>
-      <h1 className="mb-6 text-[1.6rem] font-semibold">{title}</h1>
+      <h1 className="mb-6 text-24 font-semibold">{title}</h1>
 
       <Card>
         <CardTitle>Details</CardTitle>
@@ -68,15 +67,9 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
         {account.product && (
           <p className="my-1 text-sm text-muted-foreground">Product: {account.product}</p>
         )}
-        {account.iban && (
-          <p className="my-1 text-sm text-muted-foreground">IBAN: {account.iban}</p>
-        )}
-        {account.bban && (
-          <p className="my-1 text-sm text-muted-foreground">BBAN: {account.bban}</p>
-        )}
-        {account.bic && (
-          <p className="my-1 text-sm text-muted-foreground">BIC: {account.bic}</p>
-        )}
+        {account.iban && <p className="my-1 text-sm text-muted-foreground">IBAN: {account.iban}</p>}
+        {account.bban && <p className="my-1 text-sm text-muted-foreground">BBAN: {account.bban}</p>}
+        {account.bic && <p className="my-1 text-sm text-muted-foreground">BIC: {account.bic}</p>}
         {account.currency && (
           <p className="my-1 text-sm text-muted-foreground">Currency: {account.currency}</p>
         )}
@@ -117,7 +110,9 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
           <span className="font-normal text-muted-foreground">({accountTransactions.length})</span>
         </CardTitle>
         {accountTransactions.length === 0 && (
-          <p className="text-sm text-muted-foreground">No transactions stored yet — try Sync now.</p>
+          <p className="text-sm text-muted-foreground">
+            No transactions stored yet — try Sync now.
+          </p>
         )}
         {accountTransactions.length > 0 && (
           <Table>

@@ -1,8 +1,7 @@
-'use client'
 // Visual add-bank flow. Holder chips at the top come from the API now,
 // so adding a household member doesn't require code changes here.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   ArrowRight,
@@ -51,7 +50,7 @@ function buildLinkedByHolder(data: DashboardResponse | undefined) {
   )
 }
 
-export default function AddBankModal({
+export function AddBankModal({
   open,
   onClose,
   onConnected,
@@ -63,7 +62,7 @@ export default function AddBankModal({
   initialHolderId?: string
 }) {
   const holdersQ = useHolders()
-  const holders = holdersQ.data ?? []
+  const holders = useMemo(() => holdersQ.data ?? [], [holdersQ.data])
   const dashboard = useDashboard()
 
   const [holderId, setHolderId] = useState<string | undefined>(initialHolderId)
@@ -114,7 +113,7 @@ export default function AddBankModal({
       {/* Holder picker */}
       <div className="mb-5">
         <div className="mb-2 flex items-baseline justify-between">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="text-11 font-semibold uppercase tracking-caps text-muted-foreground">
             Linked by
           </p>
           {holderId && (
@@ -135,8 +134,8 @@ export default function AddBankModal({
           </p>
         ) : (
           <div
-            className="grid gap-2"
-            style={{ gridTemplateColumns: `repeat(${Math.min(holders.length, 3)}, minmax(0, 1fr))` }}
+            style={{ '--cols': Math.min(holders.length, 3) } as React.CSSProperties}
+            className="grid grid-cols-[repeat(var(--cols),minmax(0,1fr))] gap-2"
           >
             {holders.map((h) => (
               <HolderChip
@@ -158,12 +157,12 @@ export default function AddBankModal({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.18 }}
         >
-          <p className="mb-2 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="mb-2 text-11 font-semibold uppercase tracking-caps text-muted-foreground">
             Where from
           </p>
           <div className="grid grid-cols-2 gap-2">
             <ProviderTile
-              icon={<TrendingUp className="h-5 w-5" />}
+              icon={<TrendingUp className="size-5" />}
               tone="bg-gradient-to-br from-emerald-500/15 to-transparent"
               title="Avanza"
               subtitle="Stocks, funds, ISK & pension"
@@ -173,7 +172,7 @@ export default function AddBankModal({
               onClick={() => setProvider('avanza')}
             />
             <ProviderTile
-              icon={<Building2 className="h-5 w-5" />}
+              icon={<Building2 className="size-5" />}
               tone="bg-gradient-to-br from-blue-500/15 to-transparent"
               title="A bank"
               subtitle={ebLinked ? `${ebLabels} linked` : 'Handelsbanken, Swedbank, SEB…'}
@@ -261,18 +260,22 @@ function HolderChip({
       {active && (
         <motion.div
           layoutId="holder-bg"
-          className="absolute inset-0 -z-10"
-          style={{ background: `linear-gradient(135deg, ${tint} 0%, transparent 100%)` }}
+          style={
+            { '--tint-grad': `linear-gradient(135deg, ${tint} 0%, transparent 100%)` } as React.CSSProperties
+          }
+          className="absolute inset-0 -z-10 bg-(image:--tint-grad)"
           transition={{ type: 'spring', stiffness: 500, damping: 35 }}
         />
       )}
       <span
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold transition-all"
-        style={{
-          background: `${holder.color}22`,
-          color: holder.color,
-          border: active ? `1.5px solid ${holder.color}55` : '1.5px solid transparent',
-        }}
+        style={
+          {
+            '--avatar-bg': `${holder.color}22`,
+            '--avatar-color': holder.color,
+            '--avatar-border': active ? `${holder.color}55` : 'transparent',
+          } as React.CSSProperties
+        }
+        className="flex size-10 shrink-0 items-center justify-center rounded-full border-thin border-(--avatar-border) bg-(--avatar-bg) text-14 font-semibold text-(--avatar-color) transition-all"
       >
         {initials}
       </span>
@@ -285,7 +288,7 @@ function HolderChip({
           {holder.label}
         </p>
         <p
-          className={`text-[0.7rem] transition-colors ${
+          className={`text-11 transition-colors ${
             active ? 'text-primary' : 'text-muted-foreground'
           }`}
         >
@@ -301,10 +304,10 @@ function HolderChip({
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-          className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
+          className="flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground"
           aria-hidden
         >
-          <Check className="h-3 w-3" strokeWidth={3} />
+          <Check className="size-3" strokeWidth={3} />
         </motion.span>
       )}
     </motion.button>
@@ -348,21 +351,21 @@ function ProviderTile({
         aria-hidden
       />
       {linked && (
-        <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-pos-bg/80 px-1.5 py-0.5 text-[0.6rem] font-medium text-pos">
-          <Check className="h-2.5 w-2.5" strokeWidth={3} />
+        <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-pos-bg/80 px-1.5 py-0.5 text-9 font-medium text-pos">
+          <Check className="size-2.5" strokeWidth={3} />
           Linked
         </span>
       )}
-      <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-secondary/80 text-foreground">
+      <div className="relative flex size-9 items-center justify-center rounded-lg bg-secondary/80 text-foreground">
         {icon}
       </div>
       <div className="relative">
         <p className="text-sm font-semibold">{title}</p>
-        <p className="text-[0.72rem] text-muted-foreground">{subtitle}</p>
+        <p className="text-11 text-muted-foreground">{subtitle}</p>
       </div>
-      <div className="relative mt-auto flex items-center gap-1 text-[0.65rem] text-muted-foreground">
+      <div className="relative mt-auto flex items-center gap-1 text-11 text-muted-foreground">
         {hint}
-        <ArrowRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
+        <ArrowRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
       </div>
     </motion.button>
   )
@@ -375,7 +378,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="-ml-1 mb-3 inline-flex items-center gap-1 rounded px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
     >
-      <ArrowRight className="h-3 w-3 rotate-180" />
+      <ArrowRight className="size-3 rotate-180" />
       Pick a different provider
     </button>
   )
@@ -541,7 +544,7 @@ function AvanzaPanel({
           disabled={busy || (phase.kind !== 'sync-error' && formMissing)}
           className="flex-1"
         >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {busy ? <Loader2 className="size-4 animate-spin" /> : null}
           {buttonLabel}
         </Button>
         {phase.kind === 'sync-error' && (
@@ -626,14 +629,14 @@ function PhaseIndicator({
           : null
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border bg-secondary/20 p-3 text-[0.7rem]">
+    <div className="flex flex-col gap-2 rounded-lg border border-border bg-secondary/20 p-3 text-11">
       <div className="flex items-center gap-2">
         <PhaseDot label="Authenticate" state={authState} />
         <div className="h-px flex-1 bg-border-subtle" />
         <PhaseDot label="Load data" state={syncState} />
       </div>
       {subtitle && (
-        <div className="text-[0.7rem] text-muted-foreground">{subtitle}</div>
+        <div className="text-11 text-muted-foreground">{subtitle}</div>
       )}
     </div>
   )
@@ -660,8 +663,8 @@ function PhaseDot({
   }[state]
   return (
     <div className="flex items-center gap-1.5">
-      <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
-      <span className={`uppercase tracking-[0.06em] ${textClass}`}>{label}</span>
+      <span className={`size-1.5 rounded-full ${dotClass}`} />
+      <span className={`uppercase tracking-6 ${textClass}`}>{label}</span>
     </div>
   )
 }
@@ -669,7 +672,7 @@ function PhaseDot({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-[0.7rem] font-medium uppercase tracking-[0.06em] text-text-faint">
+      <label className="text-11 font-medium uppercase tracking-6 text-text-faint">
         {label}
       </label>
       {children}
@@ -720,7 +723,7 @@ function BankPanel({ holderId }: { holderId: string }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2 text-xs">
-        <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+        <Globe className="size-3.5 text-muted-foreground" />
         <Select value={country} onChange={(e) => setCountry(e.target.value)} className="flex-1">
           <option value="SE">Sweden</option>
           <option value="NO">Norway</option>
@@ -733,7 +736,7 @@ function BankPanel({ holderId }: { holderId: string }) {
 
       {popular.length > 0 && (
         <div>
-          <p className="mb-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
+          <p className="mb-1.5 text-11 font-semibold uppercase tracking-eyebrow text-muted-foreground">
             Popular
           </p>
           <div className="grid grid-cols-2 gap-2">
@@ -756,7 +759,7 @@ function BankPanel({ holderId }: { holderId: string }) {
       )}
 
       <div>
-        <p className="mb-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
+        <p className="mb-1.5 text-11 font-semibold uppercase tracking-eyebrow text-muted-foreground">
           All banks
         </p>
         <Select value={selected} onChange={(e) => setSelected(e.target.value)}>
@@ -779,7 +782,7 @@ function BankPanel({ holderId }: { holderId: string }) {
       {error && <Alert>{error}</Alert>}
 
       <Button onClick={connect} disabled={!selected || startEb.isPending}>
-        {startEb.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        {startEb.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
         {startEb.isPending ? 'Redirecting…' : 'Continue to BankID'}
       </Button>
     </div>
