@@ -19,6 +19,7 @@ import { Alert } from '@/components/ui/alert'
 import { useTimeseries } from '@/lib/queries'
 import { SHARED_META } from '@/lib/holders'
 import type { DashboardHolder } from '@/lib/api/dashboard'
+import { ChartShape } from './skeleton-shapes'
 import type { Period } from './PeriodTabs'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -182,9 +183,7 @@ export default function Timeline({
 
       <div className="min-h-0 flex-1">
         {isLoading && series.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            Loading…
-          </div>
+          <ChartShape />
         ) : series.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             No history yet — connect a bank to see the chart.
