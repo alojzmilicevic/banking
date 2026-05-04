@@ -81,7 +81,9 @@ export function Sensitive({
       // stronger blur — a fixed px let big topbar digits resolve while
       // over-blurring small chips.
       className={cn(
-        'inline-block transition-[filter] duration-150 ease-out',
+        // Pseudo-element extends the pointer hit area ~4px beyond the text
+        // box without affecting layout — peek is finicky on small numbers.
+        "relative inline-block transition-[filter] duration-150 ease-out before:absolute before:-inset-1 before:content-['']",
         hidden && 'cursor-pointer touch-none select-none',
         blurred && '[filter:blur(0.4em)]',
         className,

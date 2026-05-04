@@ -74,25 +74,23 @@ export default function PersonSection({
             {visibleAccounts.length + hiddenAccounts.length === 1 ? 'account' : 'accounts'}
           </div>
         </div>
-        <div className="shrink-0 whitespace-nowrap text-right">
-          <div
+        <Sensitive className="flex shrink-0 flex-col whitespace-nowrap text-right">
+          <span
             className="font-mono text-[16px] font-light text-foreground tabular-nums"
             style={{ letterSpacing: '-0.02em' }}
           >
-            <Sensitive>{fmtMoneyCompact(holder.total)}</Sensitive>
-          </div>
+            {fmtMoneyCompact(holder.total)}
+          </span>
           {holder.change30d && (
-            <div
+            <span
               className="mt-px text-[11px]"
               style={{ color: holder.change30d.absolute >= 0 ? 'var(--color-pos)' : 'var(--color-neg)' }}
             >
-              <Sensitive>
-                {holder.change30d.absolute >= 0 ? '+' : ''}
-                {fmtMoneyCompact(Math.abs(holder.change30d.absolute))}
-              </Sensitive>
-            </div>
+              {holder.change30d.absolute >= 0 ? '+' : ''}
+              {fmtMoneyCompact(Math.abs(holder.change30d.absolute))}
+            </span>
           )}
-        </div>
+        </Sensitive>
         <button
           type="button"
           onClick={onToggleAll}
@@ -151,7 +149,7 @@ export default function PersonSection({
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                <div className="mt-1 flex flex-col gap-1">
+                <div className="mt-1 flex flex-col">
                   {hiddenAccounts.map((a) => (
                     <SidebarAccountRow
                       key={a.id}

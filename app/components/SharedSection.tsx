@@ -141,7 +141,7 @@ export default function SharedSection({
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                <div className="mt-1 flex flex-col gap-1">
+                <div className="mt-1 flex flex-col">
                   {hiddenAccounts.map((a) => (
                     <SidebarAccountRow
                       key={a.id}

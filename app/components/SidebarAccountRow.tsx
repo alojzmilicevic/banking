@@ -43,7 +43,10 @@ export default function SidebarAccountRow({
           onOpenSettings?.()
         }
       }}
-      className="group flex items-center gap-1.5 rounded-[10px] border px-[14px] py-[10px] transition-all"
+      className={cn(
+        'group flex items-center rounded-[10px] border transition-all',
+        visible ? 'gap-1.5 px-[14px] py-[10px]' : 'gap-1 px-[10px] py-[5px]',
+      )}
       style={{
         background: visible ? 'rgba(255,255,255,0.03)' : 'transparent',
         borderColor: visible ? 'var(--color-border-subtle)' : 'transparent',
@@ -81,24 +84,21 @@ export default function SidebarAccountRow({
           </Link>
         </div>
       </div>
-      <div className="ml-1.5 shrink-0 whitespace-nowrap text-right">
-        <div className="font-mono text-[14px] font-normal text-foreground tabular-nums">
-          <Sensitive>{fmtMoney(account.balance, account.balanceCurrency)}</Sensitive>
-        </div>
-        <div
-          className={cn(
-            'mt-0.5 text-[11px]',
-            showPct ? (positive ? 'text-pos' : 'text-neg') : 'text-transparent',
-          )}
-          aria-hidden={!showPct || undefined}
-        >
-          {showPct ? (
-            <Sensitive>{`${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`}</Sensitive>
-          ) : (
-            ' '
-          )}
-        </div>
-      </div>
+      <Sensitive
+        className={cn(
+          'ml-1.5 flex shrink-0 flex-col justify-center whitespace-nowrap text-right',
+          visible && 'h-10',
+        )}
+      >
+        <span className="font-mono text-[14px] font-normal text-foreground tabular-nums">
+          {fmtMoney(account.balance, account.balanceCurrency)}
+        </span>
+        {showPct && (
+          <span className={cn('mt-0.5 text-[11px]', positive ? 'text-pos' : 'text-neg')}>
+            {`${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`}
+          </span>
+        )}
+      </Sensitive>
     </div>
   )
 }
