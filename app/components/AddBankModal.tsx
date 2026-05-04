@@ -736,7 +736,7 @@ function BankPanel({ holderId }: { holderId: string }) {
 
       {popular.length > 0 && (
         <div>
-          <p className="mb-1.5 text-11 font-semibold uppercase tracking-wider text-muted-foreground">
+          <p className="mb-1.5 text-11 font-semibold uppercase tracking-eyebrow text-muted-foreground">
             Popular
           </p>
           <div className="grid grid-cols-2 gap-2">
@@ -759,7 +759,7 @@ function BankPanel({ holderId }: { holderId: string }) {
       )}
 
       <div>
-        <p className="mb-1.5 text-11 font-semibold uppercase tracking-wider text-muted-foreground">
+        <p className="mb-1.5 text-11 font-semibold uppercase tracking-eyebrow text-muted-foreground">
           All banks
         </p>
         <Select value={selected} onChange={(e) => setSelected(e.target.value)}>

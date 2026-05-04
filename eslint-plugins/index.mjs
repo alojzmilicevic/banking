@@ -312,9 +312,6 @@ const preferDesignTokenClass = {
             }
           }
           return
-        case 'CallExpression':
-          node.arguments.forEach(walkClassNode)
-          return
       }
     }
 

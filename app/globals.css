@@ -43,6 +43,7 @@
 
   /* ── Status surfaces ────────────────────────────────────────── */
   --color-error-bg: oklch(28% 0.10 25);
+  --color-error-bg-soft: rgba(255, 140, 140, 0.04);
   --color-error-border: oklch(50% 0.13 25);
   --color-error-foreground: oklch(85% 0.06 25);
 

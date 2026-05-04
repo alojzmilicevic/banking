@@ -58,7 +58,7 @@ export function AccountSettingsModal({
       {account && connection && (
         <div className="flex flex-col gap-3">
           <div className="rounded-12 border border-border-subtle bg-white/3 p-3">
-            <div className="text-11 uppercase tracking-wider text-text-faint">Current balance</div>
+            <div className="text-11 uppercase tracking-eyebrow text-text-faint">Current balance</div>
             <div className="mt-1 font-mono text-20 font-light tabular-nums">
               <Sensitive>{fmtMoney(account.balance, account.balanceCurrency)}</Sensitive>
             </div>
@@ -82,8 +82,8 @@ export function AccountSettingsModal({
           </div>
 
           {/* Destructive zone */}
-          <div className="mt-2 flex flex-col gap-2 rounded-12 border border-error-border bg-[rgba(255,140,140,0.04)] p-3">
-            <p className="text-11 uppercase tracking-wider text-text-faint">Disconnect bank</p>
+          <div className="mt-2 flex flex-col gap-2 rounded-12 border border-error-border bg-error-bg-soft p-3">
+            <p className="text-11 uppercase tracking-eyebrow text-text-faint">Disconnect bank</p>
             <p className="text-12 text-muted-foreground">
               Removes <strong>{connection.label ?? connection.providerId}</strong> and all of its
               accounts (transactions and history included). Re-link any time under <em>Add bank</em>{' '}

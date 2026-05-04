@@ -54,17 +54,23 @@ function useStorage<T>(
     [storage, key, type],
   )
 
-  const snapshotRef = useRef<T>(initialValue)
+  const lastRawRef = useRef<string | null | undefined>(undefined)
+  const valueRef = useRef<T>(initialValue)
   const getSnapshot = useCallback((): T => {
-    const currentValue = extractValue(key, initialValue, storage!)
-    const currentJson = JSON.stringify(currentValue)
-    const cachedJson = JSON.stringify(snapshotRef.current)
-
-    if (currentJson !== cachedJson) {
-      snapshotRef.current = currentValue
+    if (!storage) return initialValue
+    const raw = storage.getItem(key)
+    if (raw === lastRawRef.current) return valueRef.current
+    lastRawRef.current = raw
+    if (raw === null) {
+      valueRef.current = initialValue
+    } else {
+      try {
+        valueRef.current = JSON.parse(raw) as T
+      } catch {
+        valueRef.current = initialValue
+      }
     }
-
-    return snapshotRef.current
+    return valueRef.current
   }, [storage, key, initialValue])
 
   const getServerSnapshot = useCallback((): T => {
@@ -112,13 +118,3 @@ function isSetValueCallback<T>(
   return typeof thing === 'function'
 }
 
-function extractValue<T>(key: string, initialValue: T, storage: Storage): T {
-  try {
-    const item = storage.getItem(key)
-
-    if (item !== null) {
-      return JSON.parse(item)
-    }
-  } catch {}
-  return initialValue
-}
