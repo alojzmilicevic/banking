@@ -10,6 +10,7 @@
 import Link from 'next/link'
 import type { DashboardAccount } from '@/lib/api/dashboard'
 import { fmtMoney, shortProduct } from '@/lib/format'
+import { Sensitive } from '@/lib/sensitive-data'
 
 function accountLabel(a: DashboardAccount): string {
   return a.details || a.product || a.name || a.iban || a.id
@@ -79,15 +80,17 @@ export default function SidebarAccountRow({
       </div>
       <div className="ml-1.5 shrink-0 whitespace-nowrap text-right">
         <div className="font-mono text-[14px] font-normal text-foreground tabular-nums">
-          {fmtMoney(account.balance, account.balanceCurrency)}
+          <Sensitive>{fmtMoney(account.balance, account.balanceCurrency)}</Sensitive>
         </div>
         <div
           className="mt-0.5 text-[11px]"
           style={{ color: positive ? 'var(--color-pos)' : 'var(--color-neg)' }}
         >
-          {pct != null
-            ? `${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`
-            : '—'}
+          {pct != null ? (
+            <Sensitive>{`${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`}</Sensitive>
+          ) : (
+            '—'
+          )}
         </div>
       </div>
     </div>

@@ -22,6 +22,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { ChevronDown, Plus } from 'lucide-react'
 import type { DashboardAccount, DashboardHolder } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
+import { Sensitive } from '@/lib/sensitive-data'
 import { holderBg, holderBorder } from '@/lib/holders'
 import SidebarAccountRow from './SidebarAccountRow'
 
@@ -78,15 +79,17 @@ export default function PersonSection({
             className="font-mono text-[16px] font-light text-foreground tabular-nums"
             style={{ letterSpacing: '-0.02em' }}
           >
-            {fmtMoneyCompact(holder.total)}
+            <Sensitive>{fmtMoneyCompact(holder.total)}</Sensitive>
           </div>
           {holder.change30d && (
             <div
               className="mt-px text-[11px]"
               style={{ color: holder.change30d.absolute >= 0 ? 'var(--color-pos)' : 'var(--color-neg)' }}
             >
-              {holder.change30d.absolute >= 0 ? '+' : ''}
-              {fmtMoneyCompact(Math.abs(holder.change30d.absolute))}
+              <Sensitive>
+                {holder.change30d.absolute >= 0 ? '+' : ''}
+                {fmtMoneyCompact(Math.abs(holder.change30d.absolute))}
+              </Sensitive>
             </div>
           )}
         </div>

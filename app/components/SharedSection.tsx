@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { ChevronDown, Users } from 'lucide-react'
 import type { DashboardAccount } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
+import { Sensitive } from '@/lib/sensitive-data'
 import { SHARED_META } from '@/lib/holders'
 import SidebarAccountRow from './SidebarAccountRow'
 
@@ -73,14 +74,16 @@ export default function SharedSection({
             className="font-mono text-[16px] font-light text-foreground tabular-nums"
             style={{ letterSpacing: '-0.02em' }}
           >
-            {fmtMoneyCompact(total)}
+            <Sensitive>{fmtMoneyCompact(total)}</Sensitive>
           </div>
           <div
             className="mt-px text-[11px]"
             style={{ color: delta30 >= 0 ? 'var(--color-pos)' : 'var(--color-neg)' }}
           >
-            {delta30 >= 0 ? '+' : ''}
-            {fmtMoneyCompact(Math.abs(delta30))}
+            <Sensitive>
+              {delta30 >= 0 ? '+' : ''}
+              {fmtMoneyCompact(Math.abs(delta30))}
+            </Sensitive>
           </div>
         </div>
         <button

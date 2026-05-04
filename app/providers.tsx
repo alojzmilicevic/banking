@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { useState, type ReactNode } from 'react'
+import { SensitiveDataProvider } from '@/lib/sensitive-data'
 
 export function Providers({ children }: { children: ReactNode }) {
   // useState so the client survives across renders but isn't shared across
@@ -23,7 +24,7 @@ export function Providers({ children }: { children: ReactNode }) {
   )
   return (
     <QueryClientProvider client={client}>
-      {children}
+      <SensitiveDataProvider>{children}</SensitiveDataProvider>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   )

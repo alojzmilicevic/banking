@@ -5,6 +5,7 @@
 // now — Topbar doesn't need to know how to map a view key to a name.
 
 import { fmtMoney } from '@/lib/format'
+import { Sensitive, SensitiveToggle } from '@/lib/sensitive-data'
 import PeriodTabs, { type Period } from './PeriodTabs'
 
 export default function Topbar({
@@ -44,20 +45,24 @@ export default function Topbar({
             className="font-mono text-[32px] font-light text-foreground tabular-nums"
             style={{ letterSpacing: '-0.03em' }}
           >
-            {total != null ? fmtMoney(total, currency) : '—'}
+            <Sensitive>{total != null ? fmtMoney(total, currency) : '—'}</Sensitive>
           </span>
           {delta != null && (
             <span
               className="text-[14px] font-medium"
               style={{ color: positive ? 'var(--color-pos)' : 'var(--color-neg)' }}
             >
-              {positive ? '+' : ''}
-              {fmtMoney(delta, currency)}
+              <Sensitive>
+                {positive ? '+' : ''}
+                {fmtMoney(delta, currency)}
+              </Sensitive>
               {showPct && (
                 <span className="text-text-faint">
                   {' · '}
-                  {positive ? '+' : '−'}
-                  {Math.abs(pct!).toFixed(1)}%
+                  <Sensitive>
+                    {positive ? '+' : '−'}
+                    {Math.abs(pct!).toFixed(1)}%
+                  </Sensitive>
                 </span>
               )}
             </span>
@@ -65,7 +70,10 @@ export default function Topbar({
         </div>
       </div>
 
-      <PeriodTabs value={period} onChange={onPeriodChange} />
+      <div className="flex items-center gap-2">
+        <SensitiveToggle />
+        <PeriodTabs value={period} onChange={onPeriodChange} />
+      </div>
     </div>
   )
 }

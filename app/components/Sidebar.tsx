@@ -11,6 +11,7 @@ import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
+import { Sensitive } from '@/lib/sensitive-data'
 import { COMBINED_META, SHARED_META } from '@/lib/holders'
 import PersonSection from './PersonSection'
 import SharedSection from './SharedSection'
@@ -166,7 +167,7 @@ export default function Sidebar({
               {v.label}
               {v.key !== 'all' && (
                 <span className="ml-auto font-mono text-[12px] text-text-faint">
-                  {fmtMoneyCompact(v.total)}
+                  <Sensitive>{fmtMoneyCompact(v.total)}</Sensitive>
                 </span>
               )}
             </button>

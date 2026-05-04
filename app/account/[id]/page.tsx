@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, desc, eq } from 'drizzle-orm'
 import { accounts, balances, connections, db, transactions } from '@/lib/db/client'
+import { Sensitive } from '@/lib/sensitive-data'
 import { Card, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -20,7 +21,9 @@ function fmtAmount(amount: number, currency: string) {
   })
   return (
     <span className={cls}>
-      {formatted} {currency}
+      <Sensitive>
+        {formatted} {currency}
+      </Sensitive>
     </span>
   )
 }
