@@ -7,6 +7,8 @@
 
 export const ACCOUNT_TYPE = {
   ISK: 'INVESTERINGSSPARKONTO',
+  AF: 'AKTIEFONDKONTO',
+  CACC: 'CACC',
 } as const
 
 export type KnownAccountType = (typeof ACCOUNT_TYPE)[keyof typeof ACCOUNT_TYPE]
