@@ -8,7 +8,7 @@
 // topbar/summary totals.
 
 import Link from 'next/link'
-import { ACCOUNT_TYPE } from '@/lib/account-types'
+import { tracksPerformance } from '@/lib/account-types'
 import type { DashboardAccount } from '@/lib/api/dashboard'
 import { fmtMoney, shortProduct } from '@/lib/format'
 import { Sensitive } from '@/lib/sensitive-data'
@@ -30,8 +30,7 @@ export default function SidebarAccountRow({
   const visible = !account.excludedFromTotal
   const pct = account.change30d?.pct
   const positive = (account.change30d?.absolute ?? 0) >= 0
-  const isIsk = account.accountType === ACCOUNT_TYPE.ISK
-  const showPct = isIsk && pct != null
+  const showPct = tracksPerformance(account.accountType) && pct != null
 
   return (
     <div
