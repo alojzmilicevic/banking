@@ -29,6 +29,7 @@ import {
 } from '@/lib/queries'
 import type { DashboardResponse } from '@/lib/api/dashboard'
 import { holderTint } from '@/lib/holders'
+import { type Period } from './PeriodTabs'
 
 type Provider = 'avanza' | 'eb'
 
@@ -61,7 +62,7 @@ export function AddBankModal({
   onClose: () => void
   onConnected?: () => void
   initialHolderId?: string
-  period: string
+  period: Period
 }) {
   const holdersQ = useHolders()
   const holders = useMemo(() => holdersQ.data ?? [], [holdersQ.data])

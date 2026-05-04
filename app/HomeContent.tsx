@@ -61,10 +61,14 @@ export function HomeContent({
   const disconnect = useDisconnect()
   const toggleExclude = useToggleExclude()
   const bulkToggleExclude = useBulkToggleExclude()
-  // Track which connection we're currently syncing so the popover row
-  // can show a spinner. The mutation only exposes a single isPending
-  // bool, so we stash the in-flight ID alongside it.
-  const [syncingConnectionId, setSyncingConnectionId] = useState<string | null>(null)
+  // Track which connections are currently syncing so the popover rows
+  // can each show a spinner. A Set (not a single ID) because the user
+  // can fire multiple per-bank syncs in flight; the mutation hook only
+  // exposes one isPending bool, and onSettled fires per-mutate, so we
+  // add on click and remove in the per-call onSettled.
+  const [syncingConnectionIds, setSyncingConnectionIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  )
 
   const data = dashboard.data
 
@@ -100,9 +104,20 @@ export function HomeContent({
   }
 
   function onSyncConnection(connectionId: string) {
-    setSyncingConnectionId(connectionId)
+    setSyncingConnectionIds((prev) => {
+      if (prev.has(connectionId)) return prev
+      const next = new Set(prev)
+      next.add(connectionId)
+      return next
+    })
     syncConnection.mutate(connectionId, {
-      onSettled: () => setSyncingConnectionId(null),
+      onSettled: () =>
+        setSyncingConnectionIds((prev) => {
+          if (!prev.has(connectionId)) return prev
+          const next = new Set(prev)
+          next.delete(connectionId)
+          return next
+        }),
     })
   }
 
@@ -198,7 +213,7 @@ export function HomeContent({
               onToggleAccount={onToggleAccount}
               onDisconnectConnection={onDisconnectConnection}
               onSyncConnection={onSyncConnection}
-              syncingConnectionId={syncingConnectionId}
+              syncingConnectionIds={syncingConnectionIds}
               initialWidth={initialSidebarWidth}
             />
 

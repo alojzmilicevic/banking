@@ -4,7 +4,7 @@
 // measured offset — avoids the layoutId mount-flicker issue.
 
 import { motion } from 'motion/react'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 export type Period = '1W' | '1M' | '3M' | '1Y' | 'ALL'
 
@@ -26,13 +26,32 @@ export function PeriodTabs({
   const containerRef = useRef<HTMLDivElement>(null)
   const [pill, setPill] = useState<{ x: number; width: number } | null>(null)
 
-  useLayoutEffect(() => {
+  const measure = useCallback(() => {
     const btn = containerRef.current?.querySelector<HTMLButtonElement>(
       `[data-period="${value}"]`,
     )
     if (!btn) return
-    setPill({ x: btn.offsetLeft, width: btn.offsetWidth })
+    setPill((prev) => {
+      const next = { x: btn.offsetLeft, width: btn.offsetWidth }
+      if (prev && prev.x === next.x && prev.width === next.width) return prev
+      return next
+    })
   }, [value])
+
+  useLayoutEffect(() => {
+    measure()
+  }, [measure])
+
+  // Track container resizes — fonts loading late or a parent layout
+  // (e.g. sidebar drag) shifting button offsets shouldn't leave the pill
+  // stuck on its old measurement.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => measure())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [measure])
 
   return (
     <div

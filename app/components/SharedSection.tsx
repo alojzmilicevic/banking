@@ -27,14 +27,14 @@ export function SharedSection({
   onToggleAccount,
   onDisconnectConnection,
   onSyncConnection,
-  syncingConnectionId,
+  syncingConnectionIds,
 }: {
   accounts: DashboardAccount[]
   onToggleAll: () => void
   onToggleAccount: (a: DashboardAccount) => void
   onDisconnectConnection: (connectionId: string, label: string) => void
   onSyncConnection: (connectionId: string) => void
-  syncingConnectionId: string | null
+  syncingConnectionIds: ReadonlySet<string>
 }) {
   const meta = SHARED_META
   // Server bucket includes the dupe copies of joint accounts (so the
@@ -97,7 +97,7 @@ export function SharedSection({
           onToggleAccount={onToggleAccount}
           onDisconnectConnection={onDisconnectConnection}
           onSyncConnection={onSyncConnection}
-          syncingConnectionId={syncingConnectionId}
+          syncingConnectionIds={syncingConnectionIds}
         />
       </div>
 

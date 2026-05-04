@@ -42,7 +42,7 @@ export function PersonMenuPopover({
   onToggleAccount,
   onDisconnectConnection,
   onSyncConnection,
-  syncingConnectionId,
+  syncingConnectionIds,
 }: {
   triggerLabel: string
   accounts: DashboardAccount[]
@@ -52,7 +52,7 @@ export function PersonMenuPopover({
   onToggleAccount: (a: DashboardAccount) => void
   onDisconnectConnection: (connectionId: string, label: string) => void
   onSyncConnection: (connectionId: string) => void
-  syncingConnectionId: string | null
+  syncingConnectionIds: ReadonlySet<string>
 }) {
   const [open, setOpen] = useState(false)
   const groups = useMemo(() => groupByConnection(accounts), [accounts])
@@ -91,7 +91,7 @@ export function PersonMenuPopover({
                   {groups.map((g) => {
                     const connected = g.connection.status !== 'expired' && !g.connection.lastSyncError
                     const label = g.connection.label ?? g.connection.providerId
-                    const syncing = syncingConnectionId === g.connection.id
+                    const syncing = syncingConnectionIds.has(g.connection.id)
                     return (
                       <div
                         key={g.connection.id}

@@ -50,3 +50,6 @@ export function holderBorder(color: string): string {
 export function holderTint(color: string): string {
   return color.replace(/\)$/, ' / 0.25)')
 }
+export function holderAvatarBg(color: string): string {
+  return color.replace(/\)$/, ' / 0.20)')
+}

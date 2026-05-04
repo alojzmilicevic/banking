@@ -11,6 +11,7 @@ import { tracksPerformance } from '@/lib/account-types'
 import type { DashboardAccount } from '@/lib/api/dashboard'
 import { fmtMoney, shortProduct } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
+import { holderAvatarBg } from '@/lib/holders'
 import { cn } from '@/lib/utils'
 
 function accountLabel(a: DashboardAccount): string {
@@ -41,7 +42,7 @@ export function SidebarAccountRow({
       <div
         style={
           {
-            '--avatar-bg': color.replace(/\)$/, ' / 0.2)'),
+            '--avatar-bg': holderAvatarBg(color),
             '--avatar-color': color,
           } as React.CSSProperties
         }

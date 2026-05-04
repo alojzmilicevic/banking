@@ -361,7 +361,6 @@ function MobileAccountRow({
       <div className="min-w-0 flex-1">
         <div className="truncate text-14 font-medium leading-[1.2] text-foreground">
           <Link href={`/account/${account.id}`} className="text-foreground hover:underline">
-
             {accountLabel(account)}
           </Link>
         </div>

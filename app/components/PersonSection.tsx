@@ -35,7 +35,7 @@ export function PersonSection({
   onToggleAccount,
   onDisconnectConnection,
   onSyncConnection,
-  syncingConnectionId,
+  syncingConnectionIds,
 }: {
   holder: DashboardHolder
   onToggleAll: () => void
@@ -43,7 +43,7 @@ export function PersonSection({
   onToggleAccount: (a: DashboardAccount) => void
   onDisconnectConnection: (connectionId: string, label: string) => void
   onSyncConnection: (connectionId: string) => void
-  syncingConnectionId: string | null
+  syncingConnectionIds: ReadonlySet<string>
 }) {
   // Server has already deduped joint accounts (each appears in exactly
   // one bucket), but we still hide possibleDuplicateOf rows in case the
@@ -109,7 +109,7 @@ export function PersonSection({
           onToggleAccount={onToggleAccount}
           onDisconnectConnection={onDisconnectConnection}
           onSyncConnection={onSyncConnection}
-          syncingConnectionId={syncingConnectionId}
+          syncingConnectionIds={syncingConnectionIds}
         />
       </div>
 
