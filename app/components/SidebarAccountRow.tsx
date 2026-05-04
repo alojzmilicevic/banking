@@ -83,18 +83,23 @@ export default function SidebarAccountRow({
         <div className="font-mono text-[14px] font-normal text-foreground tabular-nums">
           <Sensitive>{fmtMoney(account.balance, account.balanceCurrency)}</Sensitive>
         </div>
-        {isIsk && (
-          <div
-            className="mt-0.5 text-[11px]"
-            style={{ color: positive ? 'var(--color-pos)' : 'var(--color-neg)' }}
-          >
-            {pct != null ? (
-              <Sensitive>{`${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`}</Sensitive>
-            ) : (
-              '—'
-            )}
-          </div>
-        )}
+        <div
+          className="mt-0.5 text-[11px]"
+          style={{
+            color: isIsk
+              ? positive
+                ? 'var(--color-pos)'
+                : 'var(--color-neg)'
+              : 'transparent',
+          }}
+          aria-hidden={!isIsk || undefined}
+        >
+          {isIsk && pct != null ? (
+            <Sensitive>{`${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`}</Sensitive>
+          ) : (
+            ' '
+          )}
+        </div>
       </div>
     </div>
   )
