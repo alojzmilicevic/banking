@@ -1,4 +1,3 @@
-'use client'
 import * as React from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -37,10 +36,9 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
         role="dialog"
         aria-modal="true"
         className={cn(
-          'w-full max-w-md rounded-[20px] border border-border p-[28px_32px] text-card-foreground shadow-aloma-lg',
+          'w-full max-w-md rounded-20 border border-border bg-elevated px-8 py-7 text-card-foreground shadow-aloma-lg',
           className,
         )}
-        style={{ background: 'var(--color-elevated)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -51,7 +49,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
             aria-label="Close"
             className="-mr-1 -mt-1 rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </button>
         </div>
         {children}

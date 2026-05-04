@@ -1,4 +1,3 @@
-'use client'
 // Sidebar block for accounts whose IBAN appears under multiple holders'
 // connections, or whose connection is explicitly linked to >1 holder.
 // The API tags these with `bucket: { kind: 'shared' }` and surfaces them
@@ -16,11 +15,12 @@ import { motion, AnimatePresence } from 'motion/react'
 import { ChevronDown, Users } from 'lucide-react'
 import type { DashboardAccount } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
-import { Sensitive } from '@/lib/sensitive-data'
+import { Sensitive } from '@/components/sensitive-data'
 import { SHARED_META } from '@/lib/holders'
-import SidebarAccountRow from './SidebarAccountRow'
+import { cn } from '@/lib/utils'
+import { SidebarAccountRow } from './SidebarAccountRow'
 
-export default function SharedSection({
+export function SharedSection({
   accounts,
   onToggleAll,
   onOpenAccountSettings,
@@ -46,40 +46,36 @@ export default function SharedSection({
 
   return (
     <div
-      className="mb-3 rounded-[14px] border p-[16px_18px]"
-      style={{ background: meta.bg, borderColor: meta.border }}
+      style={{ '--shr-bg': meta.bg, '--shr-border': meta.border } as React.CSSProperties}
+      className="mb-3 rounded-14 border border-(--shr-border) bg-(--shr-bg) px-4.5 py-4"
     >
       {/* Header */}
-      <div className="mb-[14px] flex items-center gap-[10px]">
+      <div className="mb-3.5 flex items-center gap-2.5">
         <div
-          className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full"
-          style={{
-            background: `${meta.color}22`,
-            color: meta.color,
-            border: `1.5px solid ${meta.color}55`,
-          }}
+          style={
+            {
+              '--avatar-bg': `${meta.color}22`,
+              '--avatar-color': meta.color,
+              '--avatar-border': `${meta.color}55`,
+            } as React.CSSProperties
+          }
+          className="flex size-8.5 shrink-0 items-center justify-center rounded-full border-thin border-(--avatar-border) bg-(--avatar-bg) text-(--avatar-color)"
         >
-          <Users className="h-[15px] w-[15px]" />
+          <Users className="size-3.75" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-medium text-foreground">{meta.label}</div>
-          <div className="mt-px text-[11px] text-text-faint">
+          <div className="truncate text-14 font-medium text-foreground">{meta.label}</div>
+          <div className="mt-px text-11 text-text-faint">
             {visibleAccounts.length}
             {hiddenAccounts.length > 0 ? ` of ${canonicals.length}` : ''}{' '}
             {canonicals.length === 1 ? 'account' : 'accounts'}
           </div>
         </div>
         <div className="shrink-0 whitespace-nowrap text-right">
-          <div
-            className="font-mono text-[16px] font-light text-foreground tabular-nums"
-            style={{ letterSpacing: '-0.02em' }}
-          >
+          <div className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
             <Sensitive>{fmtMoneyCompact(total)}</Sensitive>
           </div>
-          <div
-            className="mt-px text-[11px]"
-            style={{ color: delta30 >= 0 ? 'var(--color-pos)' : 'var(--color-neg)' }}
-          >
+          <div className={cn('mt-px text-11', delta30 >= 0 ? 'text-pos' : 'text-neg')}>
             <Sensitive>
               {delta30 >= 0 ? '+' : ''}
               {fmtMoneyCompact(Math.abs(delta30))}
@@ -91,12 +87,10 @@ export default function SharedSection({
           onClick={onToggleAll}
           aria-label={allHidden ? 'Show all shared accounts' : 'Hide all shared accounts'}
           title={allHidden ? 'Show all' : 'Hide all'}
-          className="ml-1 shrink-0 rounded-[7px] border px-[8px] py-[5px] text-[11px] transition-colors"
-          style={{
-            background: 'rgba(255,255,255,0.05)',
-            borderColor: 'var(--color-border)',
-            color: allHidden ? 'var(--color-text-faint)' : 'var(--color-muted-foreground)',
-          }}
+          className={cn(
+            'ml-1 shrink-0 rounded-7 border border-border bg-white/5 px-2 py-1.25 text-11 transition-colors',
+            allHidden ? 'text-text-faint' : 'text-muted-foreground',
+          )}
         >
           {allHidden ? 'Show' : 'Hide'}
         </button>
@@ -113,7 +107,7 @@ export default function SharedSection({
           />
         ))}
         {visibleAccounts.length === 0 && hiddenAccounts.length > 0 && (
-          <p className="px-1 py-2 text-[12px] text-text-faint">All shared accounts hidden.</p>
+          <p className="px-1 py-2 text-12 text-text-faint">All shared accounts hidden.</p>
         )}
       </div>
 
@@ -124,10 +118,10 @@ export default function SharedSection({
             type="button"
             onClick={() => setShowHidden((v) => !v)}
             aria-expanded={showHidden}
-            className="flex w-full items-center gap-1.5 rounded-[8px] px-[10px] py-[6px] text-left text-[11px] text-text-faint transition-colors hover:bg-[rgba(255,255,255,0.04)] hover:text-muted-foreground"
+            className="flex w-full items-center gap-1.5 rounded-8 px-2.5 py-1.5 text-left text-11 text-text-faint transition-colors hover:bg-white/4 hover:text-muted-foreground"
           >
             <ChevronDown
-              className={`h-[14px] w-[14px] transition-transform ${showHidden ? '' : '-rotate-90'}`}
+              className={`size-3.5 transition-transform ${showHidden ? '' : '-rotate-90'}`}
             />
             Hidden ({hiddenAccounts.length})
           </button>

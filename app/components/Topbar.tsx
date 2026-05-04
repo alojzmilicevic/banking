@@ -5,10 +5,11 @@
 // now — Topbar doesn't need to know how to map a view key to a name.
 
 import { fmtMoney } from '@/lib/format'
-import { Sensitive, SensitiveToggle } from '@/lib/sensitive-data'
-import PeriodTabs, { type Period } from './PeriodTabs'
+import { cn } from '@/lib/utils'
+import { Sensitive, SensitiveToggle } from '@/components/sensitive-data'
+import { PeriodTabs, type Period } from './PeriodTabs'
 
-export default function Topbar({
+export function Topbar({
   label,
   total,
   delta,
@@ -29,29 +30,17 @@ export default function Topbar({
   const showPct = pct != null && Number.isFinite(pct) && Math.abs(pct) <= 500
 
   return (
-    <div
-      className="flex shrink-0 items-center justify-between border-b px-[28px] py-[16px]"
-      style={{
-        background: 'var(--color-background)',
-        borderColor: 'var(--color-border-subtle)',
-      }}
-    >
+    <div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-background px-7 py-4">
       <div>
-        <div className="mb-0.5 text-[11px] font-medium uppercase tracking-[0.08em] text-text-faint">
+        <div className="mb-0.5 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
           {label}
         </div>
         <Sensitive className="flex items-baseline gap-3">
-          <span
-            className="font-mono text-[32px] font-light text-foreground tabular-nums"
-            style={{ letterSpacing: '-0.03em' }}
-          >
+          <span className="font-mono text-30 font-light tracking-hero text-foreground tabular-nums">
             {total != null ? fmtMoney(total, currency) : '—'}
           </span>
           {delta != null && (
-            <span
-              className="text-[14px] font-medium"
-              style={{ color: positive ? 'var(--color-pos)' : 'var(--color-neg)' }}
-            >
+            <span className={cn('text-14 font-medium', positive ? 'text-pos' : 'text-neg')}>
               {positive ? '+' : ''}
               {fmtMoney(delta, currency)}
               {showPct && (

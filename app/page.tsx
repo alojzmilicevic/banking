@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import HomeContent from './HomeContent'
+import { HomeContent } from './HomeContent'
 import {
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,

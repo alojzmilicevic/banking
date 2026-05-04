@@ -9,15 +9,15 @@
 // toggles + the combined-line toggle in the sidebar.
 
 import { useEffect, useState } from 'react'
-import AccountSettingsModal from './components/AccountSettingsModal'
-import AddBankModal from './components/AddBankModal'
-import DashboardSkeleton from './components/DashboardSkeleton'
-import MobileDashboardSkeleton from './components/MobileDashboardSkeleton'
-import MobileLayout from './components/MobileLayout'
-import Sidebar, { type ViewSelection } from './components/Sidebar'
-import Timeline, { type TimelineSnapshot } from './components/Timeline'
-import Topbar from './components/Topbar'
-import SummaryCards, { buildSummaryRows } from './components/SummaryCards'
+import { AccountSettingsModal } from './components/AccountSettingsModal'
+import { AddBankModal } from './components/AddBankModal'
+import { DashboardSkeleton } from './components/DashboardSkeleton'
+import { MobileDashboardSkeleton } from './components/MobileDashboardSkeleton'
+import { MobileLayout } from './components/MobileLayout'
+import { Sidebar, type ViewSelection } from './components/Sidebar'
+import { Timeline, type TimelineSnapshot } from './components/Timeline'
+import { Topbar } from './components/Topbar'
+import { SummaryCards, buildSummaryRows } from './components/SummaryCards'
 import { type Period } from './components/PeriodTabs'
 import { Alert } from '@/components/ui/alert'
 import {
@@ -39,7 +39,7 @@ const EMPTY_SNAP: TimelineSnapshot = {
   changePct: null,
 }
 
-export default function HomeContent({
+export function HomeContent({
   initialError,
   initialSidebarWidth,
 }: {
@@ -198,7 +198,7 @@ export default function HomeContent({
                 onPeriodChange={setPeriod}
               />
 
-              <div className="flex flex-1 flex-col gap-5 overflow-hidden p-[24px_28px]">
+              <div className="flex flex-1 flex-col gap-5 overflow-hidden px-7 py-6">
                 {topError && (
                   <Alert>
                     <button
@@ -250,7 +250,7 @@ export default function HomeContent({
               failed initial /api/dashboard fetch would leave the user
               staring at an infinite shimmer with no way to recover. */}
           {topError && (
-            <div className="fixed left-1/2 top-4 z-50 w-[min(560px,calc(100%-32px))] -translate-x-1/2">
+            <div className="fixed left-1/2 top-4 z-50 w-[min(35rem,calc(100%-2rem))] -translate-x-1/2">
               <Alert>
                 <button
                   type="button"

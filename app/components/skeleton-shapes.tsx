@@ -5,14 +5,11 @@ import { useId } from 'react'
 // no clickability.
 export function PeriodTabsShape() {
   return (
-    <div
-      className="inline-flex items-center gap-0.5 rounded-[9px] border border-border-subtle p-[3px]"
-      style={{ background: 'var(--color-elevated)' }}
-    >
+    <div className="inline-flex items-center gap-0.5 rounded-9 border border-border-subtle bg-elevated p-0.75">
       {['1W', '1M', '3M', '1Y', 'All'].map((label) => (
         <span
           key={label}
-          className="rounded-[7px] px-[13px] py-[5px] text-xs font-medium text-text-faint"
+          className="rounded-7 px-3.25 py-1.25 text-xs font-medium text-text-faint"
         >
           {label}
         </span>
@@ -29,9 +26,9 @@ export function PeriodTabsShape() {
 export function ChartShape() {
   const gradientId = `skeleton-area-${useId()}`
   return (
-    <div className="relative h-full w-full overflow-hidden">
+    <div className="relative size-full overflow-hidden">
       <svg
-        className="absolute inset-0 h-full w-full animate-pulse motion-reduce:animate-none"
+        className="absolute inset-0 size-full animate-pulse motion-reduce:animate-none"
         preserveAspectRatio="none"
         viewBox="0 0 400 200"
       >

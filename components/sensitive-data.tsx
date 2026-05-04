@@ -6,16 +6,12 @@
 // peek a single number without flipping the switch.
 //
 // Default is hidden. SSR always renders hidden so the first paint matches
-// no-localStorage clients; useEffect rehydrates the persisted choice.
+// no-localStorage clients; useSyncExternalStore rehydrates the persisted
+// choice on mount.
 
 import { Eye, EyeOff } from 'lucide-react'
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from 'react'
+import { createContext, useContext, useState, type ReactNode } from 'react'
+import { useLocalStorage } from '@/hooks/use-local-storage'
 import { cn } from '@/lib/utils'
 
 type Ctx = {
@@ -31,26 +27,10 @@ const SensitiveDataContext = createContext<Ctx>({
 const STORAGE_KEY = 'aloma:hide-sensitive'
 
 export function SensitiveDataProvider({ children }: { children: ReactNode }) {
-  const [hidden, setHidden] = useState(true)
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY)
-      if (stored === '0') setHidden(false)
-      else if (stored === '1') setHidden(true)
-    } catch {
-      // localStorage unavailable (Safari private mode etc.) — keep default.
-    }
-  }, [])
+  const [hidden, setHidden] = useLocalStorage<boolean>(STORAGE_KEY, true)
 
   function toggle() {
-    setHidden((v) => {
-      const next = !v
-      try {
-        window.localStorage.setItem(STORAGE_KEY, next ? '1' : '0')
-      } catch {}
-      return next
-    })
+    setHidden((v) => !v)
   }
 
   return (
@@ -64,13 +44,7 @@ export function useSensitiveData(): Ctx {
   return useContext(SensitiveDataContext)
 }
 
-export function Sensitive({
-  children,
-  className,
-}: {
-  children: ReactNode
-  className?: string
-}) {
+export function Sensitive({ children, className }: { children: ReactNode; className?: string }) {
   const { hidden } = useSensitiveData()
   const [peeking, setPeeking] = useState(false)
   const blurred = hidden && !peeking
@@ -85,7 +59,7 @@ export function Sensitive({
         // box without affecting layout — peek is finicky on small numbers.
         "relative inline-block transition-[filter] duration-150 ease-out before:absolute before:-inset-1 before:content-['']",
         hidden && 'cursor-pointer touch-none select-none',
-        blurred && '[filter:blur(0.4em)]',
+        blurred && 'filter-[blur(0.4em)]',
         className,
       )}
       onPointerDown={(e) => {
@@ -118,11 +92,11 @@ export function SensitiveToggle({ className }: { className?: string }) {
       title={hidden ? 'Show amounts' : 'Hide amounts'}
       aria-pressed={hidden}
       className={cn(
-        'flex h-[34px] w-[34px] items-center justify-center rounded-full text-text-faint transition-colors hover:bg-[rgba(255,255,255,0.06)]',
+        'flex size-8.5 items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6',
         className,
       )}
     >
-      <Icon className="h-[18px] w-[18px]" />
+      <Icon className="size-4.5" />
     </button>
   )
 }
