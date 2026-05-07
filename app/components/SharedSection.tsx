@@ -18,6 +18,7 @@ import { fmtMoneyCompact } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { SHARED_META } from '@/lib/holders'
 import { cn } from '@/lib/utils'
+import { HolderAvatar } from './HolderAvatar'
 import { PersonMenuPopover } from './PersonMenuPopover'
 import { SidebarAccountRow } from './SidebarAccountRow'
 
@@ -25,16 +26,10 @@ export function SharedSection({
   accounts,
   onToggleAll,
   onToggleAccount,
-  onDisconnectConnection,
-  onSyncConnection,
-  syncingConnectionIds,
 }: {
   accounts: DashboardAccount[]
   onToggleAll: () => void
   onToggleAccount: (a: DashboardAccount) => void
-  onDisconnectConnection: (connectionId: string, label: string) => void
-  onSyncConnection: (connectionId: string) => void
-  syncingConnectionIds: ReadonlySet<string>
 }) {
   const meta = SHARED_META
   // Server bucket includes the dupe copies of joint accounts (so the
@@ -58,18 +53,9 @@ export function SharedSection({
     >
       {/* Header */}
       <div className="mb-3.5 flex items-center gap-2.5">
-        <div
-          style={
-            {
-              '--avatar-bg': `${meta.color}22`,
-              '--avatar-color': meta.color,
-              '--avatar-border': `${meta.color}55`,
-            } as React.CSSProperties
-          }
-          className="flex size-8.5 shrink-0 items-center justify-center rounded-full border-thin border-(--avatar-border) bg-(--avatar-bg) text-(--avatar-color)"
-        >
+        <HolderAvatar color={meta.color}>
           <Users className="size-3.75" />
-        </div>
+        </HolderAvatar>
         <div className="min-w-0 flex-1">
           <div className="truncate text-14 font-medium text-foreground">{meta.label}</div>
           <div className="mt-px text-11 text-text-faint">
@@ -95,9 +81,6 @@ export function SharedSection({
           allHidden={allHidden}
           onToggleAll={onToggleAll}
           onToggleAccount={onToggleAccount}
-          onDisconnectConnection={onDisconnectConnection}
-          onSyncConnection={onSyncConnection}
-          syncingConnectionIds={syncingConnectionIds}
         />
       </div>
 

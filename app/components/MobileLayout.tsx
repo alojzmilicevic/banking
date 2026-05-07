@@ -11,6 +11,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { Eye, EyeOff, Loader2, Plus, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
+import { IconButton } from '@/components/ui/icon-button'
 import { fmtMoney, fmtMoneyCompact, shortProduct } from '@/lib/format'
 import { Sensitive, SensitiveToggle } from '@/components/sensitive-data'
 import { COMBINED_META, SHARED_META } from '@/lib/holders'
@@ -45,7 +46,6 @@ export function MobileLayout({
   showCombined,
   visibleHolderIds,
   showShared,
-  onAddAccount,
   onToggleAccount,
   onSyncAll,
   syncingAll,
@@ -61,7 +61,6 @@ export function MobileLayout({
   showCombined: boolean
   visibleHolderIds: string[]
   showShared: boolean
-  onAddAccount: (holderId: string) => void
   onToggleAccount: (a: DashboardAccount) => void
   onSyncAll: () => void
   syncingAll: boolean
@@ -104,11 +103,6 @@ export function MobileLayout({
     { label: SHARED_META.label, val: dashboard.shared.total, color: SHARED_META.color },
   ]
 
-  // "+ Add account" defaults to the active person's section if one is
-  // selected; otherwise the first holder.
-  const addHolderId =
-    dashboard.holders.find((h) => h.id === view)?.id ?? dashboard.holders[0]?.id ?? ''
-
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden lg:hidden">
       {/* ── Top nav: logo + settings ───────────────────────────────── */}
@@ -118,28 +112,26 @@ export function MobileLayout({
           <span className="font-display text-18 tracking-display">aloma</span>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
+          <IconButton
             onClick={onSyncAll}
             disabled={syncingAll}
             aria-label="Sync all banks"
             title="Sync all banks"
-            className="flex size-8.5 items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6 hover:text-foreground disabled:opacity-50"
           >
             {syncingAll ? (
               <Loader2 className="size-4.5 animate-spin" />
             ) : (
               <RefreshCw className="size-4.5" />
             )}
-          </button>
+          </IconButton>
           <SensitiveToggle />
-          <button
-            type="button"
+          <Link
+            href="/settings"
             aria-label="Settings"
-            className="flex size-8.5 items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6"
+            className="flex size-8.5 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6 hover:text-foreground"
           >
             <SettingsIcon className="size-4.5" />
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -294,15 +286,13 @@ export function MobileLayout({
           )}
 
           <div className="px-4 pt-2.5">
-            <button
-              type="button"
-              onClick={() => addHolderId && onAddAccount(addHolderId)}
-              disabled={!addHolderId}
-              className="flex w-full items-center justify-center gap-2 rounded-12 border border-dashed border-white/12 px-4 py-3 text-14 text-text-faint transition-colors hover:border-input-border hover:text-foreground disabled:opacity-50"
+            <Link
+              href="/settings/connectors"
+              className="flex w-full items-center justify-center gap-2 rounded-12 border border-dashed border-white/12 px-4 py-3 text-14 text-text-faint transition-colors hover:border-input-border hover:text-foreground"
             >
               <Plus className="size-3.5" />
-              Add account
-            </button>
+              Manage connectors
+            </Link>
           </div>
         </div>
       </div>

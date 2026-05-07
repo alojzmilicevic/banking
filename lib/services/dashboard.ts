@@ -166,7 +166,34 @@ function buildAccount(
       validUntil: c.connection.validUntil,
       lastSyncedAt: c.connection.lastSyncedAt,
       lastSyncError: c.connection.lastSyncError,
+      ...extractAspsp(c.connection.providerId, c.connection.rawJson),
     },
+  }
+}
+
+// Pull aspspName/aspspCountry out of an EB connection's rawJson. The
+// callback flow stores `{ aspsp: { name, country } }`; the legacy import
+// path stored snake_case `{ aspsp_name, aspsp_country }`. Either is fine.
+// Returns nulls for non-EB providers and for malformed/legacy rawJson.
+function extractAspsp(
+  providerId: string,
+  rawJson: string | null,
+): { aspspName: string | null; aspspCountry: string | null } {
+  if (providerId !== 'enable-banking' || !rawJson) {
+    return { aspspName: null, aspspCountry: null }
+  }
+  try {
+    const raw = JSON.parse(rawJson) as {
+      aspsp?: { name?: string; country?: string }
+      aspsp_name?: string
+      aspsp_country?: string
+    }
+    return {
+      aspspName: raw.aspsp?.name ?? raw.aspsp_name ?? null,
+      aspspCountry: raw.aspsp?.country ?? raw.aspsp_country ?? null,
+    }
+  } catch {
+    return { aspspName: null, aspspCountry: null }
   }
 }
 

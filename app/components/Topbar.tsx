@@ -7,6 +7,7 @@
 import { Loader2, RefreshCw } from 'lucide-react'
 import { fmtMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { IconButton } from '@/components/ui/icon-button'
 import { Sensitive, SensitiveToggle } from '@/components/sensitive-data'
 import { PeriodTabs, type Period } from './PeriodTabs'
 
@@ -61,20 +62,19 @@ export function Topbar({
       </div>
 
       <div className="flex items-center gap-2">
-        <button
-          type="button"
+        <IconButton
+          size="lg"
           onClick={onSyncAll}
           disabled={syncingAll}
           aria-label="Sync all banks"
           title="Sync all banks"
-          className="flex size-9 cursor-pointer items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           {syncingAll ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <RefreshCw className="size-4" />
           )}
-        </button>
+        </IconButton>
         <SensitiveToggle />
         <PeriodTabs value={period} onChange={onPeriodChange} />
       </div>

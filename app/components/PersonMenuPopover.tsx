@@ -1,7 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo } from 'react'
-import { Eye, EyeOff, Link2Off, Loader2, Plus, RefreshCw } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import type { DashboardAccount, DashboardAccountConnection } from '@/lib/api/dashboard'
 import { fmtMoney } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
@@ -15,6 +16,20 @@ function accountLabel(a: DashboardAccount): string {
 
 function connectionLabel(c: DashboardAccountConnection): string {
   return c.label ?? c.providerId
+}
+
+type ConnectionState = 'healthy' | 'expired' | 'errored'
+
+function connectionState(c: DashboardAccountConnection): ConnectionState {
+  if (c.status === 'expired') return 'expired'
+  if (c.lastSyncError) return 'errored'
+  return 'healthy'
+}
+
+function statusText(state: ConnectionState): string | null {
+  if (state === 'expired') return 'Auth expired — manage in Settings'
+  if (state === 'errored') return 'Last sync failed — manage in Settings'
+  return null
 }
 
 interface ConnectionGroup {
@@ -36,69 +51,32 @@ function groupByConnection(accounts: DashboardAccount[]): ConnectionGroup[] {
   return Array.from(map.values())
 }
 
-function ConnectionRow({
-  group,
-  syncing,
-  onSync,
-  onDisconnect,
-}: {
-  group: ConnectionGroup
-  syncing: boolean
-  onSync: () => void
-  onDisconnect: () => void
-}) {
+// Connection row is a navigation target — clicking anywhere takes the
+// user to /settings/connectors where Sync / Reconnect / Disconnect live.
+// Keeping action affordance off this surface (no fake-button icons)
+// avoids the footgun of icons that look pressable but only navigate.
+function ConnectionRow({ group, onClose }: { group: ConnectionGroup; onClose: () => void }) {
   const label = connectionLabel(group.connection)
-  const connected = group.connection.status !== 'expired' && !group.connection.lastSyncError
+  const state = connectionState(group.connection)
+  const connected = state === 'healthy'
+  const sub = statusText(state)
   return (
-    <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
+    <Link
+      href="/settings/connectors"
+      onClick={onClose}
+      className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted"
+    >
       <BankIcon
         providerId={group.connection.providerId}
         label={group.connection.label}
         size="md"
         connected={connected}
       />
-      <div className="min-w-0 flex-1 truncate text-13 font-medium text-foreground">{label}</div>
-      <button
-        type="button"
-        onClick={onSync}
-        disabled={syncing}
-        title={`Sync ${label}`}
-        aria-label={`Sync ${label}`}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-text-faint transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-      >
-        {syncing ? (
-          <Loader2 className="size-3.5 animate-spin" />
-        ) : (
-          <RefreshCw className="size-3.5" />
-        )}
-      </button>
-      <button
-        type="button"
-        onClick={onDisconnect}
-        title={`Disconnect ${label}`}
-        aria-label={`Disconnect ${label}`}
-        className="flex size-7 shrink-0 items-center justify-center rounded-md text-text-faint transition-colors hover:bg-neg/10 hover:text-neg"
-      >
-        <Link2Off className="size-3.5" />
-      </button>
-    </div>
-  )
-}
-
-function AddBankRow({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Add bank"
-      title="Add bank"
-      className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-text-faint transition-colors hover:bg-muted hover:text-foreground"
-    >
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-sm border border-dashed border-white/18">
-        <Plus className="size-3.5" />
-      </span>
-      <span className="text-13 font-medium">Add bank</span>
-    </button>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-13 font-medium text-foreground">{label}</div>
+        {sub && <div className="truncate text-11 text-neg">{sub}</div>}
+      </div>
+    </Link>
   )
 }
 
@@ -158,22 +136,14 @@ export function PersonMenuPopover({
   triggerLabel,
   accounts,
   allHidden,
-  onAddAccount,
   onToggleAll,
   onToggleAccount,
-  onDisconnectConnection,
-  onSyncConnection,
-  syncingConnectionIds,
 }: {
   triggerLabel: string
   accounts: DashboardAccount[]
   allHidden: boolean
-  onAddAccount?: () => void
   onToggleAll: () => void
   onToggleAccount: (a: DashboardAccount) => void
-  onDisconnectConnection: (connectionId: string, label: string) => void
-  onSyncConnection: (connectionId: string) => void
-  syncingConnectionIds: ReadonlySet<string>
 }) {
   const groups = useMemo(() => groupByConnection(accounts), [accounts])
   const hasAccounts = accounts.length > 0
@@ -182,30 +152,12 @@ export function PersonMenuPopover({
     <MenuPopover triggerLabel={triggerLabel}>
       {({ close }) => (
         <>
-          {/* Connection list — one row per linked bank with explicit Sync
-              and Disconnect buttons. The "+" row at the end opens the
-              AddBankModal scoped to the holder. */}
+          {/* Connection list — each row navigates to /settings/connectors,
+              where the actual sync / reconnect / disconnect actions live. */}
           <div className="flex flex-col border-b border-border-subtle p-1.5">
             {groups.map((g) => (
-              <ConnectionRow
-                key={g.connection.id}
-                group={g}
-                syncing={syncingConnectionIds.has(g.connection.id)}
-                onSync={() => onSyncConnection(g.connection.id)}
-                onDisconnect={() => {
-                  close()
-                  onDisconnectConnection(g.connection.id, connectionLabel(g.connection))
-                }}
-              />
+              <ConnectionRow key={g.connection.id} group={g} onClose={close} />
             ))}
-            {onAddAccount && (
-              <AddBankRow
-                onClick={() => {
-                  close()
-                  onAddAccount()
-                }}
-              />
-            )}
           </div>
 
           {hasAccounts && (

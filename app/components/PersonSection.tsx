@@ -25,25 +25,18 @@ import { fmtMoneyCompact } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { holderBg, holderBorder } from '@/lib/holders'
 import { cn } from '@/lib/utils'
+import { HolderAvatar } from './HolderAvatar'
 import { PersonMenuPopover } from './PersonMenuPopover'
 import { SidebarAccountRow } from './SidebarAccountRow'
 
 export function PersonSection({
   holder,
   onToggleAll,
-  onAddAccount,
   onToggleAccount,
-  onDisconnectConnection,
-  onSyncConnection,
-  syncingConnectionIds,
 }: {
   holder: DashboardHolder
   onToggleAll: () => void
-  onAddAccount: () => void
   onToggleAccount: (a: DashboardAccount) => void
-  onDisconnectConnection: (connectionId: string, label: string) => void
-  onSyncConnection: (connectionId: string) => void
-  syncingConnectionIds: ReadonlySet<string>
 }) {
   // Server has already deduped joint accounts (each appears in exactly
   // one bucket), but we still hide possibleDuplicateOf rows in case the
@@ -64,18 +57,9 @@ export function PersonSection({
     >
       {/* Header */}
       <div className="mb-3.5 flex items-center gap-2.5">
-        <div
-          style={
-            {
-              '--avatar-bg': `${holder.color}22`,
-              '--avatar-color': holder.color,
-              '--avatar-border': `${holder.color}55`,
-            } as React.CSSProperties
-          }
-          className="flex size-8.5 shrink-0 items-center justify-center rounded-full border-thin border-(--avatar-border) bg-(--avatar-bg) text-14 font-semibold text-(--avatar-color)"
-        >
+        <HolderAvatar color={holder.color}>
           {holder.initials ?? holder.label.slice(0, 2).toUpperCase()}
-        </div>
+        </HolderAvatar>
         <div className="min-w-0 flex-1">
           <div className="truncate text-14 font-medium text-foreground">{holder.label}</div>
           <div className="mt-px text-11 text-text-faint">
@@ -104,12 +88,8 @@ export function PersonSection({
           triggerLabel={`${holder.label} options`}
           accounts={holder.accounts.filter((a) => !a.possibleDuplicateOf)}
           allHidden={allHidden}
-          onAddAccount={onAddAccount}
           onToggleAll={onToggleAll}
           onToggleAccount={onToggleAccount}
-          onDisconnectConnection={onDisconnectConnection}
-          onSyncConnection={onSyncConnection}
-          syncingConnectionIds={syncingConnectionIds}
         />
       </div>
 

@@ -7,6 +7,8 @@
 // components iterate over `dashboard.holders[]` and `dashboard.shared`.
 
 import Image from 'next/image'
+import Link from 'next/link'
+import { Settings as SettingsIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
@@ -42,11 +44,7 @@ export function Sidebar({
   onToggleCombined,
   onToggleAllForHolder,
   onToggleAllShared,
-  onAddAccount,
   onToggleAccount,
-  onDisconnectConnection,
-  onSyncConnection,
-  syncingConnectionIds,
   initialWidth,
 }: {
   dashboard: DashboardResponse
@@ -56,11 +54,7 @@ export function Sidebar({
   onToggleCombined: () => void
   onToggleAllForHolder: (holderId: string) => void
   onToggleAllShared: () => void
-  onAddAccount: (holderId: string) => void
   onToggleAccount: (a: DashboardAccount) => void
-  onDisconnectConnection: (connectionId: string, label: string) => void
-  onSyncConnection: (connectionId: string) => void
-  syncingConnectionIds: ReadonlySet<string>
   // Comes from the server via the cookie read in app/page.tsx, so the
   // SSR'd HTML already has the correct width on first paint.
   initialWidth: number
@@ -182,11 +176,7 @@ export function Sidebar({
           key={h.id}
           holder={h}
           onToggleAll={() => onToggleAllForHolder(h.id)}
-          onAddAccount={() => onAddAccount(h.id)}
           onToggleAccount={onToggleAccount}
-          onDisconnectConnection={onDisconnectConnection}
-          onSyncConnection={onSyncConnection}
-          syncingConnectionIds={syncingConnectionIds}
         />
       ))}
 
@@ -194,9 +184,6 @@ export function Sidebar({
         accounts={dashboard.shared.accounts}
         onToggleAll={onToggleAllShared}
         onToggleAccount={onToggleAccount}
-        onDisconnectConnection={onDisconnectConnection}
-        onSyncConnection={onSyncConnection}
-        syncingConnectionIds={syncingConnectionIds}
       />
 
       {/* Combined toggle */}
@@ -214,6 +201,16 @@ export function Sidebar({
       </button>
 
       <div className="flex-1" />
+
+      {/* Settings entry — bottom of the sidebar so it sits out of the
+          per-holder rhythm but is one click away. */}
+      <Link
+        href="/settings"
+        className="mt-2 flex w-full items-center gap-2.5 rounded-9 border border-transparent px-3 py-2.25 text-14 text-text-faint transition-colors hover:border-border-subtle hover:bg-white/3 hover:text-foreground"
+      >
+        <SettingsIcon className="size-4" />
+        Settings
+      </Link>
 
       {/* Resize handle — 4px hover/drag target on the right edge. The
           inner indicator brightens while hovered or dragging so the

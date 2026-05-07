@@ -71,6 +71,12 @@ export interface DashboardAccountConnection {
   validUntil: number | null
   lastSyncedAt: number | null
   lastSyncError: string | null
+  // Enable Banking only — the institution this connection was established
+  // against. Surfaced so the UI can re-trigger OAuth without making the
+  // user re-pick country + bank. Null for non-EB providers and for legacy
+  // EB rows whose rawJson predates the snake_case → camelCase rename.
+  aspspName: string | null
+  aspspCountry: string | null
 }
 
 // ─── Shared & Unassigned buckets ─────────────────────────────────────────

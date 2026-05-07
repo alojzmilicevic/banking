@@ -9,7 +9,6 @@
 // toggles + the combined-line toggle in the sidebar.
 
 import { useEffect, useState } from 'react'
-import { AddBankModal } from './components/AddBankModal'
 import { DashboardSkeleton } from './components/DashboardSkeleton'
 import { MobileDashboardSkeleton } from './components/MobileDashboardSkeleton'
 import { MobileLayout } from './components/MobileLayout'
@@ -22,9 +21,7 @@ import { Alert } from '@/components/ui/alert'
 import {
   useBulkToggleExclude,
   useDashboard,
-  useDisconnect,
   useSyncAll,
-  useSyncConnection,
   useToggleExclude,
 } from '@/lib/queries'
 import type { DashboardAccount } from '@/lib/api/dashboard'
@@ -52,23 +49,11 @@ export function HomeContent({
   const [showCombined, setShowCombined] = useState(true)
   const [pageError, setPageError] = useState<string | null>(initialError)
   const [snap, setSnap] = useState<TimelineSnapshot>(EMPTY_SNAP)
-  const [addOpen, setAddOpen] = useState(false)
-  const [addHolderId, setAddHolderId] = useState<string | undefined>(undefined)
 
   const dashboard = useDashboard(period)
   const syncAll = useSyncAll()
-  const syncConnection = useSyncConnection()
-  const disconnect = useDisconnect()
   const toggleExclude = useToggleExclude()
   const bulkToggleExclude = useBulkToggleExclude()
-  // Track which connections are currently syncing so the popover rows
-  // can each show a spinner. A Set (not a single ID) because the user
-  // can fire multiple per-bank syncs in flight; the mutation hook only
-  // exposes one isPending bool, and onSettled fires per-mutate, so we
-  // add on click and remove in the per-call onSettled.
-  const [syncingConnectionIds, setSyncingConnectionIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  )
 
   const data = dashboard.data
 
@@ -84,41 +69,8 @@ export function HomeContent({
     }
   }, [])
 
-  function openAdd(holderId?: string) {
-    setAddHolderId(holderId)
-    setAddOpen(true)
-  }
-
   function onToggleAccount(a: DashboardAccount) {
     toggleExclude.mutate({ id: a.id, exclude: !a.excludedFromTotal })
-  }
-
-  function onDisconnectConnection(connectionId: string, label: string) {
-    if (
-      !confirm(
-        `Disconnect ${label}?\n\nThis deletes its accounts, transactions and history. Snapshot history is recomputed on next sync.`,
-      )
-    )
-      return
-    disconnect.mutate(connectionId)
-  }
-
-  function onSyncConnection(connectionId: string) {
-    setSyncingConnectionIds((prev) => {
-      if (prev.has(connectionId)) return prev
-      const next = new Set(prev)
-      next.add(connectionId)
-      return next
-    })
-    syncConnection.mutate(connectionId, {
-      onSettled: () =>
-        setSyncingConnectionIds((prev) => {
-          if (!prev.has(connectionId)) return prev
-          const next = new Set(prev)
-          next.delete(connectionId)
-          return next
-        }),
-    })
   }
 
   function bulkToggle(predicate: (a: DashboardAccount) => boolean) {
@@ -189,8 +141,6 @@ export function HomeContent({
     pageError ??
     dashboard.error?.message ??
     syncAll.error?.message ??
-    syncConnection.error?.message ??
-    disconnect.error?.message ??
     toggleExclude.error?.message ??
     bulkToggleExclude.error?.message ??
     null
@@ -209,11 +159,7 @@ export function HomeContent({
               onToggleCombined={() => setShowCombined((v) => !v)}
               onToggleAllForHolder={onToggleAllForHolder}
               onToggleAllShared={onToggleAllShared}
-              onAddAccount={openAdd}
               onToggleAccount={onToggleAccount}
-              onDisconnectConnection={onDisconnectConnection}
-              onSyncConnection={onSyncConnection}
-              syncingConnectionIds={syncingConnectionIds}
               initialWidth={initialSidebarWidth}
             />
 
@@ -270,7 +216,6 @@ export function HomeContent({
             showCombined={showCombined}
             visibleHolderIds={visibleHolderIds}
             showShared={showShared}
-            onAddAccount={openAdd}
             onToggleAccount={onToggleAccount}
             onSyncAll={() => syncAll.mutate()}
             syncingAll={syncAll.isPending}
@@ -302,14 +247,6 @@ export function HomeContent({
           <MobileDashboardSkeleton />
         </>
       )}
-
-      <AddBankModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onConnected={() => celebrate()}
-        initialHolderId={addHolderId}
-        period={period}
-      />
     </>
   )
 }
