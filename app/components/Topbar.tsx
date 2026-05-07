@@ -6,7 +6,7 @@
 
 import { fmtMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { Sensitive, SensitiveToggle } from '@/components/sensitive-data'
+import { Sensitive } from '@/components/sensitive-data'
 import { PeriodTabs, type Period } from './PeriodTabs'
 
 export function Topbar({
@@ -55,10 +55,7 @@ export function Topbar({
         </Sensitive>
       </div>
 
-      <div className="flex items-center gap-2">
-        <SensitiveToggle />
-        <PeriodTabs value={period} onChange={onPeriodChange} />
-      </div>
+      <PeriodTabs value={period} onChange={onPeriodChange} />
     </div>
   )
 }

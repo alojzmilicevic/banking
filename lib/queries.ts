@@ -4,6 +4,7 @@
 // wealth-affecting mutations fire.
 
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -48,7 +49,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 // ─── query keys ─────────────────────────────────────────────────────────
 
 export const qk = {
-  dashboard: ['dashboard'] as const,
+  dashboard: (period: string) => ['dashboard', period] as const,
   holders: ['holders'] as const,
   institutions: (country: string) => ['institutions', country] as const,
   timeseries: (period: string) => ['timeseries', period] as const,
@@ -57,7 +58,8 @@ export const qk = {
 // Anything that changes wealth (sync, disconnect, exclude toggle, new
 // connection). Centralized so we don't forget one of the keys.
 function invalidateWealth(qc: QueryClient) {
-  qc.invalidateQueries({ queryKey: qk.dashboard })
+  // Prefix-match every cached period variant of dashboard / timeseries.
+  qc.invalidateQueries({ queryKey: ['dashboard'] })
   qc.invalidateQueries({ queryKey: ['timeseries'] })
 }
 
@@ -72,10 +74,14 @@ export function useInstitutions(country: string) {
   })
 }
 
-export function useDashboard() {
+export function useDashboard(period: string) {
   return useQuery({
-    queryKey: qk.dashboard,
-    queryFn: () => fetchJson<DashboardResponse>('/api/dashboard'),
+    queryKey: qk.dashboard(period),
+    queryFn: () => fetchJson<DashboardResponse>(`/api/dashboard?period=${period}`),
+    // Keep the previous period's data on screen while a new period fetches —
+    // otherwise `data` flips to undefined and the whole layout falls back to
+    // the skeleton, which resets the sidebar's resize state.
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -88,10 +94,30 @@ export function useHolders() {
   })
 }
 
+export function useAddHolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { label: string; initials?: string; color?: string }) =>
+      fetchJson<HolderListItem>('/api/holders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.holders })
+      // Holders show up in dashboard buckets too, so refresh those.
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
 export function useTimeseries(period: string) {
   return useQuery({
     queryKey: qk.timeseries(period),
     queryFn: () => fetchJson<TimeseriesResponse>(`/api/timeseries?period=${period}`),
+    // Keep the previous period's series on screen while the new one fetches —
+    // otherwise the chart drops into its skeleton on every period click.
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -174,6 +200,29 @@ export function useToggleExclude() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ excludedFromTotal: exclude }),
       }),
+    onSuccess: () => invalidateWealth(qc),
+  })
+}
+
+// Bulk variant — fires all PATCHes in parallel and invalidates wealth
+// queries ONCE at the end. Calling useToggleExclude in a loop would
+// trigger N invalidations and N dashboard refetches racing each other,
+// which is visibly slow with more than a couple of accounts.
+export function useBulkToggleExclude() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (items: { id: string; exclude: boolean }[]) => {
+      if (items.length === 0) return
+      await Promise.all(
+        items.map(({ id, exclude }) =>
+          fetchJson(`/api/accounts/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ excludedFromTotal: exclude }),
+          }),
+        ),
+      )
+    },
     onSuccess: () => invalidateWealth(qc),
   })
 }

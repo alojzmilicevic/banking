@@ -17,7 +17,7 @@ const d = getDashboard(user.id)
 
 console.log(`\nHolders (${d.holders.length}):`)
 for (const h of d.holders) {
-  const change = h.change30d ? ` (Δ30d: ${h.change30d.absolute >= 0 ? '+' : ''}${h.change30d.absolute})` : ''
+  const change = h.change ? ` (Δ: ${h.change.absolute >= 0 ? '+' : ''}${h.change.absolute})` : ''
   console.log(`  ${h.label.padEnd(8)}  total=${h.total}${change}  accounts=${h.accounts.length}`)
 }
 
@@ -25,7 +25,7 @@ console.log(`\nShared:  total=${d.shared.total}  accounts=${d.shared.accounts.le
 console.log(`Unassigned: ${d.unassigned ? `total=${d.unassigned.total} accounts=${d.unassigned.accounts.length}` : 'none'}`)
 console.log(
   `\nTotals: total=${d.totals.total}  cash=${d.totals.cash}  investment=${d.totals.investment}` +
-    (d.totals.change30d ? `  Δ30d=${d.totals.change30d.absolute}` : ''),
+    (d.totals.change ? `  Δ=${d.totals.change.absolute}` : ''),
 )
 
 console.log(`\nBucket distribution by account:`)

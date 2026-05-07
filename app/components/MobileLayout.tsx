@@ -9,10 +9,11 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { Eye, EyeOff, Plus, Settings as SettingsIcon } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Plus, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
+import { IconButton } from '@/components/ui/icon-button'
 import { fmtMoney, fmtMoneyCompact, shortProduct } from '@/lib/format'
-import { Sensitive, SensitiveToggle } from '@/components/sensitive-data'
+import { Sensitive } from '@/components/sensitive-data'
 import { COMBINED_META, SHARED_META } from '@/lib/holders'
 import { cn } from '@/lib/utils'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
@@ -45,8 +46,9 @@ export function MobileLayout({
   showCombined,
   visibleHolderIds,
   showShared,
-  onAddAccount,
-  onOpenAccountSettings,
+  onToggleAccount,
+  onSyncAll,
+  syncingAll,
   topError,
   onDismissError,
 }: {
@@ -59,8 +61,9 @@ export function MobileLayout({
   showCombined: boolean
   visibleHolderIds: string[]
   showShared: boolean
-  onAddAccount: (holderId: string) => void
-  onOpenAccountSettings: (account: DashboardAccount) => void
+  onToggleAccount: (a: DashboardAccount) => void
+  onSyncAll: () => void
+  syncingAll: boolean
   topError: string | null
   onDismissError: () => void
 }) {
@@ -100,11 +103,6 @@ export function MobileLayout({
     { label: SHARED_META.label, val: dashboard.shared.total, color: SHARED_META.color },
   ]
 
-  // "+ Add account" defaults to the active person's section if one is
-  // selected; otherwise the first holder.
-  const addHolderId =
-    dashboard.holders.find((h) => h.id === view)?.id ?? dashboard.holders[0]?.id ?? ''
-
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden lg:hidden">
       {/* ── Top nav: logo + settings ───────────────────────────────── */}
@@ -114,14 +112,25 @@ export function MobileLayout({
           <span className="font-display text-18 tracking-display">aloma</span>
         </div>
         <div className="flex items-center gap-1">
-          <SensitiveToggle />
-          <button
-            type="button"
+          <IconButton
+            onClick={onSyncAll}
+            disabled={syncingAll}
+            aria-label="Sync all banks"
+            title="Sync all banks"
+          >
+            {syncingAll ? (
+              <Loader2 className="size-4.5 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4.5" />
+            )}
+          </IconButton>
+          <Link
+            href="/settings"
             aria-label="Settings"
-            className="flex size-8.5 items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6"
+            className="flex size-8.5 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6 hover:text-foreground"
           >
             <SettingsIcon className="size-4.5" />
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -270,21 +279,19 @@ export function MobileLayout({
                 account={account}
                 connectionLabel={account.connection.label ?? account.connection.providerId}
                 color={bucketColor(account, holderColorById)}
-                onOpenSettings={() => onOpenAccountSettings(account)}
+                onToggleVisibility={() => onToggleAccount(account)}
               />
             ))
           )}
 
           <div className="px-4 pt-2.5">
-            <button
-              type="button"
-              onClick={() => addHolderId && onAddAccount(addHolderId)}
-              disabled={!addHolderId}
-              className="flex w-full items-center justify-center gap-2 rounded-12 border border-dashed border-white/12 px-4 py-3 text-14 text-text-faint transition-colors hover:border-input-border hover:text-foreground disabled:opacity-50"
+            <Link
+              href="/settings/connectors"
+              className="flex w-full items-center justify-center gap-2 rounded-12 border border-dashed border-white/12 px-4 py-3 text-14 text-text-faint transition-colors hover:border-input-border hover:text-foreground"
             >
               <Plus className="size-3.5" />
-              Add account
-            </button>
+              Manage connectors
+            </Link>
           </div>
         </div>
       </div>
@@ -316,31 +323,22 @@ function MobileAccountRow({
   account,
   connectionLabel,
   color,
-  onOpenSettings,
+  onToggleVisibility,
 }: {
   account: DashboardAccount
   connectionLabel: string
   color: string
-  onOpenSettings: () => void
+  onToggleVisibility: () => void
 }) {
   const visible = !account.excludedFromTotal
-  const pct = account.change30d?.pct
-  const positive = (account.change30d?.absolute ?? 0) >= 0
+  const pct = account.change?.pct
+  const positive = (account.change?.absolute ?? 0) >= 0
   const Icon = visible ? Eye : EyeOff
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onOpenSettings}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onOpenSettings()
-        }
-      }}
       className={cn(
-        'flex cursor-pointer items-center gap-3 border-b border-border-subtle px-5 py-3.25 transition-opacity',
+        'flex items-center gap-3 border-b border-border-subtle px-5 py-3.25 transition-opacity',
         !visible && 'opacity-40',
       )}
     >
@@ -351,11 +349,7 @@ function MobileAccountRow({
       />
       <div className="min-w-0 flex-1">
         <div className="truncate text-14 font-medium leading-[1.2] text-foreground">
-          <Link
-            href={`/account/${account.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="text-foreground hover:underline"
-          >
+          <Link href={`/account/${account.id}`} className="text-foreground hover:underline">
             {accountLabel(account)}
           </Link>
         </div>
@@ -385,10 +379,7 @@ function MobileAccountRow({
       </div>
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          onOpenSettings()
-        }}
+        onClick={onToggleVisibility}
         aria-label={visible ? 'Hide account' : 'Show account'}
         className="flex size-7 shrink-0 items-center justify-center rounded-6 text-text-faint"
       >

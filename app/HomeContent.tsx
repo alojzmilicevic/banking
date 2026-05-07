@@ -9,8 +9,7 @@
 // toggles + the combined-line toggle in the sidebar.
 
 import { useEffect, useState } from 'react'
-import { AccountSettingsModal } from './components/AccountSettingsModal'
-import { AddBankModal } from './components/AddBankModal'
+import { useLocalStorage } from '@/hooks/use-local-storage'
 import { DashboardSkeleton } from './components/DashboardSkeleton'
 import { MobileDashboardSkeleton } from './components/MobileDashboardSkeleton'
 import { MobileLayout } from './components/MobileLayout'
@@ -21,8 +20,8 @@ import { SummaryCards, buildSummaryRows } from './components/SummaryCards'
 import { type Period } from './components/PeriodTabs'
 import { Alert } from '@/components/ui/alert'
 import {
+  useBulkToggleExclude,
   useDashboard,
-  useDisconnect,
   useSyncAll,
   useToggleExclude,
 } from '@/lib/queries'
@@ -48,17 +47,16 @@ export function HomeContent({
 }) {
   const [period, setPeriod] = useState<Period>('1Y')
   const [view, setView] = useState<ViewSelection>('all')
-  const [showCombined, setShowCombined] = useState(true)
+  // Persisted via localStorage so the Settings page can flip it from
+  // /settings (different route, can't share React state otherwise).
+  const [showCombined] = useLocalStorage<boolean>('aloma:show-combined', true)
   const [pageError, setPageError] = useState<string | null>(initialError)
   const [snap, setSnap] = useState<TimelineSnapshot>(EMPTY_SNAP)
-  const [addOpen, setAddOpen] = useState(false)
-  const [addHolderId, setAddHolderId] = useState<string | undefined>(undefined)
-  const [activeAccount, setActiveAccount] = useState<DashboardAccount | null>(null)
 
-  const dashboard = useDashboard()
+  const dashboard = useDashboard(period)
   const syncAll = useSyncAll()
-  const disconnect = useDisconnect()
   const toggleExclude = useToggleExclude()
+  const bulkToggleExclude = useBulkToggleExclude()
 
   const data = dashboard.data
 
@@ -74,26 +72,8 @@ export function HomeContent({
     }
   }, [])
 
-  function openAdd(holderId?: string) {
-    setAddHolderId(holderId)
-    setAddOpen(true)
-  }
-
   function onToggleAccount(a: DashboardAccount) {
     toggleExclude.mutate({ id: a.id, exclude: !a.excludedFromTotal })
-  }
-
-  function onDisconnectActive() {
-    if (!activeAccount) return
-    const c = activeAccount.connection
-    if (
-      !confirm(
-        `Disconnect ${c.label ?? c.providerId}?\n\nThis deletes its accounts, transactions and history. Snapshot history is recomputed on next sync.`,
-      )
-    )
-      return
-    disconnect.mutate(c.id)
-    setActiveAccount(null)
   }
 
   function bulkToggle(predicate: (a: DashboardAccount) => boolean) {
@@ -104,12 +84,12 @@ export function HomeContent({
     }
     for (const a of data.shared.accounts) if (predicate(a)) owned.push(a)
 
-    const anyVisible = owned.some((a) => !a.excludedFromTotal)
-    for (const a of owned) {
-      const shouldExclude = anyVisible
-      if (a.excludedFromTotal === shouldExclude) continue
-      toggleExclude.mutate({ id: a.id, exclude: shouldExclude })
-    }
+    const shouldExclude = owned.some((a) => !a.excludedFromTotal)
+    const items = owned
+      .filter((a) => a.excludedFromTotal !== shouldExclude)
+      .map((a) => ({ id: a.id, exclude: shouldExclude }))
+    if (items.length === 0) return
+    bulkToggleExclude.mutate(items)
   }
 
   function onToggleAllForHolder(holderId: string) {
@@ -164,8 +144,8 @@ export function HomeContent({
     pageError ??
     dashboard.error?.message ??
     syncAll.error?.message ??
-    disconnect.error?.message ??
     toggleExclude.error?.message ??
+    bulkToggleExclude.error?.message ??
     null
 
   return (
@@ -178,13 +158,12 @@ export function HomeContent({
               dashboard={data}
               view={view}
               onChangeView={setView}
-              showCombined={showCombined}
-              onToggleCombined={() => setShowCombined((v) => !v)}
               onToggleAllForHolder={onToggleAllForHolder}
               onToggleAllShared={onToggleAllShared}
-              onAddAccount={openAdd}
+              onToggleAccount={onToggleAccount}
+              onSyncAll={() => syncAll.mutate()}
+              syncingAll={syncAll.isPending}
               initialWidth={initialSidebarWidth}
-              onOpenAccountSettings={(account) => setActiveAccount(account)}
             />
 
             <main className="flex flex-1 flex-col overflow-hidden">
@@ -238,8 +217,9 @@ export function HomeContent({
             showCombined={showCombined}
             visibleHolderIds={visibleHolderIds}
             showShared={showShared}
-            onAddAccount={openAdd}
-            onOpenAccountSettings={(account) => setActiveAccount(account)}
+            onToggleAccount={onToggleAccount}
+            onSyncAll={() => syncAll.mutate()}
+            syncingAll={syncAll.isPending}
             topError={topError}
             onDismissError={() => setPageError(null)}
           />
@@ -268,26 +248,6 @@ export function HomeContent({
           <MobileDashboardSkeleton />
         </>
       )}
-
-      <AddBankModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onConnected={() => celebrate()}
-        initialHolderId={addHolderId}
-      />
-
-      <AccountSettingsModal
-        account={activeAccount}
-        onClose={() => setActiveAccount(null)}
-        onToggleHide={() => {
-          if (!activeAccount) return
-          onToggleAccount(activeAccount)
-          setActiveAccount(null)
-        }}
-        onDisconnect={onDisconnectActive}
-        toggling={toggleExclude.isPending}
-        disconnecting={disconnect.isPending}
-      />
     </>
   )
 }

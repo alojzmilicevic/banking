@@ -143,6 +143,38 @@ const PREFIX_TO_NAMESPACE = new Map([
   // checking the text-* namespace when the value parses as a length/rem.
 ])
 
+// Prefixes that consume a value from Tailwind's spacing scale. The scale's
+// step is var(--spacing) = 0.25rem in v4, so `p-2 = 0.5rem`. With a 16px
+// root font-size that's 8px, which is what the canonicalization assumes.
+const SPACING_PREFIXES = new Set([
+  'p', 'px', 'py', 'pt', 'pb', 'pl', 'pr', 'ps', 'pe',
+  'm', 'mx', 'my', 'mt', 'mb', 'ml', 'mr', 'ms', 'me',
+  'gap', 'gap-x', 'gap-y',
+  'space-x', 'space-y',
+  'size', 'w', 'h', 'min-w', 'max-w', 'min-h', 'max-h',
+  'top', 'right', 'bottom', 'left', 'start', 'end',
+  'inset', 'inset-x', 'inset-y',
+  'translate-x', 'translate-y',
+  'basis',
+])
+
+// `[Npx]` / `[Nrem]` → Tailwind spacing-scale step, or null if it doesn't
+// land on a 0.25 multiple. 16px root means 1px = 0.0625rem = 0.25 step,
+// so every integer-px value canonicalizes; sub-pixel values usually don't.
+function canonicalSpacing(value) {
+  const m = value.match(/^(\d+(?:\.\d+)?)(px|rem)$/)
+  if (!m) return null
+  const num = Number(m[1])
+  if (num <= 0) return null
+  const rem = m[2] === 'px' ? num / 16 : num
+  const step = rem / 0.25
+  // Reject values that don't sit cleanly on the 0.25 step grid.
+  const snapped = Math.round(step * 4) / 4
+  if (Math.abs(step - snapped) > 1e-6) return null
+  // Stringify without a trailing `.0` — `2` not `2.0`.
+  return Number.isInteger(snapped) ? String(snapped) : String(snapped)
+}
+
 function normalizeValue(value) {
   // Strip whitespace, lowercase function names. Keeps hex/rgba/oklch
   // comparable across formatting differences.
@@ -218,6 +250,8 @@ const preferDesignTokenClass = {
     messages: {
       preferToken:
         "Prefer `{{ modifiers }}{{ prefix }}-{{ name }}` over `{{ modifiers }}{{ prefix }}-[{{ value }}]` (matches design token `--{{ namespace }}-{{ name }}`).",
+      preferSpacing:
+        "Prefer `{{ modifiers }}{{ prefix }}-{{ name }}` over `{{ modifiers }}{{ prefix }}-[{{ value }}]` (Tailwind spacing scale; 16px root × 0.25rem step).",
     },
     fixable: 'code',
   },
@@ -227,6 +261,13 @@ const preferDesignTokenClass = {
     const { byNamespaceValue, byTextValue } = loadTokens(tokensFile)
 
     function lookup(prefix, value) {
+      // Spacing scale match (p-[8px] → p-2). Checked before the design-
+      // token namespaces because spacing prefixes don't appear in
+      // PREFIX_TO_NAMESPACE — there's no `--spacing-N` token to look up.
+      if (SPACING_PREFIXES.has(prefix)) {
+        const step = canonicalSpacing(value)
+        if (step) return { name: step, namespace: 'spacing' }
+      }
       const namespace = PREFIX_TO_NAMESPACE.get(prefix)
       if (!namespace) return null
       const aliases = valueAliases(value)
@@ -261,7 +302,7 @@ const preferDesignTokenClass = {
             start: context.sourceCode.getLocFromIndex(start),
             end: context.sourceCode.getLocFromIndex(end),
           },
-          messageId: 'preferToken',
+          messageId: found.namespace === 'spacing' ? 'preferSpacing' : 'preferToken',
           data: { modifiers, prefix, name: found.name, namespace: found.namespace, value },
           fix(fixer) {
             return fixer.replaceTextRange([start, end], `${modifiers}${prefix}-${found.name}`)

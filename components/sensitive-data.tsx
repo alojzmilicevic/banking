@@ -11,6 +11,7 @@
 
 import { Eye, EyeOff } from 'lucide-react'
 import { createContext, useContext, useState, type ReactNode } from 'react'
+import { IconButton } from '@/components/ui/icon-button'
 import { useLocalStorage } from '@/hooks/use-local-storage'
 import { cn } from '@/lib/utils'
 
@@ -85,18 +86,14 @@ export function SensitiveToggle({ className }: { className?: string }) {
   const { hidden, toggle } = useSensitiveData()
   const Icon = hidden ? EyeOff : Eye
   return (
-    <button
-      type="button"
+    <IconButton
       onClick={toggle}
       aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
       title={hidden ? 'Show amounts' : 'Hide amounts'}
       aria-pressed={hidden}
-      className={cn(
-        'flex size-8.5 items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6',
-        className,
-      )}
+      className={className}
     >
       <Icon className="size-4.5" />
-    </button>
+    </IconButton>
   )
 }

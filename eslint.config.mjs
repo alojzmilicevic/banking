@@ -63,10 +63,12 @@ const config = tseslint.config(
       },
     },
     rules: {
+      'better-tailwindcss/enforce-canonical-classes': 'error',
       'better-tailwindcss/enforce-shorthand-classes': 'error',
       'better-tailwindcss/no-conflicting-classes': 'error',
       'better-tailwindcss/no-duplicate-classes': 'error',
       'better-tailwindcss/no-restricted-classes': 'error',
+      'better-tailwindcss/no-unnecessary-whitespace': 'error',
     },
   },
   {

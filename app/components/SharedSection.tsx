@@ -18,16 +18,18 @@ import { fmtMoneyCompact } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { SHARED_META } from '@/lib/holders'
 import { cn } from '@/lib/utils'
+import { HolderAvatar } from './HolderAvatar'
+import { PersonMenuPopover } from './PersonMenuPopover'
 import { SidebarAccountRow } from './SidebarAccountRow'
 
 export function SharedSection({
   accounts,
   onToggleAll,
-  onOpenAccountSettings,
+  onToggleAccount,
 }: {
   accounts: DashboardAccount[]
   onToggleAll: () => void
-  onOpenAccountSettings?: (a: DashboardAccount) => void
+  onToggleAccount: (a: DashboardAccount) => void
 }) {
   const meta = SHARED_META
   // Server bucket includes the dupe copies of joint accounts (so the
@@ -37,7 +39,7 @@ export function SharedSection({
   const visibleAccounts = canonicals.filter((a) => !a.excludedFromTotal)
   const hiddenAccounts = canonicals.filter((a) => a.excludedFromTotal)
   const total = visibleAccounts.reduce((s, a) => s + (a.balance ?? 0), 0)
-  const delta30 = visibleAccounts.reduce((s, a) => s + (a.change30d?.absolute ?? 0), 0)
+  const delta = visibleAccounts.reduce((s, a) => s + (a.change?.absolute ?? 0), 0)
   const allHidden = canonicals.length > 0 && visibleAccounts.length === 0
 
   const [showHidden, setShowHidden] = useState(false)
@@ -51,18 +53,9 @@ export function SharedSection({
     >
       {/* Header */}
       <div className="mb-3.5 flex items-center gap-2.5">
-        <div
-          style={
-            {
-              '--avatar-bg': `${meta.color}22`,
-              '--avatar-color': meta.color,
-              '--avatar-border': `${meta.color}55`,
-            } as React.CSSProperties
-          }
-          className="flex size-8.5 shrink-0 items-center justify-center rounded-full border-thin border-(--avatar-border) bg-(--avatar-bg) text-(--avatar-color)"
-        >
+        <HolderAvatar color={meta.color}>
           <Users className="size-3.75" />
-        </div>
+        </HolderAvatar>
         <div className="min-w-0 flex-1">
           <div className="truncate text-14 font-medium text-foreground">{meta.label}</div>
           <div className="mt-px text-11 text-text-faint">
@@ -75,36 +68,26 @@ export function SharedSection({
           <div className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
             <Sensitive>{fmtMoneyCompact(total)}</Sensitive>
           </div>
-          <div className={cn('mt-px text-11', delta30 >= 0 ? 'text-pos' : 'text-neg')}>
+          <div className={cn('mt-px text-11', delta >= 0 ? 'text-pos' : 'text-neg')}>
             <Sensitive>
-              {delta30 >= 0 ? '+' : ''}
-              {fmtMoneyCompact(Math.abs(delta30))}
+              {delta >= 0 ? '+' : ''}
+              {fmtMoneyCompact(Math.abs(delta))}
             </Sensitive>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onToggleAll}
-          aria-label={allHidden ? 'Show all shared accounts' : 'Hide all shared accounts'}
-          title={allHidden ? 'Show all' : 'Hide all'}
-          className={cn(
-            'ml-1 shrink-0 rounded-7 border border-border bg-white/5 px-2 py-1.25 text-11 transition-colors',
-            allHidden ? 'text-text-faint' : 'text-muted-foreground',
-          )}
-        >
-          {allHidden ? 'Show' : 'Hide'}
-        </button>
+        <PersonMenuPopover
+          triggerLabel="Shared accounts options"
+          accounts={canonicals}
+          allHidden={allHidden}
+          onToggleAll={onToggleAll}
+          onToggleAccount={onToggleAccount}
+        />
       </div>
 
       {/* Visible account rows */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         {visibleAccounts.map((a) => (
-          <SidebarAccountRow
-            key={a.id}
-            account={a}
-            color={meta.color}
-            onOpenSettings={onOpenAccountSettings ? () => onOpenAccountSettings(a) : undefined}
-          />
+          <SidebarAccountRow key={a.id} account={a} color={meta.color} />
         ))}
         {visibleAccounts.length === 0 && hiddenAccounts.length > 0 && (
           <p className="px-1 py-2 text-12 text-text-faint">All shared accounts hidden.</p>
@@ -118,7 +101,7 @@ export function SharedSection({
             type="button"
             onClick={() => setShowHidden((v) => !v)}
             aria-expanded={showHidden}
-            className="flex w-full items-center gap-1.5 rounded-8 px-2.5 py-1.5 text-left text-11 text-text-faint transition-colors hover:bg-white/4 hover:text-muted-foreground"
+            className="flex w-full cursor-pointer items-center gap-1.5 rounded-8 px-2.5 py-1.5 text-left text-11 text-text-faint transition-colors hover:bg-white/4 hover:text-muted-foreground"
           >
             <ChevronDown
               className={`size-3.5 transition-transform ${showHidden ? '' : '-rotate-90'}`}
@@ -137,14 +120,7 @@ export function SharedSection({
               >
                 <div className="mt-1 flex flex-col">
                   {hiddenAccounts.map((a) => (
-                    <SidebarAccountRow
-                      key={a.id}
-                      account={a}
-                      color={meta.color}
-                                onOpenSettings={
-                        onOpenAccountSettings ? () => onOpenAccountSettings(a) : undefined
-                      }
-                    />
+                    <SidebarAccountRow key={a.id} account={a} color={meta.color} />
                   ))}
                 </div>
               </motion.div>

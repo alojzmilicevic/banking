@@ -8,6 +8,7 @@ import * as connectionsRepo from '@/lib/repositories/connections'
 import * as holdersRepo from '@/lib/repositories/holders'
 import { pickBalance } from '@/lib/balance'
 import { buildAccountSparklines } from '@/lib/sync/account-sparkline'
+import { daysForPeriod, type Period } from '@/lib/services/timeseries'
 import type { Account, Balance, Connection, HolderRow } from '@/lib/db/schema'
 import type {
   ChangePill,
@@ -124,7 +125,7 @@ function buildAccount(
   const best = pickAccountBalance(balancesForAcct)
   const isInvestment = isInvestmentKind(c.account.kind)
 
-  let change30d: ChangePill | null = null
+  let change: ChangePill | null = null
   if (spark && spark.values.length >= 2) {
     const today = spark.values[0]
     const past = spark.values[spark.values.length - 1]
@@ -132,13 +133,11 @@ function buildAccount(
     let pct: number | null = null
     if (isInvestment && past !== 0) {
       const raw = ((today - past) / Math.abs(past)) * 100
-      // Clamp: tiny base × big move ⇒ 3000% noise that means "you funded
-      // an empty account", not "growth". Same threshold as the topbar.
-      if (Number.isFinite(raw) && Math.abs(raw) <= 500) {
+      if (Number.isFinite(raw)) {
         pct = Math.round(raw * 100) / 100
       }
     }
-    change30d = { absolute, pct }
+    change = { absolute, pct }
   }
 
   return {
@@ -156,7 +155,7 @@ function buildAccount(
     balance: best?.amount ?? null,
     balanceCurrency: best?.currency ?? c.account.currency ?? null,
     sparkline: spark?.series ?? null,
-    change30d,
+    change,
     bucket: bucketFor(c),
     possibleDuplicateOf: c.possibleDuplicateOf,
     connection: {
@@ -167,7 +166,34 @@ function buildAccount(
       validUntil: c.connection.validUntil,
       lastSyncedAt: c.connection.lastSyncedAt,
       lastSyncError: c.connection.lastSyncError,
+      ...extractAspsp(c.connection.providerId, c.connection.rawJson),
     },
+  }
+}
+
+// Pull aspspName/aspspCountry out of an EB connection's rawJson. The
+// callback flow stores `{ aspsp: { name, country } }`; the legacy import
+// path stored snake_case `{ aspsp_name, aspsp_country }`. Either is fine.
+// Returns nulls for non-EB providers and for malformed/legacy rawJson.
+function extractAspsp(
+  providerId: string,
+  rawJson: string | null,
+): { aspspName: string | null; aspspCountry: string | null } {
+  if (providerId !== 'enable-banking' || !rawJson) {
+    return { aspspName: null, aspspCountry: null }
+  }
+  try {
+    const raw = JSON.parse(rawJson) as {
+      aspsp?: { name?: string; country?: string }
+      aspsp_name?: string
+      aspsp_country?: string
+    }
+    return {
+      aspspName: raw.aspsp?.name ?? raw.aspsp_name ?? null,
+      aspspCountry: raw.aspsp?.country ?? raw.aspsp_country ?? null,
+    }
+  } catch {
+    return { aspspName: null, aspspCountry: null }
   }
 }
 
@@ -175,11 +201,11 @@ interface BucketTotals {
   total: number
   cash: number
   investment: number
-  absolute30d: number
+  absoluteChange: number
 }
 
 function emptyBucketTotals(): BucketTotals {
-  return { total: 0, cash: 0, investment: 0, absolute30d: 0 }
+  return { total: 0, cash: 0, investment: 0, absoluteChange: 0 }
 }
 
 function addToBucket(b: BucketTotals, a: DashboardAccount, isInvestment: boolean) {
@@ -192,23 +218,23 @@ function addToBucket(b: BucketTotals, a: DashboardAccount, isInvestment: boolean
   b.total += amt
   if (isInvestment) b.investment += amt
   else b.cash += amt
-  if (a.change30d) b.absolute30d += a.change30d.absolute
+  if (a.change) b.absoluteChange += a.change.absolute
 }
 
 function changeFromBucket(b: BucketTotals): ChangePill | null {
-  if (b.absolute30d === 0 && b.total === 0) return null
-  const startTotal = b.total - b.absolute30d
+  if (b.absoluteChange === 0 && b.total === 0) return null
+  const startTotal = b.total - b.absoluteChange
   let pct: number | null = null
   if (startTotal !== 0) {
-    const raw = (b.absolute30d / Math.abs(startTotal)) * 100
-    if (Number.isFinite(raw) && Math.abs(raw) <= 500) {
+    const raw = (b.absoluteChange / Math.abs(startTotal)) * 100
+    if (Number.isFinite(raw)) {
       pct = Math.round(raw * 100) / 100
     }
   }
-  return { absolute: Math.round(b.absolute30d * 100) / 100, pct }
+  return { absolute: Math.round(b.absoluteChange * 100) / 100, pct }
 }
 
-export function getDashboard(userId: string): DashboardResponse {
+export function getDashboard(userId: string, period: Period = '1Y'): DashboardResponse {
   const errors: string[] = []
 
   const holderRows = holdersRepo.listForUser(userId)
@@ -217,9 +243,9 @@ export function getDashboard(userId: string): DashboardResponse {
   if (conns.length === 0) {
     return {
       holders: holderRows.map(holderRowToDashboardEmpty),
-      shared: { total: 0, change30d: null, accounts: [] },
+      shared: { total: 0, change: null, accounts: [] },
       unassigned: null,
-      totals: { total: 0, cash: 0, investment: 0, change30d: null },
+      totals: { total: 0, cash: 0, investment: 0, change: null },
       baseCurrency: BASE_CURRENCY,
       errors,
     }
@@ -229,7 +255,7 @@ export function getDashboard(userId: string): DashboardResponse {
   const allBalances = balancesRepo.listByAccountIds(accs.map((a) => a.id))
   const balancesByAcct = groupBy(allBalances, (b) => b.accountId)
   const holderIdsByConn = holdersRepo.getHolderIdsByConnection(conns.map((c) => c.id))
-  const sparklines = buildAccountSparklines(userId)
+  const sparklines = buildAccountSparklines(userId, daysForPeriod(period, userId))
 
   const classified = classifyAccounts(conns, accs, holderIdsByConn)
   const built = classified.map((c) =>
@@ -283,12 +309,12 @@ export function getDashboard(userId: string): DashboardResponse {
       initials: h.initials,
       displayOrder: h.displayOrder,
       total: round2(holderTotals.get(h.id)!.total),
-      change30d: changeFromBucket(holderTotals.get(h.id)!),
+      change: changeFromBucket(holderTotals.get(h.id)!),
       accounts: holderAccounts.get(h.id)!,
     })),
     shared: {
       total: round2(sharedTotals.total),
-      change30d: changeFromBucket(sharedTotals),
+      change: changeFromBucket(sharedTotals),
       accounts: sharedAccounts,
     },
     unassigned:
@@ -299,7 +325,7 @@ export function getDashboard(userId: string): DashboardResponse {
       total: round2(grand.total),
       cash: round2(grand.cash),
       investment: round2(grand.investment),
-      change30d: changeFromBucket(grand),
+      change: changeFromBucket(grand),
     },
     baseCurrency: BASE_CURRENCY,
     errors,
@@ -316,7 +342,7 @@ function holderRowToDashboardEmpty(h: HolderRow): DashboardHolder {
     initials: h.initials,
     displayOrder: h.displayOrder,
     total: 0,
-    change30d: null,
+    change: null,
     accounts: [],
   }
 }

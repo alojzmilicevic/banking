@@ -1,41 +1,42 @@
 // One household member's section in the sidebar:
 //   ┌──────────────────────────────────────────────┐
 //   │ [AM]  Alojz                  571k    +13k    │
-//   │       3 accounts                  [Hide]     │
+//   │       3 accounts                  [⋮]        │
 //   ├──────────────────────────────────────────────┤
 //   │ ● Visible row …                              │
 //   │ ● Visible row …                              │
 //   ├──────────────────────────────────────────────┤
 //   │ ▸ Hidden (2)                                 │
-//   ├──────────────────────────────────────────────┤
-//   │ + Add account                                │
 //   └──────────────────────────────────────────────┘
 //
+// Bulk hide/show, per-account toggles, disconnect, and add-bank all
+// live in the PersonMenuPopover hung off the ⋮ trigger.
+//
 // Sums + delta come straight from the API (server already filtered by
-// holder, deduped joints, and computed change30d). Hidden accounts
+// holder, deduped joints, and computed change for the active period).
 // collapse under an expandable so the user can unhide without leaving
 // the sidebar.
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { ChevronDown, Plus } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import type { DashboardAccount, DashboardHolder } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { holderBg, holderBorder } from '@/lib/holders'
 import { cn } from '@/lib/utils'
+import { HolderAvatar } from './HolderAvatar'
+import { PersonMenuPopover } from './PersonMenuPopover'
 import { SidebarAccountRow } from './SidebarAccountRow'
 
 export function PersonSection({
   holder,
   onToggleAll,
-  onAddAccount,
-  onOpenAccountSettings,
+  onToggleAccount,
 }: {
   holder: DashboardHolder
   onToggleAll: () => void
-  onAddAccount: () => void
-  onOpenAccountSettings?: (a: DashboardAccount) => void
+  onToggleAccount: (a: DashboardAccount) => void
 }) {
   // Server has already deduped joint accounts (each appears in exactly
   // one bucket), but we still hide possibleDuplicateOf rows in case the
@@ -56,18 +57,9 @@ export function PersonSection({
     >
       {/* Header */}
       <div className="mb-3.5 flex items-center gap-2.5">
-        <div
-          style={
-            {
-              '--avatar-bg': `${holder.color}22`,
-              '--avatar-color': holder.color,
-              '--avatar-border': `${holder.color}55`,
-            } as React.CSSProperties
-          }
-          className="flex size-8.5 shrink-0 items-center justify-center rounded-full border-thin border-(--avatar-border) bg-(--avatar-bg) text-14 font-semibold text-(--avatar-color)"
-        >
+        <HolderAvatar color={holder.color}>
           {holder.initials ?? holder.label.slice(0, 2).toUpperCase()}
-        </div>
+        </HolderAvatar>
         <div className="min-w-0 flex-1">
           <div className="truncate text-14 font-medium text-foreground">{holder.label}</div>
           <div className="mt-px text-11 text-text-faint">
@@ -80,41 +72,31 @@ export function PersonSection({
           <span className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
             {fmtMoneyCompact(holder.total)}
           </span>
-          {holder.change30d && (
+          {holder.change && (
             <span
               className={cn(
                 'mt-px text-11',
-                holder.change30d.absolute >= 0 ? 'text-pos' : 'text-neg',
+                holder.change.absolute >= 0 ? 'text-pos' : 'text-neg',
               )}
             >
-              {holder.change30d.absolute >= 0 ? '+' : ''}
-              {fmtMoneyCompact(Math.abs(holder.change30d.absolute))}
+              {holder.change.absolute >= 0 ? '+' : ''}
+              {fmtMoneyCompact(Math.abs(holder.change.absolute))}
             </span>
           )}
         </Sensitive>
-        <button
-          type="button"
-          onClick={onToggleAll}
-          aria-label={allHidden ? 'Show all accounts' : 'Hide all accounts'}
-          title={allHidden ? 'Show all' : 'Hide all'}
-          className={cn(
-            'ml-1 shrink-0 rounded-7 border border-border bg-white/5 px-2 py-1.25 text-11 transition-colors',
-            allHidden ? 'text-text-faint' : 'text-muted-foreground',
-          )}
-        >
-          {allHidden ? 'Show' : 'Hide'}
-        </button>
+        <PersonMenuPopover
+          triggerLabel={`${holder.label} options`}
+          accounts={holder.accounts.filter((a) => !a.possibleDuplicateOf)}
+          allHidden={allHidden}
+          onToggleAll={onToggleAll}
+          onToggleAccount={onToggleAccount}
+        />
       </div>
 
       {/* Visible account rows */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         {visibleAccounts.map((a) => (
-          <SidebarAccountRow
-            key={a.id}
-            account={a}
-            color={holder.color}
-            onOpenSettings={onOpenAccountSettings ? () => onOpenAccountSettings(a) : undefined}
-          />
+          <SidebarAccountRow key={a.id} account={a} color={holder.color} />
         ))}
         {holder.accounts.length === 0 && (
           <p className="px-1 py-2 text-12 text-text-faint">No accounts linked yet.</p>
@@ -131,10 +113,10 @@ export function PersonSection({
             type="button"
             onClick={() => setShowHidden((v) => !v)}
             aria-expanded={showHidden}
-            className="flex w-full items-center gap-1.5 rounded-8 px-2.5 py-1.5 text-left text-11 text-text-faint transition-colors hover:bg-white/4 hover:text-muted-foreground"
+            className="flex w-full cursor-pointer items-center gap-1.5 rounded-8 px-2.5 py-1.5 text-left text-11 text-text-faint transition-colors hover:bg-white/4 hover:text-muted-foreground"
           >
             <ChevronDown
-              className={`size-3.5 transition-transform ${showHidden ? '' : '-rotate-90'}`}
+              className={cn('size-3.5 transition-transform', showHidden ? '' : '-rotate-90')}
             />
             Hidden ({hiddenAccounts.length})
           </button>
@@ -150,14 +132,7 @@ export function PersonSection({
               >
                 <div className="mt-1 flex flex-col">
                   {hiddenAccounts.map((a) => (
-                    <SidebarAccountRow
-                      key={a.id}
-                      account={a}
-                      color={holder.color}
-                      onOpenSettings={
-                        onOpenAccountSettings ? () => onOpenAccountSettings(a) : undefined
-                      }
-                    />
+                    <SidebarAccountRow key={a.id} account={a} color={holder.color} />
                   ))}
                 </div>
               </motion.div>
@@ -165,16 +140,6 @@ export function PersonSection({
           </AnimatePresence>
         </div>
       )}
-
-      {/* Add account */}
-      <button
-        type="button"
-        onClick={onAddAccount}
-        className="mt-2.5 flex w-full items-center gap-2 rounded-10 border border-dashed border-white/12 px-3.5 py-2.25 text-14 text-text-faint transition-colors hover:border-input-border hover:text-foreground"
-      >
-        <Plus className="size-3.5" />
-        Add account
-      </button>
     </div>
   )
 }

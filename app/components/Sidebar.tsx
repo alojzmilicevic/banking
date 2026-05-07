@@ -7,7 +7,10 @@
 // components iterate over `dashboard.holders[]` and `dashboard.shared`.
 
 import Image from 'next/image'
+import Link from 'next/link'
+import { Loader2, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { IconButton } from '@/components/ui/icon-button'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
 import { fmtMoneyCompact } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
@@ -38,23 +41,21 @@ export function Sidebar({
   dashboard,
   view,
   onChangeView,
-  showCombined,
-  onToggleCombined,
   onToggleAllForHolder,
   onToggleAllShared,
-  onAddAccount,
-  onOpenAccountSettings,
+  onToggleAccount,
+  onSyncAll,
+  syncingAll,
   initialWidth,
 }: {
   dashboard: DashboardResponse
   view: ViewSelection
   onChangeView: (v: ViewSelection) => void
-  showCombined: boolean
-  onToggleCombined: () => void
   onToggleAllForHolder: (holderId: string) => void
   onToggleAllShared: () => void
-  onAddAccount: (holderId: string) => void
-  onOpenAccountSettings?: (a: DashboardAccount) => void
+  onToggleAccount: (a: DashboardAccount) => void
+  onSyncAll: () => void
+  syncingAll: boolean
   // Comes from the server via the cookie read in app/page.tsx, so the
   // SSR'd HTML already has the correct width on first paint.
   initialWidth: number
@@ -121,12 +122,23 @@ export function Sidebar({
   return (
     <aside
       style={{ '--sb-width': `${width}px` } as React.CSSProperties}
-      className="relative flex w-(--sb-width) shrink-0 flex-col overflow-y-auto border-r border-border-subtle bg-card px-4 py-5"
+      className="relative flex w-(--sb-width) shrink-0 flex-col overflow-y-auto border-r border-border-subtle bg-card px-4 pb-5"
     >
-      {/* Logo */}
-      <div className="mb-7 flex items-center gap-2.5 border-b border-border-subtle pb-5">
+      {/* Sticky header — logo + Settings entry. Owns its own top padding
+          (rather than the aside) so it sits flush to the very top of
+          the sidebar; bg-card matches the aside so scrolled content
+          doesn't bleed through. */}
+      <div className="sticky top-0 z-10 -mx-4 mb-7 flex items-center gap-2.5 border-b border-border-subtle bg-card px-4 py-5">
         <Image src="/logo-icon.svg" alt="Aloma" width={30} height={30} priority />
         <span className="font-display text-20 tracking-display">aloma</span>
+        <Link
+          href="/settings"
+          aria-label="Settings"
+          title="Settings"
+          className="ml-auto flex size-7 cursor-pointer items-center justify-center rounded-full text-text-faint transition-colors hover:bg-white/6 hover:text-foreground"
+        >
+          <SettingsIcon className="size-4" />
+        </Link>
       </div>
 
       {/* View switcher */}
@@ -142,10 +154,10 @@ export function Sidebar({
               type="button"
               onClick={() => onChangeView(v.key)}
               className={cn(
-                'flex w-full items-center gap-2.5 rounded-9 border px-3 py-2.25 text-left text-14 transition-all',
+                'flex w-full cursor-pointer items-center gap-2.5 rounded-9 border px-3 py-2.25 text-left text-14 transition-all',
                 active
                   ? 'border-border bg-white/6 font-medium text-foreground'
-                  : 'border-transparent bg-transparent font-normal text-muted-foreground',
+                  : 'border-transparent bg-transparent font-normal text-muted-foreground hover:border-border-subtle hover:bg-white/3 hover:text-foreground',
               )}
             >
               <span
@@ -166,9 +178,25 @@ export function Sidebar({
 
       <div className="my-4 h-px bg-border-subtle" />
 
-      {/* Accounts label */}
-      <div className="mb-2.5 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
-        Accounts
+      {/* Accounts label + Sync All */}
+      <div className="mb-2.5 flex items-center justify-between">
+        <span className="text-11 font-medium uppercase tracking-eyebrow text-text-faint">
+          Accounts
+        </span>
+        <IconButton
+          variant="toolbar"
+          size="sm"
+          onClick={onSyncAll}
+          disabled={syncingAll}
+          aria-label="Sync all banks"
+          title="Sync all banks"
+        >
+          {syncingAll ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="size-3.5" />
+          )}
+        </IconButton>
       </div>
 
       {dashboard.holders.map((h) => (
@@ -176,30 +204,15 @@ export function Sidebar({
           key={h.id}
           holder={h}
           onToggleAll={() => onToggleAllForHolder(h.id)}
-          onAddAccount={() => onAddAccount(h.id)}
-          onOpenAccountSettings={onOpenAccountSettings}
+          onToggleAccount={onToggleAccount}
         />
       ))}
 
       <SharedSection
         accounts={dashboard.shared.accounts}
         onToggleAll={onToggleAllShared}
-        onOpenAccountSettings={onOpenAccountSettings}
+        onToggleAccount={onToggleAccount}
       />
-
-      {/* Combined toggle */}
-      <button
-        type="button"
-        onClick={onToggleCombined}
-        className={cn(
-          'mt-1 flex w-full items-center gap-2.5 rounded-9 border border-border-subtle bg-transparent px-3 py-2.25 text-14 transition-colors',
-          showCombined ? 'text-primary' : 'text-text-faint',
-        )}
-      >
-        <span className="h-0.5 w-4 shrink-0 rounded-1 bg-primary" />
-        Combined line
-        <span className="ml-auto text-11">{showCombined ? 'On' : 'Off'}</span>
-      </button>
 
       <div className="flex-1" />
 
