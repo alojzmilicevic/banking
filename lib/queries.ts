@@ -94,6 +94,23 @@ export function useHolders() {
   })
 }
 
+export function useAddHolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { label: string; initials?: string; color?: string }) =>
+      fetchJson<HolderListItem>('/api/holders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.holders })
+      // Holders show up in dashboard buckets too, so refresh those.
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
 export function useTimeseries(period: string) {
   return useQuery({
     queryKey: qk.timeseries(period),

@@ -9,6 +9,7 @@
 // toggles + the combined-line toggle in the sidebar.
 
 import { useEffect, useState } from 'react'
+import { useLocalStorage } from '@/hooks/use-local-storage'
 import { DashboardSkeleton } from './components/DashboardSkeleton'
 import { MobileDashboardSkeleton } from './components/MobileDashboardSkeleton'
 import { MobileLayout } from './components/MobileLayout'
@@ -46,7 +47,9 @@ export function HomeContent({
 }) {
   const [period, setPeriod] = useState<Period>('1Y')
   const [view, setView] = useState<ViewSelection>('all')
-  const [showCombined, setShowCombined] = useState(true)
+  // Persisted via localStorage so the Settings page can flip it from
+  // /settings (different route, can't share React state otherwise).
+  const [showCombined] = useLocalStorage<boolean>('aloma:show-combined', true)
   const [pageError, setPageError] = useState<string | null>(initialError)
   const [snap, setSnap] = useState<TimelineSnapshot>(EMPTY_SNAP)
 
@@ -155,11 +158,11 @@ export function HomeContent({
               dashboard={data}
               view={view}
               onChangeView={setView}
-              showCombined={showCombined}
-              onToggleCombined={() => setShowCombined((v) => !v)}
               onToggleAllForHolder={onToggleAllForHolder}
               onToggleAllShared={onToggleAllShared}
               onToggleAccount={onToggleAccount}
+              onSyncAll={() => syncAll.mutate()}
+              syncingAll={syncAll.isPending}
               initialWidth={initialSidebarWidth}
             />
 
@@ -172,8 +175,6 @@ export function HomeContent({
                 currency={snap.currency}
                 period={period}
                 onPeriodChange={setPeriod}
-                onSyncAll={() => syncAll.mutate()}
-                syncingAll={syncAll.isPending}
               />
 
               <div className="flex flex-1 flex-col gap-5 overflow-hidden px-7 py-6">

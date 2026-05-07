@@ -51,11 +51,10 @@ function groupByConnection(accounts: DashboardAccount[]): ConnectionGroup[] {
   return Array.from(map.values())
 }
 
-// Connection row is a navigation target — clicking anywhere takes the
-// user to /settings/connectors where Sync / Reconnect / Disconnect live.
-// Keeping action affordance off this surface (no fake-button icons)
-// avoids the footgun of icons that look pressable but only navigate.
-function ConnectionRow({ group, onClose }: { group: ConnectionGroup; onClose: () => void }) {
+// Connection tile — just the bank icon; clicking navigates to
+// /settings/connectors. The strip is horizontal so the bank list reads
+// as a quick-glance status row. Tooltip carries label + status text.
+function ConnectionTile({ group, onClose }: { group: ConnectionGroup; onClose: () => void }) {
   const label = connectionLabel(group.connection)
   const state = connectionState(group.connection)
   const connected = state === 'healthy'
@@ -64,7 +63,9 @@ function ConnectionRow({ group, onClose }: { group: ConnectionGroup; onClose: ()
     <Link
       href="/settings/connectors"
       onClick={onClose}
-      className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted"
+      title={sub ? `${label} — ${sub}` : label}
+      aria-label={sub ? `${label} — ${sub}` : label}
+      className="rounded-sm transition-opacity hover:opacity-80"
     >
       <BankIcon
         providerId={group.connection.providerId}
@@ -72,10 +73,6 @@ function ConnectionRow({ group, onClose }: { group: ConnectionGroup; onClose: ()
         size="md"
         connected={connected}
       />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-13 font-medium text-foreground">{label}</div>
-        {sub && <div className="truncate text-11 text-neg">{sub}</div>}
-      </div>
     </Link>
   )
 }
@@ -152,13 +149,17 @@ export function PersonMenuPopover({
     <MenuPopover triggerLabel={triggerLabel}>
       {({ close }) => (
         <>
-          {/* Connection list — each row navigates to /settings/connectors,
-              where the actual sync / reconnect / disconnect actions live. */}
-          <div className="flex flex-col border-b border-border-subtle p-1.5">
-            {groups.map((g) => (
-              <ConnectionRow key={g.connection.id} group={g} onClose={close} />
-            ))}
-          </div>
+          {/* Connection strip — horizontal row of bank icons with a tiny
+              gap. Click any to navigate to /settings/connectors where
+              Sync / Reconnect / Disconnect live. Status surfaces via
+              the icon's dimmed/grayscale state and the tooltip. */}
+          {groups.length > 0 && (
+            <div className="flex gap-1 border-b border-border-subtle p-2">
+              {groups.map((g) => (
+                <ConnectionTile key={g.connection.id} group={g} onClose={close} />
+              ))}
+            </div>
+          )}
 
           {hasAccounts && (
             <div className="border-b border-border-subtle p-2.5">

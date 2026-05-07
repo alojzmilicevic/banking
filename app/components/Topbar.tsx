@@ -4,11 +4,9 @@
 // `label` resolves in the parent (HomeContent) since holders are dynamic
 // now — Topbar doesn't need to know how to map a view key to a name.
 
-import { Loader2, RefreshCw } from 'lucide-react'
 import { fmtMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { IconButton } from '@/components/ui/icon-button'
-import { Sensitive, SensitiveToggle } from '@/components/sensitive-data'
+import { Sensitive } from '@/components/sensitive-data'
 import { PeriodTabs, type Period } from './PeriodTabs'
 
 export function Topbar({
@@ -19,8 +17,6 @@ export function Topbar({
   currency,
   period,
   onPeriodChange,
-  onSyncAll,
-  syncingAll,
 }: {
   label: string
   total: number | null
@@ -29,8 +25,6 @@ export function Topbar({
   currency: string | null
   period: Period
   onPeriodChange: (p: Period) => void
-  onSyncAll: () => void
-  syncingAll: boolean
 }) {
   const positive = (delta ?? 0) >= 0
   const showPct = pct != null && Number.isFinite(pct) && Math.abs(pct) <= 500
@@ -61,23 +55,7 @@ export function Topbar({
         </Sensitive>
       </div>
 
-      <div className="flex items-center gap-2">
-        <IconButton
-          size="lg"
-          onClick={onSyncAll}
-          disabled={syncingAll}
-          aria-label="Sync all banks"
-          title="Sync all banks"
-        >
-          {syncingAll ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <RefreshCw className="size-4" />
-          )}
-        </IconButton>
-        <SensitiveToggle />
-        <PeriodTabs value={period} onChange={onPeriodChange} />
-      </div>
+      <PeriodTabs value={period} onChange={onPeriodChange} />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { type ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
+import { EscapeToHome } from './EscapeToHome'
 import { SettingsNav } from './SettingsNav'
 
 const SECTIONS = [
@@ -11,6 +12,7 @@ const SECTIONS = [
 export default function SettingsLayout({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 pt-6 pb-12 lg:flex-row lg:gap-12 lg:px-10 lg:pt-10">
+      <EscapeToHome />
       <aside className="mb-6 flex flex-col gap-5 lg:mb-0 lg:w-50 lg:shrink-0">
         <Link
           href="/"

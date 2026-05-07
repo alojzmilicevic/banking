@@ -13,7 +13,7 @@ import { Eye, EyeOff, Loader2, Plus, RefreshCw, Settings as SettingsIcon } from 
 import { Alert } from '@/components/ui/alert'
 import { IconButton } from '@/components/ui/icon-button'
 import { fmtMoney, fmtMoneyCompact, shortProduct } from '@/lib/format'
-import { Sensitive, SensitiveToggle } from '@/components/sensitive-data'
+import { Sensitive } from '@/components/sensitive-data'
 import { COMBINED_META, SHARED_META } from '@/lib/holders'
 import { cn } from '@/lib/utils'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
@@ -124,7 +124,6 @@ export function MobileLayout({
               <RefreshCw className="size-4.5" />
             )}
           </IconButton>
-          <SensitiveToggle />
           <Link
             href="/settings"
             aria-label="Settings"

@@ -5,6 +5,7 @@
 // connectionId → holderId[] map; the dashboard service uses it to bucket
 // each connection (0=unassigned, 1=personal, 2+=joint).
 
+import { randomUUID } from 'node:crypto'
 import { asc, eq, inArray } from 'drizzle-orm'
 import { connectionHolders, db, holders } from '@/lib/db/client'
 import type { HolderRow } from '@/lib/db/schema'
@@ -41,6 +42,27 @@ export function getHolderIdsByConnection(
     else out.set(r.connectionId, [r.holderId])
   }
   return out
+}
+
+export function create(input: {
+  userId: string
+  label: string
+  color: string
+  initials: string
+}): HolderRow {
+  const existing = listForUser(input.userId)
+  const id = randomUUID()
+  const row: HolderRow = {
+    id,
+    userId: input.userId,
+    label: input.label,
+    color: input.color,
+    initials: input.initials,
+    displayOrder: existing.length,
+    createdAt: Date.now(),
+  }
+  db.insert(holders).values(row).run()
+  return row
 }
 
 export function setForConnection(connectionId: string, holderIds: string[]): void {
