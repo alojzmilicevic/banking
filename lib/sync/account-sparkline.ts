@@ -32,6 +32,17 @@ const WEALTH_AFFECTING_KINDS = new Set([
   'tax',
 ])
 
+// External money flows — deposits/withdrawals/transfers between the user's
+// own accounts. Subtracted from the period's balance change so the dashboard
+// reports actual investment growth (market drift + dividends − fees), not
+// money the user moved in or out.
+const DEPOSIT_KINDS = new Set([
+  'cash_in',
+  'cash_out',
+  'transfer_in',
+  'transfer_out',
+])
+
 function isoDay(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
@@ -42,6 +53,10 @@ export interface AccountSparkline {
   values: number[]
   // Convenience: same series oldest-first as `{ date, value }[]` for charts.
   series: { date: string; value: number }[]
+  // Net external money moved in (positive) or out (negative) over the
+  // window. Used by the dashboard so the change pill reflects real growth
+  // rather than balance change driven by deposits/withdrawals.
+  netDeposits: number
 }
 
 export function buildAccountSparklines(
@@ -141,6 +156,14 @@ export function buildAccountSparklines(
       .filter((t) => !t.kind || WEALTH_AFFECTING_KINDS.has(t.kind))
       .map((t) => ({ date: t.date, amount: t.amount }))
 
+    // Net deposits during the change window. The walkback (and Avanza
+    // history) treats day `sinceIso` as the past anchor and includes txs
+    // on that day in the past balance, so we only subtract txs strictly
+    // after it — matches the (today - past) delta the change pill uses.
+    const netDeposits = (txsByAcct.get(a.id) ?? [])
+      .filter((t) => t.kind && DEPOSIT_KINDS.has(t.kind) && t.date > sinceIso)
+      .reduce((s, t) => s + t.amount, 0)
+
     const history = new Map<string, number>()
     for (const r of historyByAcct.get(a.id) ?? []) history.set(r.date, r.value)
 
@@ -168,6 +191,7 @@ export function buildAccountSparklines(
       accountId: a.id,
       values: newestFirst.map((v) => Math.round(v * 100) / 100),
       series,
+      netDeposits: Math.round(netDeposits * 100) / 100,
     })
   }
 
