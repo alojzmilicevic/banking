@@ -1,5 +1,11 @@
 // One-shot import: pulls data/state.json (the old JSON store) into SQLite.
 // Idempotent — checked by presence of any users in the DB.
+//
+// Convention exception: this runs from inside `createDb()` before the
+// `db` proxy is wired up, so repos (which import `db` from the proxy)
+// would recurse into a half-initialized client. The function therefore
+// operates on the raw drizzle handle it's passed and stays out of the
+// repo layer.
 
 import fs from 'node:fs'
 import path from 'node:path'

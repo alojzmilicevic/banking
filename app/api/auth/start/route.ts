@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
-import { authStates, db, users } from '@/lib/db/client'
+import * as authStatesRepo from '@/lib/repositories/auth-states'
 import * as holdersRepo from '@/lib/repositories/holders'
+import * as usersRepo from '@/lib/repositories/users'
 import { getProvider } from '@/lib/providers/registry'
 import { StartAuthBodySchema } from '@/lib/api/schemas'
 import { validateJson } from '@/lib/api/validate'
@@ -31,14 +32,12 @@ export async function POST(req: Request) {
       )
     }
 
-    let user = db.select().from(users).get()
+    // Bootstrap on first link. The user row represents the household;
+    // individual people become rows in `holders` (added later from the
+    // settings UI or by the migration on existing DBs).
+    let user = usersRepo.getDefault()
     if (!user) {
-      const id = randomUUID()
-      // Bootstrap on first link. The user row represents the household;
-      // individual people become rows in `holders` (added later from the
-      // settings UI or by the migration on existing DBs).
-      db.insert(users).values({ id, name: 'Household' }).run()
-      user = db.select().from(users).get()!
+      user = usersRepo.create({ id: randomUUID(), name: 'Household' })
     }
 
     // Validate that the supplied holderId belongs to this user. Reject
@@ -69,17 +68,14 @@ export async function POST(req: Request) {
     // callback or poll handler), so we stash the holderId + payload here
     // so the callback can read it back.
     if (challenge.kind === 'redirect' || challenge.kind === 'polling' || challenge.kind === 'pending') {
-      db.insert(authStates)
-        .values({
-          state,
-          userId: user.id,
-          providerId: provider.id,
-          flow,
-          status: 'pending',
-          payload: JSON.stringify({ holderId: body.holderId ?? null, input: body.input ?? {} }),
-          expiresAt: Date.now() + AUTH_STATE_TTL_MS,
-        })
-        .run()
+      authStatesRepo.create({
+        state,
+        userId: user.id,
+        providerId: provider.id,
+        flow,
+        payload: JSON.stringify({ holderId: body.holderId ?? null, input: body.input ?? {} }),
+        expiresAt: Date.now() + AUTH_STATE_TTL_MS,
+      })
     }
 
     return NextResponse.json(challenge)

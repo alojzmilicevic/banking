@@ -7,11 +7,10 @@
 // fingerprint check; cookie-paste from a browser worked but couldn't
 // refresh itself. Password+TOTP is the path that survives.
 
-import { and, eq, inArray } from 'drizzle-orm'
-import { connectionHolders, connections, db } from '@/lib/db/client'
+import { randomUUID } from 'node:crypto'
+import * as connectionsRepo from '@/lib/repositories/connections'
 import * as holdersRepo from '@/lib/repositories/holders'
 import { deleteCredentials } from '@/lib/sync/credentials'
-import { randomUUID } from 'node:crypto'
 import type {
   AuthChallenge,
   CompleteAuthInput,
@@ -76,39 +75,31 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
   // key MUST include holder — the household has one user but multiple
   // holders, so matching on (user, provider) alone would have a re-link
   // under one holder overwrite another's connection.
-  const existing = findExistingAvanzaConnection(input.userId, holderId)
+  const existing = connectionsRepo.findIdByUserProviderAndHolder(input.userId, 'avanza', holderId)
 
   const connectionId = existing ?? randomUUID()
   if (existing) {
-    db.update(connections)
-      .set({
-        status: 'active',
-        validUntil: expiresAt,
-        lastSyncError: null,
-        rawJson: JSON.stringify({ expiresAt: expiresAt }),
-      })
-      .where(eq(connections.id, existing))
-      .run()
-  } else {
-    db.transaction((tx) => {
-      tx.insert(connections)
-        .values({
-          id: connectionId,
-          userId: input.userId,
-          providerId: 'avanza',
-          externalId: `avanza-${Date.now()}`,
-          label: 'Avanza',
-          status: 'active',
-          validUntil: expiresAt,
-          // Only non-secret metadata in rawJson. Cookies + creds live
-          // encrypted in connection_credentials.
-          rawJson: JSON.stringify({ expiresAt: expiresAt }),
-        })
-        .run()
-      if (holderId) {
-        tx.insert(connectionHolders).values({ connectionId, holderId }).run()
-      }
+    connectionsRepo.update(existing, {
+      status: 'active',
+      validUntil: expiresAt,
+      lastSyncError: null,
+      rawJson: JSON.stringify({ expiresAt }),
     })
+  } else {
+    connectionsRepo.createWithHolder(
+      {
+        id: connectionId,
+        userId: input.userId,
+        providerId: 'avanza',
+        externalId: `avanza-${Date.now()}`,
+        label: 'Avanza',
+        validUntil: expiresAt,
+        // Only non-secret metadata in rawJson. Cookies + creds live
+        // encrypted in connection_credentials.
+        rawJson: JSON.stringify({ expiresAt }),
+      },
+      holderId,
+    )
   }
 
   // Avanza creds skip the encrypted-DB path used by other providers
@@ -133,38 +124,4 @@ export async function avanzaPollAuth(_input: PollAuthInput): Promise<AuthChallen
 
 export async function avanzaCompleteAuth(_input: CompleteAuthInput): Promise<ConnectionMaterial> {
   throw new Error('Avanza does not use the OAuth-style completeAuth flow')
-}
-
-// Looks up an existing avanza connection for (user, holder) — match on
-// the M:N table for the holder-tagged case, or "no holders attached"
-// when holderId is null. Returns the connectionId or null.
-function findExistingAvanzaConnection(userId: string, holderId: string | null): string | null {
-  const rows = db
-    .select({ id: connections.id })
-    .from(connections)
-    .where(and(eq(connections.userId, userId), eq(connections.providerId, 'avanza')))
-    .all()
-  if (rows.length === 0) return null
-
-  if (holderId === null) {
-    const linked = db
-      .select({ connectionId: connectionHolders.connectionId })
-      .from(connectionHolders)
-      .where(inArray(connectionHolders.connectionId, rows.map((r) => r.id)))
-      .all()
-    const linkedSet = new Set(linked.map((l) => l.connectionId))
-    return rows.find((r) => !linkedSet.has(r.id))?.id ?? null
-  }
-
-  const link = db
-    .select({ connectionId: connectionHolders.connectionId })
-    .from(connectionHolders)
-    .where(
-      and(
-        inArray(connectionHolders.connectionId, rows.map((r) => r.id)),
-        eq(connectionHolders.holderId, holderId),
-      ),
-    )
-    .get()
-  return link?.connectionId ?? null
 }

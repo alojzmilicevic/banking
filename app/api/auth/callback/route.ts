@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
-import { eq } from 'drizzle-orm'
-import { authStates, connectionHolders, connections, db } from '@/lib/db/client'
+import * as authStatesRepo from '@/lib/repositories/auth-states'
+import * as connectionsRepo from '@/lib/repositories/connections'
 import * as holdersRepo from '@/lib/repositories/holders'
 import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/services/wealth'
@@ -27,13 +27,13 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${url.origin}/?error=missing_state`)
   }
 
-  const pending = db.select().from(authStates).where(eq(authStates.state, state)).get()
+  const pending = authStatesRepo.getByState(state)
   if (!pending) {
     return NextResponse.redirect(`${url.origin}/?error=unknown_state`)
   }
 
   // Single-use; clean up regardless of outcome.
-  db.delete(authStates).where(eq(authStates.state, state)).run()
+  authStatesRepo.deleteByState(state)
 
   try {
     const provider = getProvider(pending.providerId)
@@ -59,23 +59,18 @@ export async function GET(req: Request) {
     }
 
     const connectionId = randomUUID()
-    db.transaction((tx) => {
-      tx.insert(connections)
-        .values({
-          id: connectionId,
-          userId: pending.userId,
-          providerId: pending.providerId,
-          externalId: completed.externalId,
-          label: completed.label ?? null,
-          status: 'active',
-          validUntil: completed.validUntil ?? null,
-          rawJson: JSON.stringify(completed.raw),
-        })
-        .run()
-      if (holderId) {
-        tx.insert(connectionHolders).values({ connectionId, holderId }).run()
-      }
-    })
+    connectionsRepo.createWithHolder(
+      {
+        id: connectionId,
+        userId: pending.userId,
+        providerId: pending.providerId,
+        externalId: completed.externalId,
+        label: completed.label ?? null,
+        validUntil: completed.validUntil ?? null,
+        rawJson: JSON.stringify(completed.raw),
+      },
+      holderId,
+    )
 
     try {
       await syncConnection(connectionId)

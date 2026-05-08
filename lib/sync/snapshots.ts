@@ -22,18 +22,13 @@
 // Bucketed totals (cash vs investment) come from accounts.kind so the
 // chart can show a stacked breakdown if we want one later.
 
-import { and, desc, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm'
-import {
-  accountValueHistory,
-  accounts,
-  balances,
-  connectionHolders,
-  connections,
-  dailySnapshots,
-  db,
-  positions,
-  transactions,
-} from '@/lib/db/client'
+import * as accountsRepo from '@/lib/repositories/accounts'
+import * as accountValueHistoryRepo from '@/lib/repositories/account-value-history'
+import * as balancesRepo from '@/lib/repositories/balances'
+import * as dailySnapshotsRepo from '@/lib/repositories/daily-snapshots'
+import * as holdersRepo from '@/lib/repositories/holders'
+import * as positionsRepo from '@/lib/repositories/positions'
+import * as transactionsRepo from '@/lib/repositories/transactions'
 import { balanceIncludesInvestments, pickBalance } from '@/lib/balance'
 
 const BASE_CURRENCY = 'SEK'
@@ -91,24 +86,7 @@ function isoDay(d: Date): string {
 }
 
 function loadAccountSnapshots(userId: string, sinceIso: string): AccountSnapshot[] {
-  // User's accounts in one indexed query — joins via connections.user_id and
-  // pushes the excluded_from_total filter into SQL (was a JS .filter on a
-  // full-table scan).
-  const rawUserAccounts = db
-    .select({
-      id: accounts.id,
-      kind: accounts.kind,
-      currency: accounts.currency,
-      connectionId: accounts.connectionId,
-      iban: accounts.iban,
-      bban: accounts.bban,
-      createdAt: accounts.createdAt,
-    })
-    .from(accounts)
-    .innerJoin(connections, eq(accounts.connectionId, connections.id))
-    .where(and(eq(connections.userId, userId), ne(accounts.excludedFromTotal, 1)))
-    .all()
-
+  const rawUserAccounts = accountsRepo.listIncludedForUser(userId)
   if (rawUserAccounts.length === 0) return []
 
   // Per-connection holder set from the M:N table.
@@ -116,17 +94,7 @@ function loadAccountSnapshots(userId: string, sinceIso: string): AccountSnapshot
   //   • 1 holder  → personal (use that holderId as the bucket)
   //   • 2+ holders → explicit joint (shared bucket)
   const connectionIds = Array.from(new Set(rawUserAccounts.map((a) => a.connectionId)))
-  const linkRows = db
-    .select()
-    .from(connectionHolders)
-    .where(inArray(connectionHolders.connectionId, connectionIds))
-    .all()
-  const holderIdsByConn = new Map<string, string[]>()
-  for (const r of linkRows) {
-    const list = holderIdsByConn.get(r.connectionId)
-    if (list) list.push(r.holderId)
-    else holderIdsByConn.set(r.connectionId, [r.holderId])
-  }
+  const holderIdsByConn = holdersRepo.getHolderIdsByConnection(connectionIds)
 
   // Joint dedup: when the same physical account (same IBAN/BBAN) is
   // linked by different holder sets, both rows return separately. Without
@@ -181,53 +149,10 @@ function loadAccountSnapshots(userId: string, sinceIso: string): AccountSnapshot
   // Batch the four per-account queries into one round-trip each. Each uses
   // the existing per-account index (balances_pk, positions_pk,
   // transactions_by_account_date, account_value_history_pk).
-  const allBalances = db
-    .select()
-    .from(balances)
-    .where(inArray(balances.accountId, accountIds))
-    .all()
-
-  const allPositions = db
-    .select({ accountId: positions.accountId, marketValue: positions.marketValue })
-    .from(positions)
-    .where(inArray(positions.accountId, accountIds))
-    .all()
-
-  // Global ORDER BY date DESC: after grouping by accountId, each per-account
-  // list is still in date-desc order (stable insertion).
-  const allTxs = db
-    .select({
-      accountId: transactions.accountId,
-      date: transactions.date,
-      amount: transactions.amount,
-      kind: transactions.kind,
-    })
-    .from(transactions)
-    .where(
-      and(
-        inArray(transactions.accountId, accountIds),
-        gte(transactions.date, sinceIso),
-        ne(transactions.status, 'PDNG'),
-        ne(transactions.status, 'INFO'),
-      ),
-    )
-    .orderBy(desc(transactions.date))
-    .all()
-
-  const allHistory = db
-    .select({
-      accountId: accountValueHistory.accountId,
-      date: accountValueHistory.date,
-      value: accountValueHistory.value,
-    })
-    .from(accountValueHistory)
-    .where(
-      and(
-        inArray(accountValueHistory.accountId, accountIds),
-        gte(accountValueHistory.date, sinceIso),
-      ),
-    )
-    .all()
+  const allBalances = balancesRepo.listByAccountIds(accountIds)
+  const allPositions = positionsRepo.listByAccountIds(accountIds)
+  const allTxs = transactionsRepo.listBookedSinceForAccountIds(accountIds, sinceIso)
+  const allHistory = accountValueHistoryRepo.listByAccountIdsSince(accountIds, sinceIso)
 
   function groupByAccountId<T extends { accountId: string }>(rows: T[]): Map<string, T[]> {
     const m = new Map<string, T[]>()
@@ -407,13 +332,12 @@ export function rebuildSnapshotsForUser(
   opts: { daysBack?: number; onlyToday?: boolean } = {},
 ): RebuildResult {
   const daysBack = opts.onlyToday ? 0 : opts.daysBack ?? 365
-  const now = Date.now()
   const today = new Date()
   today.setUTCHours(0, 0, 0, 0)
   const sinceIso = isoDay(new Date(today.getTime() - daysBack * MS_DAY))
 
   const snapshots = loadAccountSnapshots(userId, sinceIso)
-  const holderIds = listHolderIdsForUser(userId)
+  const holderIds = holdersRepo.listLinkedIdsForUser(userId)
   const { points, currencyMismatches } = computeSnapshotPoints(
     snapshots,
     today,
@@ -421,39 +345,21 @@ export function rebuildSnapshotsForUser(
     holderIds,
   )
 
-  // Persist all points in a single transaction.
-  db.transaction((tx) => {
-    for (const p of points) {
-      const detailJson = JSON.stringify({
+  dailySnapshotsRepo.upsertMany(
+    points.map((p) => ({
+      userId,
+      date: p.date,
+      baseCurrency: BASE_CURRENCY,
+      totalAmount: p.totalAmount,
+      cashAmount: p.cashAmount,
+      investmentAmount: p.investmentAmount,
+      detailJson: JSON.stringify({
         byHolder: p.byHolder,
         sharedAmount: p.sharedAmount,
         unassignedAmount: p.unassignedAmount,
-      })
-      tx.insert(dailySnapshots)
-        .values({
-          userId,
-          date: p.date,
-          baseCurrency: BASE_CURRENCY,
-          totalAmount: p.totalAmount,
-          cashAmount: p.cashAmount,
-          investmentAmount: p.investmentAmount,
-          detailJson,
-          computedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [dailySnapshots.userId, dailySnapshots.date],
-          set: {
-            baseCurrency: BASE_CURRENCY,
-            totalAmount: p.totalAmount,
-            cashAmount: p.cashAmount,
-            investmentAmount: p.investmentAmount,
-            detailJson,
-            computedAt: now,
-          },
-        })
-        .run()
-    }
-  })
+      }),
+    })),
+  )
 
   return {
     written: points.length,
@@ -479,7 +385,7 @@ export function computeTodaySnapshot(userId: string): {
   const now = new Date()
   const today = isoDay(now)
   const snapshots = loadAccountSnapshots(userId, today)
-  const holderIds = listHolderIdsForUser(userId)
+  const holderIds = holdersRepo.listLinkedIdsForUser(userId)
   let cashAmount = 0
   let investmentAmount = 0
   let sharedAmount = 0
@@ -519,21 +425,6 @@ export function computeTodaySnapshot(userId: string): {
     sharedAmount: Math.round(sharedAmount * 100) / 100,
     unassignedAmount: Math.round(unassignedAmount * 100) / 100,
   }
-}
-
-// Helper for the two computation entry points above. Reads the user's
-// holder ids in a stable order so both today and the per-day walk seed
-// the same key set.
-function listHolderIdsForUser(userId: string): string[] {
-  return db
-    .select({ id: sql<string>`${connectionHolders.holderId}` })
-    .from(connectionHolders)
-    .innerJoin(connections, eq(connectionHolders.connectionId, connections.id))
-    .where(eq(connections.userId, userId))
-    .all()
-    .map((r) => r.id)
-    .filter((id, i, arr) => arr.indexOf(id) === i) // distinct
-    .sort()
 }
 
 export interface SnapshotRangeRow {
@@ -591,25 +482,7 @@ export function getSnapshotsRange(
   fromDate: string,
   toDate: string,
 ): SnapshotRangeRow[] {
-  const rows = db
-    .select({
-      date: dailySnapshots.date,
-      totalAmount: dailySnapshots.totalAmount,
-      cashAmount: dailySnapshots.cashAmount,
-      investmentAmount: dailySnapshots.investmentAmount,
-      detailJson: dailySnapshots.detailJson,
-    })
-    .from(dailySnapshots)
-    .where(
-      and(
-        eq(dailySnapshots.userId, userId),
-        gte(dailySnapshots.date, fromDate),
-        lte(dailySnapshots.date, toDate),
-      ),
-    )
-    .orderBy(dailySnapshots.date)
-    .all()
-
+  const rows = dailySnapshotsRepo.getRange(userId, fromDate, toDate)
   return rows.map((r) => {
     const d = parseDetail(r.detailJson)
     return {
@@ -627,10 +500,5 @@ export function getSnapshotsRange(
 // Earliest snapshot date stored for a user (or null if none yet).
 // Used by /api/timeseries to anchor the "ALL" period correctly.
 export function getEarliestSnapshotDate(userId: string): string | null {
-  const row = db
-    .select({ date: sql<string>`MIN(${dailySnapshots.date})` })
-    .from(dailySnapshots)
-    .where(eq(dailySnapshots.userId, userId))
-    .get()
-  return row?.date ?? null
+  return dailySnapshotsRepo.getEarliestDate(userId)
 }

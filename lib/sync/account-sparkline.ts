@@ -9,16 +9,11 @@
 // each wealth-affecting transaction with date strictly after day D to get
 // the end-of-day-D balance.
 
-import { and, desc, eq, gte, inArray, ne } from 'drizzle-orm'
-import {
-  accountValueHistory,
-  accounts,
-  balances,
-  connections,
-  db,
-  positions,
-  transactions,
-} from '@/lib/db/client'
+import * as accountsRepo from '@/lib/repositories/accounts'
+import * as accountValueHistoryRepo from '@/lib/repositories/account-value-history'
+import * as balancesRepo from '@/lib/repositories/balances'
+import * as positionsRepo from '@/lib/repositories/positions'
+import * as transactionsRepo from '@/lib/repositories/transactions'
 import { balanceIncludesInvestments, pickBalance } from '@/lib/balance'
 
 const MS_DAY = 86400_000
@@ -106,65 +101,15 @@ export function buildAccountSparklines(
   today.setUTCHours(0, 0, 0, 0)
   const sinceIso = isoDay(new Date(today.getTime() - days * MS_DAY))
 
-  const userAccounts = db
-    .select({
-      id: accounts.id,
-      kind: accounts.kind,
-    })
-    .from(accounts)
-    .innerJoin(connections, eq(accounts.connectionId, connections.id))
-    .where(eq(connections.userId, userId))
-    .all()
+  const userAccounts = accountsRepo.listAllForUser(userId)
 
   if (userAccounts.length === 0) return out
   const accountIds = userAccounts.map((a) => a.id)
 
-  const allBalances = db
-    .select()
-    .from(balances)
-    .where(inArray(balances.accountId, accountIds))
-    .all()
-
-  const allPositions = db
-    .select({ accountId: positions.accountId, marketValue: positions.marketValue })
-    .from(positions)
-    .where(inArray(positions.accountId, accountIds))
-    .all()
-
-  const allTxs = db
-    .select({
-      accountId: transactions.accountId,
-      date: transactions.date,
-      amount: transactions.amount,
-      kind: transactions.kind,
-    })
-    .from(transactions)
-    .where(
-      and(
-        inArray(transactions.accountId, accountIds),
-        gte(transactions.date, sinceIso),
-        ne(transactions.status, 'PDNG'),
-        ne(transactions.status, 'INFO'),
-      ),
-    )
-    .orderBy(desc(transactions.date))
-    .all()
-
-  const allHistory = db
-    .select({
-      accountId: accountValueHistory.accountId,
-      date: accountValueHistory.date,
-      value: accountValueHistory.value,
-      growth: accountValueHistory.growth,
-    })
-    .from(accountValueHistory)
-    .where(
-      and(
-        inArray(accountValueHistory.accountId, accountIds),
-        gte(accountValueHistory.date, sinceIso),
-      ),
-    )
-    .all()
+  const allBalances = balancesRepo.listByAccountIds(accountIds)
+  const allPositions = positionsRepo.listByAccountIds(accountIds)
+  const allTxs = transactionsRepo.listBookedSinceForAccountIds(accountIds, sinceIso)
+  const allHistory = accountValueHistoryRepo.listByAccountIdsSince(accountIds, sinceIso)
 
   function group<T extends { accountId: string }>(rows: T[]): Map<string, T[]> {
     const m = new Map<string, T[]>()

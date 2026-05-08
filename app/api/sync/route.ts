@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { eq } from 'drizzle-orm'
-import { connections, db, users } from '@/lib/db/client'
+import * as connectionsRepo from '@/lib/repositories/connections'
+import * as usersRepo from '@/lib/repositories/users'
 import { syncConnection, type SyncMode } from '@/lib/services/wealth'
 import { rateLimit } from '@/lib/sync/rate-limit'
 
@@ -25,11 +25,11 @@ export async function POST(req: Request) {
   const mode = (searchParams.get('mode') ?? 'auto') as SyncMode
 
   try {
-    const user = db.select().from(users).get()
+    const user = usersRepo.getDefault()
     const userId = user?.id ?? 'anon'
 
     if (id) {
-      const conn = db.select().from(connections).where(eq(connections.id, id)).get()
+      const conn = connectionsRepo.getById(id)
       if (!conn) {
         return NextResponse.json({ error: 'connection not found' }, { status: 404 })
       }
@@ -53,12 +53,7 @@ export async function POST(req: Request) {
 
     if (!user) return NextResponse.json({ results: [] })
 
-    const conns = db
-      .select()
-      .from(connections)
-      .where(eq(connections.userId, user.id))
-      .all()
-    const active = conns.filter((c) => c.status === 'active')
+    const active = connectionsRepo.listActiveForUser(user.id)
 
     // Per-connection rate-limit check using its provider's bucket. Rate-
     // limited connections short-circuit with a 429-shaped result; the

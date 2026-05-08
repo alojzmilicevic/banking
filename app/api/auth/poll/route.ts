@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { eq } from 'drizzle-orm'
-import { authStates, db } from '@/lib/db/client'
+import * as authStatesRepo from '@/lib/repositories/auth-states'
 import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/services/wealth'
 import { PollAuthQuerySchema } from '@/lib/api/schemas'
@@ -18,7 +17,7 @@ export async function GET(req: Request) {
   }
   const { state } = parsed.data
 
-  const row = db.select().from(authStates).where(eq(authStates.state, state)).get()
+  const row = authStatesRepo.getByState(state)
   if (!row) {
     return NextResponse.json({ kind: 'error', state, message: 'Unknown state' })
   }

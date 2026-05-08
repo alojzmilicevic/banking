@@ -20,8 +20,8 @@
 // `connection_holders`, it belongs here and MUST end with a snapshot
 // rebuild. See `lib/sync/snapshots.ts:rebuildSnapshotsForUser`.
 
-import { eq } from 'drizzle-orm'
-import { accounts, connections, db } from '@/lib/db/client'
+import * as accountsRepo from '@/lib/repositories/accounts'
+import * as connectionsRepo from '@/lib/repositories/connections'
 import { rebuildSnapshotsForUser } from '@/lib/sync/snapshots'
 import { deleteAvanzaCredentials } from '@/lib/providers/avanza/auth/credentials-store'
 
@@ -42,7 +42,7 @@ export interface DisconnectResult {
 // FK rules in lib/db/schema.ts), then rebuilds the wealth chart so the
 // removed accounts stop appearing in historical totals.
 export function disconnectConnection(connectionId: string): DisconnectResult | null {
-  const row = db.select().from(connections).where(eq(connections.id, connectionId)).get()
+  const row = connectionsRepo.getById(connectionId)
   if (!row) return null
   // For Avanza the encrypted-DB row would never have existed (creds
   // live in Keychain, not connection_credentials), so the cascade
@@ -50,7 +50,7 @@ export function disconnectConnection(connectionId: string): DisconnectResult | n
   if (row.providerId === 'avanza') {
     deleteAvanzaCredentials(connectionId)
   }
-  db.delete(connections).where(eq(connections.id, connectionId)).run()
+  connectionsRepo.deleteById(connectionId)
   rebuildSnapshotsForUser(row.userId)
   return { removed: connectionId }
 }
@@ -69,15 +69,12 @@ export function setAccountExcluded(
   accountId: string,
   excluded: boolean,
 ): SetAccountExcludedResult | null {
-  const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get()
+  const account = accountsRepo.getById(accountId)
   if (!account) return null
-  db.update(accounts)
-    .set({ excludedFromTotal: excluded ? 1 : 0 })
-    .where(eq(accounts.id, accountId))
-    .run()
+  accountsRepo.setExcluded(accountId, excluded)
   // Look up the connection only to find userId — accounts don't carry it
   // directly (it lives on the connection).
-  const conn = db.select().from(connections).where(eq(connections.id, account.connectionId)).get()
+  const conn = connectionsRepo.getById(account.connectionId)
   if (conn) rebuildSnapshotsForUser(conn.userId, { daysBack: 365 })
   return { id: accountId, excludedFromTotal: excluded }
 }

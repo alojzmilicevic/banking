@@ -12,6 +12,11 @@
 // Safe to delete this script once it has been run on every environment.
 //
 // Run with: npx tsx scripts/migrate-snapshot-keys.ts
+//
+// Convention exception: this is a deletion-pending one-shot migration
+// (see comment above) — wrapping its detail_json LIKE filter in a repo
+// function would create code that exists solely to be removed. Lives
+// here as a script and bypasses the repo layer by design.
 
 import { and, eq, sql } from 'drizzle-orm'
 import { dailySnapshots, db, holders } from '../lib/db/client'
