@@ -1,29 +1,14 @@
 'use client'
 
-import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
-  useConnectAvanza,
-  useSyncConnection,
-  useSyncProgress,
-  type SyncProgressUpdate,
-} from '@/lib/queries'
-
-// The link flow has two visible phases on purpose: authentication
-// (the /usercredentials → /totp dance + Keychain save, ~1-2s) and
-// sync (categorizedAccounts + 12 months of chart data, ~5-30s).
-// Each gets a distinct label so the user isn't staring at a single
-// "Logging in…" spinner during what's mostly historical-data
-// backfill. Sync errors keep the connection alive — it's already
-// created — and the user can retry without re-typing creds.
-type Phase =
-  | { kind: 'idle' }
-  | { kind: 'authenticating' }
-  | { kind: 'syncing'; connectionId: string }
-  | { kind: 'auth-error'; message: string }
-  | { kind: 'sync-error'; connectionId: string; message: string }
+  useAvanzaConnectFlow,
+  type AvanzaPhase,
+} from '@/hooks/use-avanza-connect-flow'
+import { syncStageLabel } from '@/hooks/use-sync-progress-label'
+import type { SyncProgressUpdate } from '@/lib/queries'
 
 export function AvanzaPanel({
   holderId,
@@ -32,79 +17,23 @@ export function AvanzaPanel({
   holderId: string
   onDone: () => void
 }) {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [totpSeed, setTotpSeed] = useState('')
-  const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
-  const connect = useConnectAvanza()
-  const sync = useSyncConnection()
-
-  // Poll the server-side progress map only while we're actively
-  // syncing, so the panel can show sub-progress like "Loading 12
-  // months of history (3 of 5)..." without an SSE channel.
-  const syncingId = phase.kind === 'syncing' ? phase.connectionId : null
-  const progressQ = useSyncProgress(syncingId, phase.kind === 'syncing')
-  const progress = progressQ.data
-
-  const formMissing = !username.trim() || !password || !totpSeed.trim()
-  const editable = phase.kind === 'idle' || phase.kind === 'auth-error'
-  const busy = phase.kind === 'authenticating' || phase.kind === 'syncing'
-
-  async function runSync(connectionId: string) {
-    setPhase({ kind: 'syncing', connectionId })
-    try {
-      await sync.mutateAsync(connectionId)
-      setUsername('')
-      setPassword('')
-      setTotpSeed('')
-      setPhase({ kind: 'idle' })
-      onDone()
-    } catch (e) {
-      setPhase({
-        kind: 'sync-error',
-        connectionId,
-        message: (e as Error).message,
-      })
-    }
-  }
-
-  async function doConnect() {
-    if (formMissing) {
-      setPhase({ kind: 'auth-error', message: 'Username, password, and TOTP seed are all required' })
-      return
-    }
-    setPhase({ kind: 'authenticating' })
-    let connectionId: string
-    try {
-      const challenge = await connect.mutateAsync({
-        username: username.trim(),
-        password,
-        totpSeed: totpSeed.trim(),
-        holderId,
-      })
-      if (challenge.kind !== 'complete' || !challenge.connectionId) {
-        throw new Error(challenge.message ?? `Unexpected challenge: ${challenge.kind}`)
-      }
-      connectionId = challenge.connectionId
-    } catch (e) {
-      setPhase({ kind: 'auth-error', message: (e as Error).message })
-      return
-    }
-    await runSync(connectionId)
-  }
-
-  const buttonLabel = (() => {
-    switch (phase.kind) {
-      case 'authenticating':
-        return 'Authenticating with Avanza…'
-      case 'syncing':
-        return syncStageLabel(progress)
-      case 'sync-error':
-        return 'Retry sync'
-      default:
-        return 'Connect Avanza'
-    }
-  })()
+  const flow = useAvanzaConnectFlow(holderId, onDone)
+  const {
+    username,
+    password,
+    totpSeed,
+    setUsername,
+    setPassword,
+    setTotpSeed,
+    phase,
+    progress,
+    buttonLabel,
+    formMissing,
+    editable,
+    busy,
+    submit,
+    closeAfterSyncError,
+  } = flow
 
   return (
     <div className="flex flex-col gap-3">
@@ -161,13 +90,7 @@ export function AvanzaPanel({
 
       <div className="flex gap-2">
         <Button
-          onClick={() => {
-            if (phase.kind === 'sync-error') {
-              void runSync(phase.connectionId)
-              return
-            }
-            void doConnect()
-          }}
+          onClick={submit}
           disabled={busy || (phase.kind !== 'sync-error' && formMissing)}
           className="flex-1"
         >
@@ -175,43 +98,13 @@ export function AvanzaPanel({
           {buttonLabel}
         </Button>
         {phase.kind === 'sync-error' && (
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setPhase({ kind: 'idle' })
-              setUsername('')
-              setPassword('')
-              setTotpSeed('')
-              onDone()
-            }}
-          >
+          <Button variant="secondary" onClick={closeAfterSyncError}>
             Close
           </Button>
         )}
       </div>
     </div>
   )
-}
-
-// Maps server-side sync progress to a human-readable button/status
-// label. Lives at module scope so it can be reused by the button and
-// the indicator subtitle without a hook.
-function syncStageLabel(p: SyncProgressUpdate | undefined): string {
-  if (!p || p.stage === 'idle') return 'Loading…'
-  switch (p.stage) {
-    case 'reauth':
-      return 'Re-authenticating…'
-    case 'fetching-accounts':
-      return 'Loading accounts…'
-    case 'fetching-history':
-      return p.total > 1
-        ? `Loading 12 months of history (${p.completed} of ${p.total})…`
-        : 'Loading 12 months of history…'
-    case 'done':
-      return 'Done'
-    case 'error':
-      return 'Sync error'
-  }
 }
 
 // Two-step indicator with a sub-line that surfaces the live progress
@@ -221,7 +114,7 @@ function PhaseIndicator({
   phase,
   progress,
 }: {
-  phase: Phase
+  phase: AvanzaPhase
   progress: SyncProgressUpdate | undefined
 }) {
   if (phase.kind === 'idle' || phase.kind === 'auth-error') return null

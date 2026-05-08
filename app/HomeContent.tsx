@@ -8,7 +8,7 @@
 // eye toggles in the sidebar; on mobile the view tabs additionally
 // re-label the topbar number/delta.
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useLocalStorage } from '@/hooks/use-local-storage'
 import { DashboardSkeleton } from './components/DashboardSkeleton'
 import { MobileDashboardSkeleton } from './components/MobileDashboardSkeleton'
@@ -28,7 +28,7 @@ import {
   useToggleExclude,
 } from '@/lib/queries'
 import type { DashboardAccount } from '@/lib/api/dashboard'
-import { celebrate } from '@/lib/animation/confetti'
+import { useConnectedConfetti } from '@/hooks/use-connected-confetti'
 
 const EMPTY_SNAP: TimelineSnapshot = {
   total: null,
@@ -65,17 +65,7 @@ export function HomeContent({
 
   const data = dashboard.data
 
-  // Fire confetti once if we just landed from a successful OAuth callback.
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const sp = new URLSearchParams(window.location.search)
-    if (sp.get('connected')) {
-      celebrate()
-      const url = new URL(window.location.href)
-      url.searchParams.delete('connected')
-      window.history.replaceState({}, '', url.toString())
-    }
-  }, [])
+  useConnectedConfetti()
 
   function onToggleAccount(a: DashboardAccount) {
     toggleExclude.mutate({ id: a.id, exclude: !a.excludedFromTotal })
