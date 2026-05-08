@@ -31,30 +31,6 @@ function SidebarSkeleton({ width }: { width: number }) {
         <span className="font-display text-20 tracking-display">aloma</span>
       </div>
 
-      {/* "View" label — static text, mirrors Sidebar.tsx */}
-      <div className="mb-2 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
-        View
-      </div>
-
-      {/* View switcher rows — All + 1 holder + Shared mirrors the
-          single-user default (the app's documented common case). Wrap
-          each in the same border+padding container as the real button so
-          total row height matches and there's no jump on data arrival. */}
-      <div className="mb-1 flex flex-col gap-0.75">
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className="flex w-full items-center gap-2.5 rounded-9 border border-transparent px-3 py-2.25 text-14"
-          >
-            <Skeleton className="size-2 rounded-full" />
-            <Skeleton className="h-3.5 w-20" />
-            {i > 0 && <Skeleton className="ml-auto h-3 w-11" />}
-          </div>
-        ))}
-      </div>
-
-      <div className="my-4 h-px bg-border-subtle" />
-
       {/* "Accounts" label — static text */}
       <div className="mb-2.5 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
         Accounts
@@ -66,15 +42,6 @@ function SidebarSkeleton({ width }: { width: number }) {
           it — most users have no hidden accounts. */}
       <PersonSectionSkeleton accountRows={3} withAdd />
       <PersonSectionSkeleton accountRows={2} sharedHeader />
-
-      {/* "Combined line" toggle — always rendered by Sidebar, so reserve
-          the row to avoid a downward jump when data lands. Static label,
-          shimmer for the On/Off pill. */}
-      <div className="mt-1 flex w-full items-center gap-2.5 rounded-9 border border-border-subtle px-3 py-2.25 text-14 text-text-faint">
-        <span className="h-0.5 w-4 shrink-0 rounded-1 bg-primary" />
-        Combined line
-        <Skeleton className="ml-auto h-2.75 w-5" />
-      </div>
 
       {/* Mirrors Sidebar.tsx — fills remaining vertical space so scroll
           behaviour matches the loaded layout. */}

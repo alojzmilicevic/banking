@@ -42,8 +42,6 @@ export interface AvanzaCredentials {
 
 export interface LoginResult {
   cookies: Record<string, string>
-  authenticationSession?: string
-  customerId?: string
 }
 
 export class AvanzaLoginError extends Error {
@@ -61,8 +59,15 @@ function getSetCookies(headers: Headers): string[] {
   return typeof headers.getSetCookie === 'function' ? headers.getSetCookie() : []
 }
 
-function parseCookieJar(setCookies: string[]): Record<string, string> {
-  const jar: Record<string, string> = {}
+// Merge Set-Cookie headers into an existing jar. Used to accumulate
+// cookies across the usercredentials + totp two-step login: a real
+// browser carries cookies from the first response into the second
+// request and persists the union, so we do the same. Discarding the
+// usercredentials response's cookies (the previous behaviour) left the
+// final jar with only `csid`/`cstoken`/`AZACSRF` from the totp step;
+// `/_api/account-overview/*` then 401'd because the persistence
+// cookies set on usercredentials were missing.
+function mergeSetCookies(jar: Record<string, string>, setCookies: string[]): void {
   for (const sc of setCookies) {
     const pair = sc.split(';', 1)[0]
     const eq = pair.indexOf('=')
@@ -73,7 +78,12 @@ function parseCookieJar(setCookies: string[]): Record<string, string> {
     if (value === '') delete jar[name]
     else jar[name] = value
   }
-  return jar
+}
+
+function jarHeader(jar: Record<string, string>): string {
+  return Object.entries(jar)
+    .map(([k, v]) => `${k}=${v}`)
+    .join('; ')
 }
 
 async function readJsonBody(res: Response): Promise<Record<string, unknown>> {
@@ -91,6 +101,13 @@ export async function loginWithPassword(
   password: string,
   totpSeed: string,
 ): Promise<LoginResult> {
+  // Single jar carried across both auth hops. The usercredentials
+  // response sets persistence/session cookies (e.g. AZAPERSISTENCE,
+  // AZAHLI) that the totp step doesn't re-emit but that the new
+  // /_api/account-overview/* endpoints require. A browser carries them
+  // forward implicitly; we have to do it explicitly.
+  const jar: Record<string, string> = {}
+
   let credRes: Response
   try {
     credRes = await fetch(`${BASE}${paths.USERCREDENTIALS}`, {
@@ -102,6 +119,8 @@ export async function loginWithPassword(
   } catch (e) {
     throw new NetworkError(`Avanza usercredentials: ${(e as Error).message}`, { cause: e })
   }
+
+  mergeSetCookies(jar, getSetCookies(credRes.headers))
 
   const credBody = await readJsonBody(credRes)
 
@@ -125,6 +144,11 @@ export async function loginWithPassword(
     )
   }
 
+  // Force-set AZAMFATRANSACTION from the response body. Set-Cookie may
+  // already have set it, but the body is the canonical source — if
+  // Avanza ever drops the Set-Cookie this still works.
+  jar['AZAMFATRANSACTION'] = transactionId
+
   const code = generateTotp(totpSeed)
   let totpRes: Response
   try {
@@ -132,7 +156,7 @@ export async function loginWithPassword(
       method: 'POST',
       headers: {
         ...COMMON_HEADERS,
-        Cookie: `AZAMFATRANSACTION=${transactionId}`,
+        Cookie: jarHeader(jar),
       },
       body: JSON.stringify({ method: 'TOTP', totpCode: code }),
       redirect: 'manual',
@@ -140,6 +164,8 @@ export async function loginWithPassword(
   } catch (e) {
     throw new NetworkError(`Avanza totp: ${(e as Error).message}`, { cause: e })
   }
+
+  mergeSetCookies(jar, getSetCookies(totpRes.headers))
 
   const totpBody = await readJsonBody(totpRes)
 
@@ -153,9 +179,11 @@ export async function loginWithPassword(
     )
   }
 
-  const cookies = parseCookieJar(getSetCookies(totpRes.headers))
+  // Drop the now-consumed 2FA transaction marker before persisting.
+  delete jar['AZAMFATRANSACTION']
+
   const required = ['csid', 'cstoken', 'AZACSRF']
-  const missing = required.filter((k) => !cookies[k])
+  const missing = required.filter((k) => !jar[k])
   if (missing.length > 0) {
     throw new AvanzaLoginError(
       'totp',
@@ -164,13 +192,5 @@ export async function loginWithPassword(
     )
   }
 
-  return {
-    cookies,
-    authenticationSession:
-      typeof totpBody.authenticationSession === 'string'
-        ? totpBody.authenticationSession
-        : undefined,
-    customerId:
-      typeof totpBody.customerId === 'string' ? totpBody.customerId : undefined,
-  }
+  return { cookies: jar }
 }

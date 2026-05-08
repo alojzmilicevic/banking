@@ -19,7 +19,6 @@ import type {
   PollAuthInput,
   StartAuthInput,
 } from '../../types'
-import type { AvanzaSession } from '../api'
 import { saveAvanzaCredentials } from './credentials-store'
 import { AvanzaLoginError, loginWithPassword, type AvanzaCredentials } from './login'
 
@@ -63,10 +62,7 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
     password,
     totpSeed,
   }
-  const session: AvanzaSession = {
-    cookies: credentials.cookies,
-    expiresAt: Date.now() + SESSION_TTL_MS,
-  }
+  const expiresAt = Date.now() + SESSION_TTL_MS
 
   const holderIdRaw = input.input.holderId
   let holderId: string | null = null
@@ -87,9 +83,9 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
     db.update(connections)
       .set({
         status: 'active',
-        validUntil: session.expiresAt,
+        validUntil: expiresAt,
         lastSyncError: null,
-        rawJson: JSON.stringify({ expiresAt: session.expiresAt }),
+        rawJson: JSON.stringify({ expiresAt: expiresAt }),
       })
       .where(eq(connections.id, existing))
       .run()
@@ -103,10 +99,10 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
           externalId: `avanza-${Date.now()}`,
           label: 'Avanza',
           status: 'active',
-          validUntil: session.expiresAt,
+          validUntil: expiresAt,
           // Only non-secret metadata in rawJson. Cookies + creds live
           // encrypted in connection_credentials.
-          rawJson: JSON.stringify({ expiresAt: session.expiresAt }),
+          rawJson: JSON.stringify({ expiresAt: expiresAt }),
         })
         .run()
       if (holderId) {

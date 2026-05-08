@@ -1,9 +1,8 @@
-// Left rail of the dashboard. Logo, view switcher, person sections,
-// shared section, combined-line toggle. The view switcher only re-labels
-// and re-totals the topbar/summary — the chart is controlled by the
-// per-account eye toggles inside each section.
+// Left rail of the dashboard. Logo, person sections, shared section.
+// The mobile layout has its own tab-strip view switcher; on desktop the
+// topbar always shows the combined total.
 //
-// All bucketing/totals come straight from the dashboard API now —
+// All bucketing/totals come straight from the dashboard API —
 // components iterate over `dashboard.holders[]` and `dashboard.shared`.
 
 import Image from 'next/image'
@@ -12,10 +11,6 @@ import { Loader2, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { IconButton } from '@/components/ui/icon-button'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
-import { fmtMoneyCompact } from '@/lib/format'
-import { Sensitive } from '@/components/sensitive-data'
-import { COMBINED_META, SHARED_META } from '@/lib/holders'
-import { cn } from '@/lib/utils'
 import { PersonSection } from './PersonSection'
 import { SharedSection } from './SharedSection'
 import {
@@ -39,8 +34,6 @@ function persistWidth(w: number) {
 
 export function Sidebar({
   dashboard,
-  view,
-  onChangeView,
   onToggleAllForHolder,
   onToggleAllShared,
   onToggleAccount,
@@ -49,8 +42,6 @@ export function Sidebar({
   initialWidth,
 }: {
   dashboard: DashboardResponse
-  view: ViewSelection
-  onChangeView: (v: ViewSelection) => void
   onToggleAllForHolder: (holderId: string) => void
   onToggleAllShared: () => void
   onToggleAccount: (a: DashboardAccount) => void
@@ -60,14 +51,6 @@ export function Sidebar({
   // SSR'd HTML already has the correct width on first paint.
   initialWidth: number
 }) {
-  // Switcher rows: All + each holder + Shared. Server already computed
-  // every total — we just render.
-  const switcher: { key: ViewSelection; label: string; color: string; total: number }[] = [
-    { key: 'all', label: COMBINED_META.label, color: COMBINED_META.color, total: dashboard.totals.total },
-    ...dashboard.holders.map((h) => ({ key: h.id, label: h.label, color: h.color, total: h.total })),
-    { key: 'shared', label: SHARED_META.label, color: SHARED_META.color, total: dashboard.shared.total },
-  ]
-
   // Width comes from the cookie on first render (via initialWidth). All
   // updates live in local state; on drag end we write the cookie so the
   // next SSR pickup has the latest value.
@@ -140,43 +123,6 @@ export function Sidebar({
           <SettingsIcon className="size-4" />
         </Link>
       </div>
-
-      {/* View switcher */}
-      <div className="mb-2 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
-        View
-      </div>
-      <div className="mb-1 flex flex-col gap-0.75">
-        {switcher.map((v) => {
-          const active = view === v.key
-          return (
-            <button
-              key={v.key}
-              type="button"
-              onClick={() => onChangeView(v.key)}
-              className={cn(
-                'flex w-full cursor-pointer items-center gap-2.5 rounded-9 border px-3 py-2.25 text-left text-14 transition-all',
-                active
-                  ? 'border-border bg-white/6 font-medium text-foreground'
-                  : 'border-transparent bg-transparent font-normal text-muted-foreground hover:border-border-subtle hover:bg-white/3 hover:text-foreground',
-              )}
-            >
-              <span
-                style={{ '--dot': v.color } as React.CSSProperties}
-                className="size-2 shrink-0 rounded-full bg-(--dot)"
-                aria-hidden
-              />
-              {v.label}
-              {v.key !== 'all' && (
-                <span className="ml-auto font-mono text-12 text-text-faint">
-                  <Sensitive>{fmtMoneyCompact(v.total)}</Sensitive>
-                </span>
-              )}
-            </button>
-          )
-        })}
-      </div>
-
-      <div className="my-4 h-px bg-border-subtle" />
 
       {/* Accounts label + Sync All */}
       <div className="mb-2.5 flex items-center justify-between">

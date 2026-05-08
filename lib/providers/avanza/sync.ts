@@ -1,4 +1,4 @@
-import { AvanzaApi, type AvanzaSession } from './api'
+import { AvanzaApi } from './api'
 import { paths } from './constants'
 import { chartDate, fetchChartTimeperiod, type ChartTimePeriodResponse } from './chart'
 import { loginWithPassword, type AvanzaCredentials } from './auth/login'
@@ -53,7 +53,7 @@ async function doSync(
   // Avanza's session cookies don't carry a client-readable lifetime, so
   // we don't precheck. Try the first data call with the existing jar; if
   // that fails with auth-expired, transparently re-auth and retry once.
-  let api = new AvanzaApi({ cookies: creds.cookies, expiresAt: 0 })
+  let api = new AvanzaApi({ cookies: creds.cookies })
 
   let resp: AvanzaCategorizedAccountsResponse
   setSyncProgress(connection.id, { stage: 'fetching-accounts' })
@@ -118,13 +118,13 @@ async function doSync(
 
 async function reauth(creds: AvanzaCredentials): Promise<AvanzaApi> {
   const result = await loginWithPassword(creds.username, creds.password, creds.totpSeed)
-  const session: AvanzaSession = {
-    cookies: result.cookies,
-    authenticationSession: result.authenticationSession,
-    customerId: result.customerId,
-    expiresAt: 0,
-  }
-  return new AvanzaApi(session)
+  // Match the link-then-sync path: cookies only, no authenticationSession.
+  // api.ts unconditionally sends X-AuthenticationSession when the session
+  // carries it, but that header is for legacy /_mobile/* endpoints — the
+  // new /_api/account-overview/* family rejects requests that include it
+  // with a 401. The link path stores only cookies (auth/index.ts) and
+  // works; we mirror that here so reauth produces an equivalent session.
+  return new AvanzaApi({ cookies: result.cookies })
 }
 
 async function fetchDailyValueSeries(

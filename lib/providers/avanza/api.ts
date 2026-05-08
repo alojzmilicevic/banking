@@ -1,13 +1,11 @@
-// Thin HTTP client for Avanza's unofficial mobile API.
+// Thin HTTP client for Avanza's unofficial web API.
 //
-// Auth: Avanza uses **session cookies** (AZAPERSISTENCE, AZAHLI, AZACSRF, …)
-// set by the BankID finalize step. The X-AuthenticationSession +
-// X-SecurityToken headers from the BankID flow are also sent for
-// legacy /_mobile/* endpoints. Both are kept on the AvanzaApi instance.
-//
+// Auth: Avanza uses **session cookies** (csid, cstoken, AZACSRF, plus
+// persistence cookies set by the usercredentials hop). The CSRF check
+// expects an X-SecurityToken header equal to the AZACSRF cookie value.
 // We maintain a per-instance cookie jar so the auth flow can accumulate
-// cookies across initiate → collect → finalize, and so the sync layer can
-// reuse them for subsequent /_api/* requests.
+// cookies across the two-step login and so the sync layer can reuse
+// them for subsequent /_api/* requests.
 
 import { BASE } from './constants'
 import {
@@ -18,17 +16,7 @@ import {
 } from '@/lib/sync/errors'
 
 export interface AvanzaSession {
-  // Tokens are present when the session was established via BankID. They're
-  // absent for the paste-cookies fallback (the website uses cookies alone).
-  securityToken?: string
-  authenticationSession?: string
-  customerId?: string
-  pushSubscriptionId?: string
-  // Cookies are the actual auth — captured from BankID finalize OR pasted
-  // directly from the user's browser.
   cookies: Record<string, string>
-  // Unix ms. Avanza sessions expire after ~60 min of idle.
-  expiresAt: number
 }
 
 export interface AvanzaResponse<T> {
@@ -42,26 +30,12 @@ const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36'
 
 export class AvanzaApi {
-  private session: AvanzaSession | null
   private cookies = new Map<string, string>()
 
   constructor(session: AvanzaSession | null = null) {
-    this.session = session
     if (session?.cookies) {
       for (const [k, v] of Object.entries(session.cookies)) this.cookies.set(k, v)
     }
-  }
-
-  setSession(s: AvanzaSession) {
-    this.session = s
-  }
-
-  getSession(): AvanzaSession | null {
-    return this.session
-  }
-
-  setCookie(name: string, value: string) {
-    this.cookies.set(name, value)
   }
 
   cookieMap(): Record<string, string> {
@@ -100,18 +74,11 @@ export class AvanzaApi {
       'Accept-Language': 'sv-SE,sv;q=0.9,en-US;q=0.8',
       ...extraHeaders,
     }
-    if (this.session?.authenticationSession) {
-      headers['X-AuthenticationSession'] = this.session.authenticationSession
-    }
     // Avanza's CSRF check expects X-SecurityToken to equal the AZACSRF
-    // cookie value (Angular pattern: cookie value echoed as header). The
-    // session.securityToken from BankID finalize is stale by the time we
-    // make data calls — so prefer the live cookie value.
+    // cookie value (Angular pattern: cookie value echoed as header).
     const azacsrf = this.cookies.get('AZACSRF')
     if (azacsrf) {
       headers['X-SecurityToken'] = azacsrf
-    } else if (this.session?.securityToken) {
-      headers['X-SecurityToken'] = this.session.securityToken
     }
     if (this.cookies.size > 0) {
       headers.Cookie = Array.from(this.cookies.entries())

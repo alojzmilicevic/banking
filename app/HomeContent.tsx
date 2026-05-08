@@ -1,12 +1,12 @@
 'use client'
-// Aloma desktop layout. Sidebar (logo, view switcher, person sections,
-// combined-line toggle) on the left. Main panel (topbar, growth chart,
-// summary cards) on the right.
+// Aloma desktop layout. Sidebar (logo, person sections) on the left.
+// Main panel (topbar, growth chart, summary cards) on the right. Mobile
+// gets its own layout with a tab-strip view switcher above the chart.
 //
-// All bucketing/totals come from /api/dashboard now — this component
-// just routes data + UI state. The view switcher only re-labels the
-// topbar number/delta; the chart is controlled by the per-account eye
-// toggles + the combined-line toggle in the sidebar.
+// All bucketing/totals come from /api/dashboard — this component just
+// routes data + UI state. The chart is controlled by the per-account
+// eye toggles in the sidebar; on mobile the view tabs additionally
+// re-label the topbar number/delta.
 
 import { useEffect, useState } from 'react'
 import { useLocalStorage } from '@/hooks/use-local-storage'
@@ -163,8 +163,6 @@ export function HomeContent({
           <div className="hidden h-screen w-screen overflow-hidden lg:flex">
             <Sidebar
               dashboard={data}
-              view={view}
-              onChangeView={setView}
               onToggleAllForHolder={onToggleAllForHolder}
               onToggleAllShared={onToggleAllShared}
               onToggleAccount={onToggleAccount}
