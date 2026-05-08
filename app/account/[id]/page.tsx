@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getAccountDetails } from '@/lib/services/account'
+import { fmtMoney } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { Card, CardTitle } from '@/components/ui/card'
 import {
@@ -14,15 +15,9 @@ import {
 
 function fmtAmount(amount: number, currency: string) {
   const cls = amount < 0 ? 'text-neg' : amount > 0 ? 'text-pos' : ''
-  const formatted = amount.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
   return (
     <span className={cls}>
-      <Sensitive>
-        {formatted} {currency}
-      </Sensitive>
+      <Sensitive>{fmtMoney(amount, currency, { decimals: 2 })}</Sensitive>
     </span>
   )
 }

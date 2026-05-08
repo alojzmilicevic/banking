@@ -3,16 +3,24 @@
 export function fmtMoney(
   amount: number | null | undefined,
   currency: string | null | undefined,
+  opts: { decimals?: number } = {},
 ): string {
   if (amount == null) return '—'
+  const decimals = opts.decimals ?? 0
   try {
     return new Intl.NumberFormat('sv-SE', {
       style: 'currency',
       currency: currency || 'SEK',
-      maximumFractionDigits: 0,
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
     }).format(amount)
   } catch {
-    return `${Math.round(amount).toLocaleString('sv-SE')} ${currency ?? ''}`.trim()
+    const factor = 10 ** decimals
+    const rounded = Math.round(amount * factor) / factor
+    return `${rounded.toLocaleString('sv-SE', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    })} ${currency ?? ''}`.trim()
   }
 }
 

@@ -17,6 +17,7 @@ import {
 import { Alert } from '@/components/ui/alert'
 import { useTimeseries } from '@/lib/queries'
 import { SHARED_META } from '@/lib/holders'
+import { fmtMoney, fmtMoneyCompact } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { DashboardHolder } from '@/lib/api/dashboard'
 import { ChartShape } from './skeleton-shapes'
@@ -25,12 +26,6 @@ import type { Period } from './PeriodTabs'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 const COMBINED_COLOR = 'oklch(65% 0.18 265)' // Indigo
-
-function fmtCompact(v: number): string {
-  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
-  if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(0)}k`
-  return String(v)
-}
 
 // Snapshot of "latest chart point" totals, keyed by view. Driven up to
 // HomeContent so the topbar and the mobile balance hero can show the
@@ -189,7 +184,7 @@ export function Timeline({
               <YAxis
                 stroke="rgba(255,255,255,0.3)"
                 tick={{ fontSize: 11 }}
-                tickFormatter={fmtCompact}
+                tickFormatter={fmtMoneyCompact}
                 width={50}
                 domain={['auto', 'auto']}
                 tickLine={false}
@@ -206,7 +201,7 @@ export function Timeline({
                 }}
                 labelStyle={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}
                 formatter={(v: number, name: string) => [
-                  `${v.toLocaleString('sv-SE')} ${currency ?? ''}`,
+                  fmtMoney(v, currency, { decimals: 2 }),
                   name,
                 ]}
                 labelFormatter={(l: string) => l}
