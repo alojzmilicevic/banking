@@ -129,10 +129,16 @@ function buildAccount(
   if (spark && spark.values.length >= 2) {
     const today = spark.values[0]
     const past = spark.values[spark.values.length - 1]
-    const absolute = Math.round((today - past) * 100) / 100
+    // Prefer provider-reported growth (Avanza's absoluteSeries diff) — it's
+    // already deposit-adjusted and correct even when we have no
+    // transactions to subtract. Fall back to the tx-based estimate for
+    // providers that ship transactions but no growth series (EB).
+    const growth =
+      spark.growth != null ? spark.growth : today - past - spark.netDeposits
+    const absolute = Math.round(growth * 100) / 100
     let pct: number | null = null
     if (isInvestment && past !== 0) {
-      const raw = ((today - past) / Math.abs(past)) * 100
+      const raw = (growth / Math.abs(past)) * 100
       if (Number.isFinite(raw)) {
         pct = Math.round(raw * 100) / 100
       }
@@ -201,11 +207,18 @@ interface BucketTotals {
   total: number
   cash: number
   investment: number
-  absoluteChange: number
+  // Sum of per-account growth (deposit-adjusted). Aggregated from
+  // a.change.absolute, which the buildAccount step has already stripped of
+  // money moved in or out.
+  absoluteGrowth: number
+  // Sum of per-account starting balances (oldest sparkline value), used as
+  // the pct denominator. Tracked separately because today − growth no
+  // longer equals "past balance" once deposits are excluded.
+  pastTotal: number
 }
 
 function emptyBucketTotals(): BucketTotals {
-  return { total: 0, cash: 0, investment: 0, absoluteChange: 0 }
+  return { total: 0, cash: 0, investment: 0, absoluteGrowth: 0, pastTotal: 0 }
 }
 
 function addToBucket(b: BucketTotals, a: DashboardAccount, isInvestment: boolean) {
@@ -218,20 +231,22 @@ function addToBucket(b: BucketTotals, a: DashboardAccount, isInvestment: boolean
   b.total += amt
   if (isInvestment) b.investment += amt
   else b.cash += amt
-  if (a.change) b.absoluteChange += a.change.absolute
+  if (a.change && a.sparkline && a.sparkline.length > 0) {
+    b.absoluteGrowth += a.change.absolute
+    b.pastTotal += a.sparkline[0].value
+  }
 }
 
 function changeFromBucket(b: BucketTotals): ChangePill | null {
-  if (b.absoluteChange === 0 && b.total === 0) return null
-  const startTotal = b.total - b.absoluteChange
+  if (b.absoluteGrowth === 0 && b.pastTotal === 0) return null
   let pct: number | null = null
-  if (startTotal !== 0) {
-    const raw = (b.absoluteChange / Math.abs(startTotal)) * 100
+  if (b.pastTotal !== 0) {
+    const raw = (b.absoluteGrowth / Math.abs(b.pastTotal)) * 100
     if (Number.isFinite(raw)) {
       pct = Math.round(raw * 100) / 100
     }
   }
-  return { absolute: Math.round(b.absoluteChange * 100) / 100, pct }
+  return { absolute: Math.round(b.absoluteGrowth * 100) / 100, pct }
 }
 
 export function getDashboard(userId: string, period: Period = '1Y'): DashboardResponse {

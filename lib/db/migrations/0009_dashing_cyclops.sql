@@ -1,0 +1,1 @@
+ALTER TABLE `account_value_history` ADD `growth` real;

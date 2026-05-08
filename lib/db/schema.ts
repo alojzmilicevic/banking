@@ -266,6 +266,12 @@ export const accountValueHistory = sqliteTable(
       .references(() => accounts.id, { onDelete: 'cascade' }),
     date: text('date').notNull(), // YYYY-MM-DD
     value: real('value').notNull(),
+    // Cumulative SEK gain since the chart's anchor day (Avanza: ~366 days
+    // ago). Provider-supplied (Avanza's `absoluteSeries`); null for
+    // providers that don't expose a deposit-adjusted return series.
+    // Difference between two days = real growth over that subwindow,
+    // independent of deposits/withdrawals.
+    growth: real('growth'),
     currency: text('currency').notNull(),
     fetchedAt: integer('fetched_at').notNull().default(sql`(unixepoch() * 1000)`),
   },

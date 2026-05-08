@@ -234,17 +234,19 @@ export async function syncConnection(
     // doesn't change retroactively), so we never delete. Each sync just
     // refines/adds the days the chart endpoint returned this time.
     for (const v of result.dailyValues ?? []) {
+      const growth = v.growth ?? null
       tx.insert(accountValueHistory)
         .values({
           accountId: v.accountId,
           date: v.date,
           value: v.value,
+          growth,
           currency: v.currency,
           fetchedAt: now,
         })
         .onConflictDoUpdate({
           target: [accountValueHistory.accountId, accountValueHistory.date],
-          set: { value: v.value, currency: v.currency, fetchedAt: now },
+          set: { value: v.value, growth, currency: v.currency, fetchedAt: now },
         })
         .run()
     }
