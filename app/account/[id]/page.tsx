@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { and, desc, eq } from 'drizzle-orm'
-import { accounts, balances, connections, db, transactions } from '@/lib/db/client'
+import { getAccountDetails } from '@/lib/services/account'
 import { Sensitive } from '@/components/sensitive-data'
 import { Card, CardTitle } from '@/components/ui/card'
 import {
@@ -31,21 +30,11 @@ function fmtAmount(amount: number, currency: string) {
 export default async function AccountPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const account = db.select().from(accounts).where(eq(accounts.id, id)).get()
-  if (!account) notFound()
+  const details = getAccountDetails(id)
+  if (!details) notFound()
 
-  const connection = db
-    .select()
-    .from(connections)
-    .where(eq(connections.id, account.connectionId))
-    .get()
-  const accountBalances = db.select().from(balances).where(eq(balances.accountId, id)).all()
-  const accountTransactions = db
-    .select()
-    .from(transactions)
-    .where(and(eq(transactions.accountId, id)))
-    .orderBy(desc(transactions.date))
-    .all()
+  const { account, connection, balances: accountBalances, transactions: accountTransactions } =
+    details
 
   const title = account.details || account.product || account.name || account.iban || 'Account'
 
