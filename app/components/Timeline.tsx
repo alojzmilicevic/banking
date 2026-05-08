@@ -17,6 +17,7 @@ import {
 import { Alert } from '@/components/ui/alert'
 import { useTimeseries } from '@/lib/queries'
 import { SHARED_META } from '@/lib/holders'
+import { cn } from '@/lib/utils'
 import type { DashboardHolder } from '@/lib/api/dashboard'
 import { ChartShape } from './skeleton-shapes'
 import type { Period } from './PeriodTabs'
@@ -57,6 +58,9 @@ export function Timeline({
   showCombined,
   visibleHolderIds,
   showShared,
+  onToggleCombined,
+  onToggleHolder,
+  onToggleShared,
   onSnapshotChange,
 }: {
   period: Period
@@ -64,6 +68,9 @@ export function Timeline({
   showCombined: boolean
   visibleHolderIds: string[]
   showShared: boolean
+  onToggleCombined?: () => void
+  onToggleHolder?: (holderId: string) => void
+  onToggleShared?: () => void
   onSnapshotChange?: (snap: TimelineSnapshot) => void
 }) {
   const { data, error, isLoading } = useTimeseries(period)
@@ -167,13 +174,27 @@ export function Timeline({
           Growth · {period === 'ALL' ? 'All' : period}
         </span>
         <div className="flex flex-wrap gap-x-3 gap-y-1 lg:gap-4">
-          {showCombined && <LegendDot color={COMBINED_COLOR} label="Combined" />}
-          {holders
-            .filter((h) => visibleHolderIds.includes(h.id))
-            .map((h) => (
-              <LegendDot key={h.id} color={h.color} label={h.label} />
-            ))}
-          {showShared && <LegendDot color={SHARED_META.color} label={SHARED_META.label} />}
+          <LegendItem
+            color={COMBINED_COLOR}
+            label="Combined"
+            active={showCombined}
+            onToggle={onToggleCombined}
+          />
+          {holders.map((h) => (
+            <LegendItem
+              key={h.id}
+              color={h.color}
+              label={h.label}
+              active={visibleHolderIds.includes(h.id)}
+              onToggle={onToggleHolder ? () => onToggleHolder(h.id) : undefined}
+            />
+          ))}
+          <LegendItem
+            color={SHARED_META.color}
+            label={SHARED_META.label}
+            active={showShared}
+            onToggle={onToggleShared}
+          />
         </div>
       </div>
 
@@ -285,15 +306,53 @@ export function Timeline({
   )
 }
 
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span
-        style={{ '--dot': color } as React.CSSProperties}
-        className="h-0.5 w-4.5 rounded-1 bg-(--dot)"
+function LegendItem({
+  color,
+  label,
+  active,
+  onToggle,
+}: {
+  color: string
+  label: string
+  active: boolean
+  onToggle?: () => void
+}) {
+  const inner = (
+    <>
+      <svg
+        width="18"
+        height="2"
+        viewBox="0 0 18 2"
         aria-hidden
-      />
+        className="shrink-0 overflow-visible"
+      >
+        <rect width="18" height="2" rx="1" fill={color} />
+      </svg>
       <span className="text-12 text-text-faint">{label}</span>
-    </div>
+    </>
+  )
+
+  if (!onToggle) {
+    return (
+      <div
+        className={cn('flex items-center gap-1.5 transition-opacity', !active && 'opacity-40')}
+      >
+        {inner}
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      className={cn(
+        'flex cursor-pointer items-center gap-1.5 transition-opacity hover:opacity-100',
+        active ? 'opacity-100' : 'opacity-40',
+      )}
+    >
+      {inner}
+    </button>
   )
 }

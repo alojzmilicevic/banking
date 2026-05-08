@@ -49,7 +49,12 @@ export function HomeContent({
   const [view, setView] = useState<ViewSelection>('all')
   // Persisted via localStorage so the Settings page can flip it from
   // /settings (different route, can't share React state otherwise).
-  const [showCombined] = useLocalStorage<boolean>('aloma:show-combined', true)
+  const [showCombined, setShowCombined] = useLocalStorage<boolean>('aloma:show-combined', true)
+  const [legendHolders, setLegendHolders] = useLocalStorage<Record<string, boolean>>(
+    'aloma:legend-holders',
+    {},
+  )
+  const [showShared, setShowShared] = useLocalStorage<boolean>('aloma:legend-shared', false)
   const [pageError, setPageError] = useState<string | null>(initialError)
   const [snap, setSnap] = useState<TimelineSnapshot>(EMPTY_SNAP)
 
@@ -128,17 +133,16 @@ export function HomeContent({
       })
     : []
 
-  // Chart line visibility — light up a per-holder/shared line whenever
-  // that bucket has any non-excluded canonical accounts. Server already
-  // pre-filtered dupes via `possibleDuplicateOf`, so the predicate is
-  // simple here.
-  function holderHasVisible(accs: DashboardAccount[]) {
-    return accs.some((a) => !a.excludedFromTotal && !a.possibleDuplicateOf)
-  }
+  // Chart line visibility is user-controlled via the legend (clickable
+  // dots in Timeline). Combined defaults on; per-holder + Shared default
+  // off and turn on when the user clicks their legend item.
   const visibleHolderIds = data
-    ? data.holders.filter((h) => holderHasVisible(h.accounts)).map((h) => h.id)
+    ? data.holders.filter((h) => legendHolders[h.id] ?? false).map((h) => h.id)
     : []
-  const showShared = data ? holderHasVisible(data.shared.accounts) : false
+  const onToggleCombined = () => setShowCombined((v) => !v)
+  const onToggleShared = () => setShowShared((v) => !v)
+  const onToggleHolder = (id: string) =>
+    setLegendHolders((m) => ({ ...m, [id]: !(m[id] ?? false) }))
 
   const topError =
     pageError ??
@@ -198,6 +202,9 @@ export function HomeContent({
                   showCombined={showCombined}
                   visibleHolderIds={visibleHolderIds}
                   showShared={showShared}
+                  onToggleCombined={onToggleCombined}
+                  onToggleHolder={onToggleHolder}
+                  onToggleShared={onToggleShared}
                   onSnapshotChange={setSnap}
                 />
 
@@ -217,6 +224,9 @@ export function HomeContent({
             showCombined={showCombined}
             visibleHolderIds={visibleHolderIds}
             showShared={showShared}
+            onToggleCombined={onToggleCombined}
+            onToggleHolder={onToggleHolder}
+            onToggleShared={onToggleShared}
             onToggleAccount={onToggleAccount}
             onSyncAll={() => syncAll.mutate()}
             syncingAll={syncAll.isPending}

@@ -46,6 +46,9 @@ export function MobileLayout({
   showCombined,
   visibleHolderIds,
   showShared,
+  onToggleCombined,
+  onToggleHolder,
+  onToggleShared,
   onToggleAccount,
   onSyncAll,
   syncingAll,
@@ -61,6 +64,9 @@ export function MobileLayout({
   showCombined: boolean
   visibleHolderIds: string[]
   showShared: boolean
+  onToggleCombined: () => void
+  onToggleHolder: (holderId: string) => void
+  onToggleShared: () => void
   onToggleAccount: (a: DashboardAccount) => void
   onSyncAll: () => void
   syncingAll: boolean
@@ -227,6 +233,9 @@ export function MobileLayout({
             showCombined={showCombined}
             visibleHolderIds={visibleHolderIds}
             showShared={showShared}
+            onToggleCombined={onToggleCombined}
+            onToggleHolder={onToggleHolder}
+            onToggleShared={onToggleShared}
           />
         </div>
 
