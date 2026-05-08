@@ -8,11 +8,11 @@ import {
   getSnapshotsRange,
 } from '@/lib/sync/snapshots'
 import type { TimeseriesPoint, TimeseriesResponse } from '@/lib/api/dashboard'
+import { PERIODS, type Period } from '@/lib/api/schemas'
 
 const MS_DAY = 86400_000
 
-const PERIODS = ['1W', '1M', '3M', '1Y', 'ALL'] as const
-export type Period = (typeof PERIODS)[number]
+export type { Period }
 
 export function isPeriod(s: string): s is Period {
   return (PERIODS as readonly string[]).includes(s)

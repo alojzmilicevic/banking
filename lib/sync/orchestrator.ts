@@ -65,20 +65,30 @@ export async function syncConnection(
 
   const now = Date.now()
 
-  persistSyncResult({ connectionId, isInitial, result, now })
+  // Anything below here can still throw (DB constraint, snapshot rebuild,
+  // credential write). Persist the error onto the connection row so the
+  // FE can surface it instead of letting it disappear into the caller's
+  // log.
+  try {
+    persistSyncResult({ connectionId, isInitial, result, now })
 
-  // Persist any provider-rotated credentials. Done outside the data
-  // transaction so a credentials write isn't strictly tied to the data
-  // sync — we'd rather keep the data sync atomic and treat credential
-  // refresh as a best-effort follow-up.
-  if (result.refreshedCredentials) {
-    saveCredentials(conn.id, result.refreshedCredentials)
+    // Persist any provider-rotated credentials. Done outside the data
+    // transaction so a credentials write isn't strictly tied to the data
+    // sync — we'd rather keep the data sync atomic and treat credential
+    // refresh as a best-effort follow-up.
+    if (result.refreshedCredentials) {
+      saveCredentials(conn.id, result.refreshedCredentials)
+    }
+
+    // Recompute the full last-365-day wealth snapshot series. DB-only and
+    // fast — uses Avanza account_value_history for investments + EB
+    // transaction walkback for cash, joined per day.
+    rebuildSnapshotsForUser(conn.userId, { daysBack: 365 })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    connectionsRepo.update(connectionId, { lastSyncError: `[persist] ${msg}` })
+    throw e
   }
-
-  // Recompute the full last-365-day wealth snapshot series. DB-only and
-  // fast — uses Avanza account_value_history for investments + EB
-  // transaction walkback for cash, joined per day.
-  rebuildSnapshotsForUser(conn.userId, { daysBack: 365 })
 
   return {
     connectionId,

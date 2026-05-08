@@ -1,7 +1,7 @@
 // Auth-state repository — pending auth flows (redirect, polling, credentials).
 
 import { eq } from 'drizzle-orm'
-import { authStates, db } from '@/lib/db/client'
+import { authStates, db, type Executor } from '@/lib/db/client'
 
 export interface AuthStateRow {
   state: string
@@ -15,19 +15,23 @@ export interface AuthStateRow {
   expiresAt: number
 }
 
-export function getByState(state: string): AuthStateRow | null {
-  return db.select().from(authStates).where(eq(authStates.state, state)).get() ?? null
+export function getByState(state: string, executor: Executor = db): AuthStateRow | null {
+  return executor.select().from(authStates).where(eq(authStates.state, state)).get() ?? null
 }
 
-export function create(input: {
-  state: string
-  userId: string
-  providerId: string
-  flow: string
-  payload: string
-  expiresAt: number
-}): void {
-  db.insert(authStates)
+export function create(
+  input: {
+    state: string
+    userId: string
+    providerId: string
+    flow: string
+    payload: string
+    expiresAt: number
+  },
+  executor: Executor = db,
+): void {
+  executor
+    .insert(authStates)
     .values({
       state: input.state,
       userId: input.userId,
@@ -40,6 +44,6 @@ export function create(input: {
     .run()
 }
 
-export function deleteByState(state: string): void {
-  db.delete(authStates).where(eq(authStates.state, state)).run()
+export function deleteByState(state: string, executor: Executor = db): void {
+  executor.delete(authStates).where(eq(authStates.state, state)).run()
 }

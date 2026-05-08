@@ -2,7 +2,8 @@
 // uniform: parse → 400 on failure, parsed value on success.
 
 import { NextResponse } from 'next/server'
-import type { z } from 'zod'
+import { z } from 'zod'
+import { PeriodQuerySchema, type Period } from './schemas'
 
 export type ValidationResult<T> =
   | { ok: true; data: T }
@@ -14,10 +15,10 @@ function formatIssues(error: z.ZodError): string {
     .join('; ')
 }
 
-export async function validateJson<T>(
+export async function validateJson<S extends z.ZodTypeAny>(
   req: Request,
-  schema: z.ZodType<T>,
-): Promise<ValidationResult<T>> {
+  schema: S,
+): Promise<ValidationResult<z.infer<S>>> {
   let body: unknown
   try {
     body = await req.json()
@@ -40,10 +41,10 @@ export async function validateJson<T>(
   return { ok: true, data: parsed.data }
 }
 
-export function validateQuery<T>(
+export function validateQuery<S extends z.ZodTypeAny>(
   url: URL,
-  schema: z.ZodType<T>,
-): ValidationResult<T> {
+  schema: S,
+): ValidationResult<z.infer<S>> {
   const params: Record<string, string> = {}
   for (const [k, v] of url.searchParams.entries()) params[k] = v
   const parsed = schema.safeParse(params)
@@ -57,4 +58,14 @@ export function validateQuery<T>(
     }
   }
   return { ok: true, data: parsed.data }
+}
+
+// Shared helper for routes that read `?period=`. Falls back to '1Y' when
+// the param is absent or unrecognised so the FE doesn't have to special-case
+// the very first request.
+export function getPeriodFromUrl(url: URL): Period {
+  const parsed = PeriodQuerySchema.safeParse(
+    Object.fromEntries(url.searchParams.entries()),
+  )
+  return parsed.success ? parsed.data.period : '1Y'
 }

@@ -1,7 +1,7 @@
 // daily_snapshots repository — drizzle queries only.
 
 import { and, eq, gte, lte, sql } from 'drizzle-orm'
-import { dailySnapshots, db } from '@/lib/db/client'
+import { dailySnapshots, db, type Executor } from '@/lib/db/client'
 
 export interface DailySnapshotUpsert {
   userId: string
@@ -21,9 +21,16 @@ export interface SnapshotRangeRowRaw {
   detailJson: string
 }
 
-export function upsertMany(rows: DailySnapshotUpsert[], now: number = Date.now()): void {
+// Bulk upsert. When the caller is already running inside a transaction
+// they can pass `tx` and the rows are written in-line (no nested
+// transaction); otherwise we open a fresh one ourselves.
+export function upsertMany(
+  rows: DailySnapshotUpsert[],
+  now: number = Date.now(),
+  executor: Executor = db,
+): void {
   if (rows.length === 0) return
-  db.transaction((tx) => {
+  const writeAll = (tx: Executor) => {
     for (const r of rows) {
       tx.insert(dailySnapshots)
         .values({
@@ -49,15 +56,21 @@ export function upsertMany(rows: DailySnapshotUpsert[], now: number = Date.now()
         })
         .run()
     }
-  })
+  }
+  if (executor === db) {
+    db.transaction(writeAll)
+  } else {
+    writeAll(executor)
+  }
 }
 
 export function getRange(
   userId: string,
   fromDate: string,
   toDate: string,
+  executor: Executor = db,
 ): SnapshotRangeRowRaw[] {
-  return db
+  return executor
     .select({
       date: dailySnapshots.date,
       totalAmount: dailySnapshots.totalAmount,
@@ -77,8 +90,8 @@ export function getRange(
     .all()
 }
 
-export function getEarliestDate(userId: string): string | null {
-  const row = db
+export function getEarliestDate(userId: string, executor: Executor = db): string | null {
+  const row = executor
     .select({ date: sql<string>`MIN(${dailySnapshots.date})` })
     .from(dailySnapshots)
     .where(eq(dailySnapshots.userId, userId))

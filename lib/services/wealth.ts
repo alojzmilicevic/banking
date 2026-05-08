@@ -41,9 +41,15 @@ export interface DisconnectResult {
 // transactions/account_value_history/connection_holders cascade per the
 // FK rules in lib/db/schema.ts), then rebuilds the wealth chart so the
 // removed accounts stop appearing in historical totals.
-export function disconnectConnection(connectionId: string): DisconnectResult | null {
+//
+// Caller MUST pass the requesting user's id; mismatches are treated as
+// "not found" so a stale or tampered id can't reach across users.
+export function disconnectConnection(
+  connectionId: string,
+  userId: string,
+): DisconnectResult | null {
   const row = connectionsRepo.getById(connectionId)
-  if (!row) return null
+  if (!row || row.userId !== userId) return null
   // For Avanza the encrypted-DB row would never have existed (creds
   // live in Keychain, not connection_credentials), so the cascade
   // can't reach them — clear the Keychain item explicitly.
@@ -65,16 +71,21 @@ export interface SetAccountExcludedResult {
 // Toggles whether an account contributes to the household total. The
 // chart updates immediately because rebuild walks back through every
 // daily_snapshots row using the new excluded flag.
+//
+// Ownership is enforced by walking account → connection.userId; mismatches
+// return null so the route maps to 404.
 export function setAccountExcluded(
   accountId: string,
   excluded: boolean,
+  userId: string,
 ): SetAccountExcludedResult | null {
   const account = accountsRepo.getById(accountId)
   if (!account) return null
-  accountsRepo.setExcluded(accountId, excluded)
   // Look up the connection only to find userId — accounts don't carry it
   // directly (it lives on the connection).
   const conn = connectionsRepo.getById(account.connectionId)
-  if (conn) rebuildSnapshotsForUser(conn.userId, { daysBack: 365 })
+  if (!conn || conn.userId !== userId) return null
+  accountsRepo.setExcluded(accountId, excluded)
+  rebuildSnapshotsForUser(conn.userId, { daysBack: 365 })
   return { id: accountId, excludedFromTotal: excluded }
 }

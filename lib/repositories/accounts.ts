@@ -1,20 +1,28 @@
 // Accounts repository — drizzle queries only.
 
 import { and, eq, inArray, ne } from 'drizzle-orm'
-import { accounts, connections, db } from '@/lib/db/client'
+import { accounts, connections, db, type Executor } from '@/lib/db/client'
 import type { Account } from '@/lib/db/schema'
 
-export function listByConnectionIds(connectionIds: string[]): Account[] {
+export function listByConnectionIds(
+  connectionIds: string[],
+  executor: Executor = db,
+): Account[] {
   if (connectionIds.length === 0) return []
-  return db.select().from(accounts).where(inArray(accounts.connectionId, connectionIds)).all()
+  return executor
+    .select()
+    .from(accounts)
+    .where(inArray(accounts.connectionId, connectionIds))
+    .all()
 }
 
-export function getById(id: string): Account | null {
-  return db.select().from(accounts).where(eq(accounts.id, id)).get() ?? null
+export function getById(id: string, executor: Executor = db): Account | null {
+  return executor.select().from(accounts).where(eq(accounts.id, id)).get() ?? null
 }
 
-export function setExcluded(id: string, excluded: boolean): void {
-  db.update(accounts)
+export function setExcluded(id: string, excluded: boolean, executor: Executor = db): void {
+  executor
+    .update(accounts)
     .set({ excludedFromTotal: excluded ? 1 : 0 })
     .where(eq(accounts.id, id))
     .run()
@@ -37,8 +45,11 @@ export interface UserAccountRow {
 // sparkline builder, which (unlike the snapshot rebuilder) wants
 // excluded accounts too so the dashboard tile can still render their
 // values, just with the row marked as not contributing to totals.
-export function listAllForUser(userId: string): { id: string; kind: string | null }[] {
-  return db
+export function listAllForUser(
+  userId: string,
+  executor: Executor = db,
+): { id: string; kind: string | null }[] {
+  return executor
     .select({ id: accounts.id, kind: accounts.kind })
     .from(accounts)
     .innerJoin(connections, eq(accounts.connectionId, connections.id))
@@ -46,8 +57,11 @@ export function listAllForUser(userId: string): { id: string; kind: string | nul
     .all()
 }
 
-export function listIncludedForUser(userId: string): UserAccountRow[] {
-  return db
+export function listIncludedForUser(
+  userId: string,
+  executor: Executor = db,
+): UserAccountRow[] {
+  return executor
     .select({
       id: accounts.id,
       kind: accounts.kind,

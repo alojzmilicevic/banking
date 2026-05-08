@@ -2,7 +2,7 @@
 // Stores ciphertext only; encryption/decryption belongs in the caller.
 
 import { eq } from 'drizzle-orm'
-import { connectionCredentials, db } from '@/lib/db/client'
+import { connectionCredentials, db, type Executor } from '@/lib/db/client'
 import type { ConnectionCredential } from '@/lib/db/schema'
 
 export interface CredentialBlob {
@@ -11,9 +11,12 @@ export interface CredentialBlob {
   authTag: string
 }
 
-export function getByConnectionId(connectionId: string): ConnectionCredential | null {
+export function getByConnectionId(
+  connectionId: string,
+  executor: Executor = db,
+): ConnectionCredential | null {
   return (
-    db
+    executor
       .select()
       .from(connectionCredentials)
       .where(eq(connectionCredentials.connectionId, connectionId))
@@ -21,8 +24,13 @@ export function getByConnectionId(connectionId: string): ConnectionCredential | 
   )
 }
 
-export function upsert(connectionId: string, blob: CredentialBlob): void {
-  db.insert(connectionCredentials)
+export function upsert(
+  connectionId: string,
+  blob: CredentialBlob,
+  executor: Executor = db,
+): void {
+  executor
+    .insert(connectionCredentials)
     .values({
       connectionId,
       ciphertext: blob.ciphertext,
@@ -40,8 +48,12 @@ export function upsert(connectionId: string, blob: CredentialBlob): void {
     .run()
 }
 
-export function deleteByConnectionId(connectionId: string): void {
-  db.delete(connectionCredentials)
+export function deleteByConnectionId(
+  connectionId: string,
+  executor: Executor = db,
+): void {
+  executor
+    .delete(connectionCredentials)
     .where(eq(connectionCredentials.connectionId, connectionId))
     .run()
 }

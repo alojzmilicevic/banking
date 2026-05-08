@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import * as authStatesRepo from '@/lib/repositories/auth-states'
+import * as connectionsRepo from '@/lib/repositories/connections'
 import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/services/wealth'
 import { PollAuthQuerySchema } from '@/lib/api/schemas'
@@ -31,16 +32,34 @@ export async function GET(req: Request) {
     })
   }
 
-  const result = await provider.pollAuth({ state, payload: JSON.parse(row.payload) })
+  let payload: Record<string, unknown> = {}
+  try {
+    const decoded = JSON.parse(row.payload)
+    if (decoded && typeof decoded === 'object') {
+      payload = decoded as Record<string, unknown>
+    }
+  } catch {
+    // Legacy / corrupt payload — fall through with an empty object so
+    // pollAuth can still attempt the request.
+  }
+
+  const result = await provider.pollAuth({ state, payload })
 
   // When a poll completes, kick off the initial sync so the user has data
   // by the time they land on the home page. Don't fail the auth flow if
-  // sync errors — they can hit Refresh.
+  // sync errors — persist the error onto the connection row so the
+  // dashboard can surface it.
   if (result.kind === 'complete') {
     try {
       await syncConnection(result.connectionId)
     } catch (e) {
       console.error(`[poll] initial sync of ${result.connectionId} failed:`, e)
+      try {
+        const msg = e instanceof Error ? e.message : String(e)
+        connectionsRepo.update(result.connectionId, { lastSyncError: `[initial] ${msg}` })
+      } catch (persistErr) {
+        console.error('[poll] could not persist initial sync error:', persistErr)
+      }
     }
   }
 

@@ -61,5 +61,12 @@ export const db = new Proxy({} as Drizzle, {
   },
 })
 
+// Repositories accept an optional Executor so a service can run several
+// reads inside a single `db.transaction((tx) => …)` and observe a
+// consistent snapshot. The `tx` argument is a SQLiteTransaction (subset of
+// the full Drizzle handle), so the alias accepts either.
+type Tx = Parameters<Parameters<Drizzle['transaction']>[0]>[0]
+export type Executor = Drizzle | Tx
+
 export { schema }
 export * from './schema'

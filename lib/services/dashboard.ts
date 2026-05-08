@@ -10,6 +10,7 @@ import { pickBalance } from '@/lib/balance'
 import { buildAccountSparklines } from '@/lib/sync/account-sparkline'
 import { daysForPeriod, type Period } from '@/lib/services/timeseries'
 import type { Account, Balance, Connection, HolderRow } from '@/lib/db/schema'
+import { db } from '@/lib/db/client'
 import type {
   ChangePill,
   DashboardAccount,
@@ -268,8 +269,23 @@ function changeFromBucket(b: BucketTotals): ChangePill | null {
 export function getDashboard(userId: string, period: Period = '1Y'): DashboardResponse {
   const errors: string[] = []
 
-  const holderRows = holdersRepo.listForUser(userId)
-  const conns = connectionsRepo.listForUser(userId)
+  // Read all dashboard rows inside a single transaction so a concurrent
+  // disconnect can't drop a connection between the holders/conns/accs/balances
+  // reads — every query in this block sees the same consistent snapshot.
+  const snapshot = db.transaction((tx) => {
+    const holderRows = holdersRepo.listForUser(userId, tx)
+    const conns = connectionsRepo.listForUser(userId, tx)
+    if (conns.length === 0) {
+      return { holderRows, conns, accs: [] as Account[], balancesByAcct: new Map<string, Balance[]>(), holderIdsByConn: new Map<string, string[]>() }
+    }
+    const accs = accountsRepo.listByConnectionIds(conns.map((c) => c.id), tx)
+    const allBalances = balancesRepo.listByAccountIds(accs.map((a) => a.id), tx)
+    const balancesByAcct = groupBy(allBalances, (b) => b.accountId)
+    const holderIdsByConn = holdersRepo.getHolderIdsByConnection(conns.map((c) => c.id), tx)
+    return { holderRows, conns, accs, balancesByAcct, holderIdsByConn }
+  })
+
+  const { holderRows, conns, accs, balancesByAcct, holderIdsByConn } = snapshot
 
   if (conns.length === 0) {
     return {
@@ -282,10 +298,9 @@ export function getDashboard(userId: string, period: Period = '1Y'): DashboardRe
     }
   }
 
-  const accs = accountsRepo.listByConnectionIds(conns.map((c) => c.id))
-  const allBalances = balancesRepo.listByAccountIds(accs.map((a) => a.id))
-  const balancesByAcct = groupBy(allBalances, (b) => b.accountId)
-  const holderIdsByConn = holdersRepo.getHolderIdsByConnection(conns.map((c) => c.id))
+  // Sparklines deliberately stay outside the read tx — they're a soft
+  // signal (change pill) that doesn't need to share the same snapshot as
+  // the balance/bucket figures.
   const sparklines = buildAccountSparklines(userId, daysForPeriod(period, userId))
 
   const classified = classifyAccounts(conns, accs, holderIdsByConn)

@@ -1,11 +1,11 @@
 // Transactions repository — drizzle queries only.
 
 import { and, desc, eq, gte, inArray, ne } from 'drizzle-orm'
-import { db, transactions } from '@/lib/db/client'
+import { db, transactions, type Executor } from '@/lib/db/client'
 import type { Transaction } from '@/lib/db/schema'
 
-export function listByAccountId(accountId: string): Transaction[] {
-  return db
+export function listByAccountId(accountId: string, executor: Executor = db): Transaction[] {
+  return executor
     .select()
     .from(transactions)
     .where(eq(transactions.accountId, accountId))
@@ -26,9 +26,10 @@ export interface BookedTxRow {
 export function listBookedSinceForAccountIds(
   accountIds: string[],
   sinceDate: string,
+  executor: Executor = db,
 ): BookedTxRow[] {
   if (accountIds.length === 0) return []
-  return db
+  return executor
     .select({
       accountId: transactions.accountId,
       date: transactions.date,

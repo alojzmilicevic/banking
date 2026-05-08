@@ -5,22 +5,27 @@
 // fresh).
 
 import { eq } from 'drizzle-orm'
-import { db, users } from '@/lib/db/client'
+import { db, users, type Executor } from '@/lib/db/client'
 import type { User } from '@/lib/db/schema'
 
-export function getDefault(): User | null {
-  return db.select().from(users).get() ?? null
+export function getDefault(executor: Executor = db): User | null {
+  return executor.select().from(users).get() ?? null
 }
 
-export function getById(id: string): User | null {
-  return db.select().from(users).where(eq(users.id, id)).get() ?? null
+export function getById(id: string, executor: Executor = db): User | null {
+  return executor.select().from(users).where(eq(users.id, id)).get() ?? null
 }
 
-export function create(input: { id: string; name: string }): User {
-  db.insert(users).values({ id: input.id, name: input.name }).run()
-  return db.select().from(users).where(eq(users.id, input.id)).get()!
+export function create(
+  input: { id: string; name: string },
+  executor: Executor = db,
+): User {
+  executor.insert(users).values({ id: input.id, name: input.name }).run()
+  const row = executor.select().from(users).where(eq(users.id, input.id)).get()
+  if (!row) throw new Error(`users.create: insert returned no row for id=${input.id}`)
+  return row
 }
 
-export function listAll(): User[] {
-  return db.select().from(users).all()
+export function listAll(executor: Executor = db): User[] {
+  return executor.select().from(users).all()
 }

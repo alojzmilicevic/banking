@@ -3,12 +3,12 @@
 // Returns raw rows; the dashboard service handles bucketing/joint
 // detection on top of these.
 
-import { and, desc, eq, inArray } from 'drizzle-orm'
-import { connectionHolders, connections, db } from '@/lib/db/client'
+import { and, desc, eq, sql } from 'drizzle-orm'
+import { connectionHolders, connections, db, type Executor } from '@/lib/db/client'
 import type { Connection } from '@/lib/db/schema'
 
-export function listForUser(userId: string): Connection[] {
-  return db
+export function listForUser(userId: string, executor: Executor = db): Connection[] {
+  return executor
     .select()
     .from(connections)
     .where(eq(connections.userId, userId))
@@ -16,16 +16,16 @@ export function listForUser(userId: string): Connection[] {
     .all()
 }
 
-export function listActiveForUser(userId: string): Connection[] {
-  return db
+export function listActiveForUser(userId: string, executor: Executor = db): Connection[] {
+  return executor
     .select()
     .from(connections)
     .where(and(eq(connections.userId, userId), eq(connections.status, 'active')))
     .all()
 }
 
-export function getById(id: string): Connection | null {
-  return db.select().from(connections).where(eq(connections.id, id)).get() ?? null
+export function getById(id: string, executor: Executor = db): Connection | null {
+  return executor.select().from(connections).where(eq(connections.id, id)).get() ?? null
 }
 
 export interface CreateConnectionInput {
@@ -44,11 +44,15 @@ export interface CreateConnectionInput {
 // Used by the EB callback and Avanza first-link flows — both insert a
 // connection plus, when a holderId was supplied at /api/auth/start, the
 // matching connection_holders row.
+//
+// If the caller is already inside a transaction it can pass `tx` to fold
+// the inserts into the outer one; otherwise we open a fresh transaction.
 export function createWithHolder(
   input: CreateConnectionInput,
   holderId: string | null,
+  executor: Executor = db,
 ): void {
-  db.transaction((tx) => {
+  const writeAll = (tx: Executor) => {
     tx.insert(connections)
       .values({
         id: input.id,
@@ -65,7 +69,12 @@ export function createWithHolder(
     if (holderId) {
       tx.insert(connectionHolders).values({ connectionId: input.id, holderId }).run()
     }
-  })
+  }
+  if (executor === db) {
+    db.transaction(writeAll)
+  } else {
+    writeAll(executor)
+  }
 }
 
 export interface UpdateConnectionInput {
@@ -76,12 +85,16 @@ export interface UpdateConnectionInput {
   rawJson?: string | null
 }
 
-export function update(id: string, patch: UpdateConnectionInput): void {
-  db.update(connections).set(patch).where(eq(connections.id, id)).run()
+export function update(
+  id: string,
+  patch: UpdateConnectionInput,
+  executor: Executor = db,
+): void {
+  executor.update(connections).set(patch).where(eq(connections.id, id)).run()
 }
 
-export function deleteById(id: string): void {
-  db.delete(connections).where(eq(connections.id, id)).run()
+export function deleteById(id: string, executor: Executor = db): void {
+  executor.delete(connections).where(eq(connections.id, id)).run()
 }
 
 // Avanza re-link match: looks for an existing (user, avanza, holder)
@@ -92,35 +105,40 @@ export function findIdByUserProviderAndHolder(
   userId: string,
   providerId: string,
   holderId: string | null,
+  executor: Executor = db,
 ): string | null {
-  const rows = db
-    .select({ id: connections.id })
-    .from(connections)
-    .where(and(eq(connections.userId, userId), eq(connections.providerId, providerId)))
-    .all()
-  if (rows.length === 0) return null
-
-  const ids = rows.map((r) => r.id)
-
-  if (holderId === null) {
-    const linked = db
-      .select({ connectionId: connectionHolders.connectionId })
-      .from(connectionHolders)
-      .where(inArray(connectionHolders.connectionId, ids))
-      .all()
-    const linkedSet = new Set(linked.map((l) => l.connectionId))
-    return rows.find((r) => !linkedSet.has(r.id))?.id ?? null
+  if (holderId !== null) {
+    // Connection with a matching link row. One JOIN, one round-trip.
+    const row = executor
+      .select({ id: connections.id })
+      .from(connections)
+      .innerJoin(connectionHolders, eq(connectionHolders.connectionId, connections.id))
+      .where(
+        and(
+          eq(connections.userId, userId),
+          eq(connections.providerId, providerId),
+          eq(connectionHolders.holderId, holderId),
+        ),
+      )
+      .get()
+    return row?.id ?? null
   }
 
-  const link = db
-    .select({ connectionId: connectionHolders.connectionId })
-    .from(connectionHolders)
+  // Unassigned: a connection with no matching connection_holders row.
+  // SQLite supports the `NOT EXISTS` correlated subquery via drizzle's
+  // `sql` raw escape, but a single LEFT JOIN with `IS NULL` is simpler
+  // and works the same.
+  const row = executor
+    .select({ id: connections.id })
+    .from(connections)
+    .leftJoin(connectionHolders, eq(connectionHolders.connectionId, connections.id))
     .where(
       and(
-        inArray(connectionHolders.connectionId, ids),
-        eq(connectionHolders.holderId, holderId),
+        eq(connections.userId, userId),
+        eq(connections.providerId, providerId),
+        sql`${connectionHolders.connectionId} IS NULL`,
       ),
     )
     .get()
-  return link?.connectionId ?? null
+  return row?.id ?? null
 }

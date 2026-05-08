@@ -8,6 +8,8 @@ import * as usersRepo from '@/lib/repositories/users'
 import type { HolderListItem } from '@/lib/api/dashboard'
 import { deriveInitials, pickHolderColor } from '@/lib/holders'
 import type { HolderRow } from '@/lib/db/schema'
+import { HolderBodySchema } from '@/lib/api/schemas'
+import { validateJson } from '@/lib/api/validate'
 
 function toListItem(h: HolderRow): HolderListItem {
   return {
@@ -30,25 +32,14 @@ export async function POST(req: Request) {
   if (!user) {
     return NextResponse.json({ error: 'No user' }, { status: 400 })
   }
-  let body: { label?: unknown; initials?: unknown; color?: unknown }
-  try {
-    body = (await req.json()) as typeof body
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-  }
-  const label = typeof body.label === 'string' ? body.label.trim() : ''
-  if (!label) {
-    return NextResponse.json({ error: 'Label required' }, { status: 400 })
-  }
+  const parsed = await validateJson(req, HolderBodySchema)
+  if (!parsed.ok) return parsed.response
+  const { label, initials: initialsInput, color: colorInput } = parsed.data
   const existing = holdersRepo.listForUser(user.id)
-  const initials =
-    typeof body.initials === 'string' && body.initials.trim()
-      ? body.initials.trim().toUpperCase().slice(0, 3)
-      : deriveInitials(label)
-  const color =
-    typeof body.color === 'string' && body.color.trim()
-      ? body.color.trim()
-      : pickHolderColor(existing.map((h) => h.color))
+  const initials = initialsInput
+    ? initialsInput.toUpperCase().slice(0, 3)
+    : deriveInitials(label)
+  const color = colorInput ?? pickHolderColor(existing.map((h) => h.color))
   const created = holdersRepo.create({
     userId: user.id,
     label,

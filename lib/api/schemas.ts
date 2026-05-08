@@ -32,3 +32,30 @@ export const AuthCallbackQuerySchema = z.object({
 export const PatchAccountBodySchema = z.object({
   excludedFromTotal: z.boolean(),
 })
+
+export const PERIODS = ['1W', '1M', '3M', '1Y', 'ALL'] as const
+export const PeriodQuerySchema = z.object({
+  period: z.enum(PERIODS).default('1Y'),
+})
+export type Period = (typeof PERIODS)[number]
+
+export const InstitutionsQuerySchema = z.object({
+  country: z.string().regex(/^[A-Za-z]{2}$/, 'country must be a 2-letter code').default('SE'),
+  provider: z.string().min(1).default('enable-banking'),
+  fresh: z.enum(['0', '1']).optional(),
+})
+
+export const HolderBodySchema = z.object({
+  label: z.string().trim().min(1, 'Label required').max(100),
+  initials: z.string().trim().min(1).max(3).optional(),
+  color: z.string().trim().min(1).max(32).optional(),
+})
+
+export const SyncQuerySchema = z.object({
+  id: z.string().min(1).optional(),
+  mode: z.enum(['auto', 'force-full', 'force-incremental']).default('auto'),
+})
+
+export const SyncProgressQuerySchema = z.object({
+  id: z.string().min(1, 'id query param required'),
+})

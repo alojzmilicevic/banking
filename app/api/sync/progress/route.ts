@@ -7,11 +7,11 @@
 
 import { NextResponse } from 'next/server'
 import { getSyncProgress } from '@/lib/sync/progress'
+import { SyncProgressQuerySchema } from '@/lib/api/schemas'
+import { validateQuery } from '@/lib/api/validate'
 
 export async function GET(req: Request) {
-  const id = new URL(req.url).searchParams.get('id')
-  if (!id) {
-    return NextResponse.json({ error: 'id query param required' }, { status: 400 })
-  }
-  return NextResponse.json(getSyncProgress(id))
+  const parsed = validateQuery(new URL(req.url), SyncProgressQuerySchema)
+  if (!parsed.ok) return parsed.response
+  return NextResponse.json(getSyncProgress(parsed.data.id))
 }

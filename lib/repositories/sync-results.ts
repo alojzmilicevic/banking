@@ -15,6 +15,7 @@ import {
   instruments,
   positions,
   transactions,
+  type Executor,
 } from '@/lib/db/client'
 import type { SyncResult } from '@/lib/providers/types'
 
@@ -25,13 +26,11 @@ export interface PersistSyncResultInput {
   now: number
 }
 
-export function persistSyncResult({
-  connectionId,
-  isInitial,
-  result,
-  now,
-}: PersistSyncResultInput): void {
-  db.transaction((tx) => {
+export function persistSyncResult(
+  { connectionId, isInitial, result, now }: PersistSyncResultInput,
+  executor: Executor = db,
+): void {
+  const writeAll = (tx: Executor) => {
     for (const i of result.instruments ?? []) {
       tx.insert(instruments)
         .values({
@@ -213,5 +212,10 @@ export function persistSyncResult({
       })
       .where(eq(connections.id, connectionId))
       .run()
-  })
+  }
+  if (executor === db) {
+    db.transaction(writeAll)
+  } else {
+    writeAll(executor)
+  }
 }

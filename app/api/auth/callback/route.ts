@@ -32,12 +32,10 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${url.origin}/?error=unknown_state`)
   }
 
-  // Single-use; clean up regardless of outcome.
-  authStatesRepo.deleteByState(state)
-
   try {
     const provider = getProvider(pending.providerId)
     if (!provider.completeAuth) {
+      authStatesRepo.deleteByState(state)
       return NextResponse.redirect(
         `${url.origin}/?error=${encodeURIComponent(`${provider.name} has no callback flow`)}`,
       )
@@ -72,16 +70,41 @@ export async function GET(req: Request) {
       holderId,
     )
 
+    // Connection row is durable now; clear the single-use auth state.
+    // (If completeAuth had thrown, we'd leave the row so the client can
+    // retry with the same state instead of being stranded.)
+    authStatesRepo.deleteByState(state)
+
+    // Best-effort initial sync. Failures are persisted on the connection
+    // row by the orchestrator (lastSyncError), so the dashboard surfaces
+    // them — no need to fail the redirect.
     try {
       await syncConnection(connectionId)
     } catch (e) {
       console.error('[callback] initial sync failed:', e)
+      await persistInitialSyncError(connectionId, e)
     }
 
     return NextResponse.redirect(`${url.origin}/?connected=${connectionId}`)
   } catch (e) {
+    // Anything that throws here is recoverable on retry, so leave the
+    // auth state row in place. (Stale rows time out on `expiresAt`.)
     return NextResponse.redirect(
       `${url.origin}/?error=${encodeURIComponent((e as Error).message)}`,
     )
+  }
+}
+
+// Belt-and-braces: the orchestrator already persists provider errors via
+// `connectionsRepo.update({ lastSyncError })`, but errors from later
+// stages (snapshot rebuild, persist) bubble up unhandled. Make sure
+// every initial-sync failure leaves a trail on the connection row so
+// the FE can surface "this just-linked connection didn't sync".
+async function persistInitialSyncError(connectionId: string, e: unknown): Promise<void> {
+  try {
+    const msg = e instanceof Error ? e.message : String(e)
+    connectionsRepo.update(connectionId, { lastSyncError: `[initial] ${msg}` })
+  } catch (persistErr) {
+    console.error('[callback] could not persist initial sync error:', persistErr)
   }
 }

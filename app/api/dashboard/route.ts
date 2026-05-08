@@ -3,13 +3,11 @@
 
 import { NextResponse } from 'next/server'
 import { getDashboard } from '@/lib/services/dashboard'
-import { isPeriod, type Period } from '@/lib/services/timeseries'
 import * as usersRepo from '@/lib/repositories/users'
+import { getPeriodFromUrl } from '@/lib/api/validate'
 
 export async function GET(req: Request) {
-  const url = new URL(req.url)
-  const periodParam = url.searchParams.get('period') ?? '1Y'
-  const period: Period = isPeriod(periodParam) ? periodParam : '1Y'
+  const period = getPeriodFromUrl(new URL(req.url))
 
   const user = usersRepo.getDefault()
   if (!user) {

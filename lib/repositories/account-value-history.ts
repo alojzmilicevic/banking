@@ -1,7 +1,7 @@
 // account_value_history repository — drizzle queries only.
 
 import { and, gte, inArray } from 'drizzle-orm'
-import { accountValueHistory, db } from '@/lib/db/client'
+import { accountValueHistory, db, type Executor } from '@/lib/db/client'
 
 export interface DailyValueRow {
   accountId: string
@@ -13,9 +13,10 @@ export interface DailyValueRow {
 export function listByAccountIdsSince(
   accountIds: string[],
   sinceDate: string,
+  executor: Executor = db,
 ): DailyValueRow[] {
   if (accountIds.length === 0) return []
-  return db
+  return executor
     .select({
       accountId: accountValueHistory.accountId,
       date: accountValueHistory.date,

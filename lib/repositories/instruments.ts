@@ -4,7 +4,7 @@
 // so all writes are atomic; this single-row helper is here for any callers
 // that just need to upsert one instrument outside a sync.
 
-import { db, instruments } from '@/lib/db/client'
+import { db, instruments, type Executor } from '@/lib/db/client'
 
 export interface InstrumentInput {
   id: string
@@ -17,8 +17,12 @@ export interface InstrumentInput {
   providerInstrumentId: string | null
 }
 
-export function upsert(input: InstrumentInput, now: number = Date.now()): void {
-  db.insert(instruments)
+export function upsert(
+  input: InstrumentInput,
+  now: number = Date.now(),
+  executor: Executor = db,
+): void {
+  executor.insert(instruments)
     .values({
       id: input.id,
       type: input.type,
