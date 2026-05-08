@@ -51,7 +51,9 @@ function isoDay(d: Date): string {
 // points. We want growth at the latest day with data (today proper might
 // not be a trading day) minus growth at the latest point ≤ window start.
 // Returns null when either endpoint is missing — caller falls back to the
-// netDeposits-based estimate.
+// netDeposits-based estimate. We do NOT silently fall back to "earliest
+// available point" for accounts younger than the window: that would
+// report since-inception growth under a "1Y" label, which is a lie.
 function computeGrowthOverWindow(
   growthByDate: Map<string, number>,
   today: Date,

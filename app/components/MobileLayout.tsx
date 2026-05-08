@@ -12,11 +12,14 @@ import Link from 'next/link'
 import { Eye, EyeOff, Loader2, Plus, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { IconButton } from '@/components/ui/icon-button'
+import { tracksPerformance } from '@/lib/account-types'
 import { fmtMoney, fmtMoneyCompact, shortProduct } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { COMBINED_META, SHARED_META } from '@/lib/holders'
 import { cn } from '@/lib/utils'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
+import { ChangePill } from './ChangePill'
+import { ChangeModeToggle, type ChangeMode } from './ChangeModeToggle'
 import { PeriodTabs, type Period } from './PeriodTabs'
 import type { ViewSelection } from './Sidebar'
 import { Timeline, type TimelineSnapshot } from './Timeline'
@@ -54,6 +57,8 @@ export function MobileLayout({
   syncingAll,
   topError,
   onDismissError,
+  changeMode,
+  onChangeModeChange,
 }: {
   dashboard: DashboardResponse
   view: ViewSelection
@@ -72,6 +77,8 @@ export function MobileLayout({
   syncingAll: boolean
   topError: string | null
   onDismissError: () => void
+  changeMode: ChangeMode
+  onChangeModeChange: (m: ChangeMode) => void
 }) {
   // Tabs: All + each holder + Shared. Server already ordered holders by
   // displayOrder.
@@ -93,15 +100,18 @@ export function MobileLayout({
         ? dashboard.shared.accounts.filter((a) => !a.possibleDuplicateOf)
         : (dashboard.holders.find((h) => h.id === view)?.accounts ?? [])
 
-  // Topbar values: pick the slice that matches the current view.
+  // Topbar values: pick the slice that matches the current view. Total
+  // tracks the chart's latest point (snap); change comes from the
+  // dashboard's deposit-adjusted bucket math.
   const total =
     view === 'all' ? snap.total : view === 'shared' ? snap.shared : (snap.byHolder[view] ?? null)
-  const change = snap.changeByKey[view] ?? null
-  const delta = change?.absolute ?? null
-  const pct = change?.pct ?? null
-
-  const positive = (delta ?? 0) >= 0
-  const showPct = pct != null && Number.isFinite(pct) && Math.abs(pct) <= 500
+  const change =
+    view === 'all'
+      ? dashboard.totals.change
+      : view === 'shared'
+        ? dashboard.shared.change
+        : dashboard.holders.find((h) => h.id === view)?.change ?? null
+  const currency = snap.currency ?? dashboard.baseCurrency
 
   // Sub-totals row (only for the "All" view) — one chip per holder + Shared.
   const subTotals = [
@@ -188,41 +198,21 @@ export function MobileLayout({
           </div>
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span className="font-mono text-30 font-light leading-none tracking-hero text-foreground tabular-nums">
-              <Sensitive>{total != null ? fmtMoney(total, snap.currency) : '—'}</Sensitive>
+              <Sensitive>{total != null ? fmtMoney(total, currency) : '—'}</Sensitive>
             </span>
-            {showPct && (
-              <span
-                className={cn(
-                  'rounded-full px-2.5 py-0.75 text-14 font-semibold',
-                  positive ? 'bg-pos-bg text-pos' : 'bg-white/6 text-neg',
-                )}
-              >
-                <Sensitive>
-                  {positive ? '+' : '−'}
-                  {Math.abs(pct!).toFixed(2)}%
-                </Sensitive>
-              </span>
-            )}
+            <ChangePill change={change} variant="chip" />
           </div>
-          {delta != null && (
-            <div
-              className={cn(
-                'mt-1.5 font-mono text-14 font-light tracking-tight tabular-nums',
-                positive ? 'text-pos' : 'text-neg',
-              )}
-            >
-              <Sensitive>
-                {positive ? '+' : ''}
-                {fmtMoney(delta, snap.currency)}
-              </Sensitive>{' '}
-              · {period === 'ALL' ? 'All' : period}
+          {change && (
+            <div className="mt-1.5 text-12 text-text-faint">
+              {`Past ${period === 'ALL' ? 'all time' : period}`}
             </div>
           )}
         </div>
 
-        {/* ── Range pills ─────────────────────────────────────────── */}
-        <div className="shrink-0 px-5 pt-3.5 pb-1.5">
+        {/* ── Range pills + value/% toggle ────────────────────────── */}
+        <div className="flex shrink-0 items-center justify-between gap-2 px-5 pt-3.5 pb-1.5">
           <PeriodTabs value={period} onChange={onPeriodChange} />
+          <ChangeModeToggle value={changeMode} onChange={onChangeModeChange} />
         </div>
 
         {/* ── Graph (compact) ─────────────────────────────────────── */}
@@ -340,8 +330,9 @@ function MobileAccountRow({
   onToggleVisibility: () => void
 }) {
   const visible = !account.excludedFromTotal
-  const pct = account.change?.pct
-  const positive = (account.change?.absolute ?? 0) >= 0
+  // Same gate as SidebarAccountRow — cash accounts have noisy
+  // tx-derived change numbers; only investment accounts surface a pill.
+  const showChange = tracksPerformance(account.accountType)
   const Icon = visible ? Eye : EyeOff
 
   return (
@@ -372,18 +363,8 @@ function MobileAccountRow({
         <div className="font-mono text-14 font-normal tracking-tight text-foreground tabular-nums">
           <Sensitive>{fmtMoney(account.balance, account.balanceCurrency)}</Sensitive>
         </div>
-        {pct != null && (
-          <div
-            className={cn(
-              'mt-0.75 inline-block rounded-full px-1.75 py-px text-11 font-medium',
-              positive ? 'bg-pos-bg text-pos' : 'bg-white/6 text-neg',
-            )}
-          >
-            <Sensitive>
-              {positive ? '+' : '−'}
-              {Math.abs(pct).toFixed(1)}%
-            </Sensitive>
-          </div>
+        {showChange && (
+          <ChangePill change={account.change} variant="chip-sm" className="mt-0.75" />
         )}
       </div>
       <button

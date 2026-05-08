@@ -128,22 +128,37 @@ function buildAccount(
   let change: ChangePill | null = null
   if (spark && spark.values.length >= 2) {
     const today = spark.values[0]
-    const past = spark.values[spark.values.length - 1]
     // Prefer provider-reported growth (Avanza's absoluteSeries diff) — it's
-    // already deposit-adjusted and correct even when we have no
-    // transactions to subtract. Fall back to the tx-based estimate for
-    // providers that ship transactions but no growth series (EB).
-    const growth =
-      spark.growth != null ? spark.growth : today - past - spark.netDeposits
-    const absolute = Math.round(growth * 100) / 100
-    let pct: number | null = null
-    if (isInvestment && past !== 0) {
-      const raw = (growth / Math.abs(past)) * 100
-      if (Number.isFinite(raw)) {
-        pct = Math.round(raw * 100) / 100
-      }
+    // already deposit-adjusted. Fall back to the tx-based estimate only
+    // for providers that actually ship transactions (EB). Avanza syncs no
+    // transactions, so `netDeposits` is always 0 — the fallback would
+    // report raw balance change including deposits and divide it by a
+    // dust-sized past value (e.g. a brand-new ISK that started near 0).
+    let growth: number | null = null
+    if (spark.growth != null) {
+      growth = spark.growth
+    } else if (c.connection.providerId === 'enable-banking') {
+      const past = spark.values[spark.values.length - 1]
+      growth = today - past - spark.netDeposits
     }
-    change = { absolute, pct }
+    if (growth != null) {
+      const absolute = Math.round(growth * 100) / 100
+      let pct: number | null = null
+      if (isInvestment) {
+        // Denominator = capital deployed (today − growth). Approximates
+        // "starting balance + net deposits during the window" and stays
+        // stable when an account was empty at window start, which would
+        // otherwise blow up `growth / past` to millions of percent.
+        const deployed = today - growth
+        if (deployed > 0) {
+          const raw = (growth / deployed) * 100
+          if (Number.isFinite(raw)) {
+            pct = Math.round(raw * 100) / 100
+          }
+        }
+      }
+      change = { absolute, pct }
+    }
   }
 
   return {
@@ -211,14 +226,15 @@ interface BucketTotals {
   // a.change.absolute, which the buildAccount step has already stripped of
   // money moved in or out.
   absoluteGrowth: number
-  // Sum of per-account starting balances (oldest sparkline value), used as
-  // the pct denominator. Tracked separately because today − growth no
-  // longer equals "past balance" once deposits are excluded.
-  pastTotal: number
+  // Sum of per-account capital deployed (today's balance − the growth
+  // attributed to it). Approximates "starting balance + net deposits"
+  // across the window and stays sensible even when individual accounts
+  // were empty at the start of the period.
+  deployedTotal: number
 }
 
 function emptyBucketTotals(): BucketTotals {
-  return { total: 0, cash: 0, investment: 0, absoluteGrowth: 0, pastTotal: 0 }
+  return { total: 0, cash: 0, investment: 0, absoluteGrowth: 0, deployedTotal: 0 }
 }
 
 function addToBucket(b: BucketTotals, a: DashboardAccount, isInvestment: boolean) {
@@ -231,17 +247,17 @@ function addToBucket(b: BucketTotals, a: DashboardAccount, isInvestment: boolean
   b.total += amt
   if (isInvestment) b.investment += amt
   else b.cash += amt
-  if (a.change && a.sparkline && a.sparkline.length > 0) {
+  if (a.change) {
     b.absoluteGrowth += a.change.absolute
-    b.pastTotal += a.sparkline[0].value
+    b.deployedTotal += amt - a.change.absolute
   }
 }
 
 function changeFromBucket(b: BucketTotals): ChangePill | null {
-  if (b.absoluteGrowth === 0 && b.pastTotal === 0) return null
+  if (b.absoluteGrowth === 0 && b.deployedTotal === 0) return null
   let pct: number | null = null
-  if (b.pastTotal !== 0) {
-    const raw = (b.absoluteGrowth / Math.abs(b.pastTotal)) * 100
+  if (b.deployedTotal > 0) {
+    const raw = (b.absoluteGrowth / b.deployedTotal) * 100
     if (Number.isFinite(raw)) {
       pct = Math.round(raw * 100) / 100
     }

@@ -13,6 +13,7 @@ import { fmtMoney, shortProduct } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { holderAvatarBg } from '@/lib/holders'
 import { cn } from '@/lib/utils'
+import { ChangePill } from './ChangePill'
 
 function accountLabel(a: DashboardAccount): string {
   return a.details || a.product || a.name || a.iban || a.id
@@ -26,9 +27,11 @@ export function SidebarAccountRow({
   color: string
 }) {
   const visible = !account.excludedFromTotal
-  const pct = account.change?.pct
-  const positive = (account.change?.absolute ?? 0) >= 0
-  const showPct = tracksPerformance(account.accountType) && pct != null
+  // Cash accounts get a `change.absolute` from EB tx-based estimation,
+  // but the number is essentially "deposits in − withdrawals out, minus
+  // what we could attribute as deposits" — noise, not performance. Only
+  // surface the pill for accounts whose period change is actually meaningful.
+  const showChange = tracksPerformance(account.accountType)
 
   return (
     <div
@@ -65,16 +68,16 @@ export function SidebarAccountRow({
           </Link>
         </div>
       </div>
-      <Sensitive className="ml-1.5 flex shrink-0 flex-col justify-center whitespace-nowrap text-right">
-        <span className="font-mono text-14 font-normal leading-none text-foreground tabular-nums">
-          {fmtMoney(account.balance, account.balanceCurrency)}
-        </span>
-        {showPct && (
-          <span className={`mt-0.5 text-11 leading-none ${positive ? 'text-pos' : 'text-neg'}`}>
-            {`${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`}
+      <div className="ml-1.5 flex shrink-0 flex-col justify-center whitespace-nowrap text-right">
+        <Sensitive>
+          <span className="font-mono text-14 font-normal leading-none text-foreground tabular-nums">
+            {fmtMoney(account.balance, account.balanceCurrency)}
           </span>
+        </Sensitive>
+        {showChange && (
+          <ChangePill change={account.change} variant="row" className="mt-0.5" />
         )}
-      </Sensitive>
+      </div>
     </div>
   )
 }

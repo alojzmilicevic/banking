@@ -5,30 +5,30 @@
 // now — Topbar doesn't need to know how to map a view key to a name.
 
 import { fmtMoney } from '@/lib/format'
-import { cn } from '@/lib/utils'
 import { Sensitive } from '@/components/sensitive-data'
+import { ChangePill, type ChangeValue } from './ChangePill'
+import { ChangeModeToggle, type ChangeMode } from './ChangeModeToggle'
 import { PeriodTabs, type Period } from './PeriodTabs'
 
 export function Topbar({
   label,
   total,
-  delta,
-  pct,
+  change,
   currency,
   period,
   onPeriodChange,
+  changeMode,
+  onChangeModeChange,
 }: {
   label: string
   total: number | null
-  delta: number | null
-  pct: number | null
+  change: ChangeValue | null
   currency: string | null
   period: Period
   onPeriodChange: (p: Period) => void
+  changeMode: ChangeMode
+  onChangeModeChange: (m: ChangeMode) => void
 }) {
-  const positive = (delta ?? 0) >= 0
-  const showPct = pct != null && Number.isFinite(pct) && Math.abs(pct) <= 500
-
   return (
     <div className="flex shrink-0 items-center justify-between border-b border-border-subtle bg-background px-7 py-4">
       <div>
@@ -39,23 +39,14 @@ export function Topbar({
           <span className="font-mono text-30 font-light tracking-hero text-foreground tabular-nums">
             {total != null ? fmtMoney(total, currency) : '—'}
           </span>
-          {delta != null && (
-            <span className={cn('text-14 font-medium', positive ? 'text-pos' : 'text-neg')}>
-              {positive ? '+' : ''}
-              {fmtMoney(delta, currency)}
-              {showPct && (
-                <span className="text-text-faint">
-                  {' · '}
-                  {positive ? '+' : '−'}
-                  {Math.abs(pct!).toFixed(1)}%
-                </span>
-              )}
-            </span>
-          )}
+          <ChangePill change={change} variant="hero" currency={currency} />
         </Sensitive>
       </div>
 
-      <PeriodTabs value={period} onChange={onPeriodChange} />
+      <div className="flex items-center gap-2">
+        <ChangeModeToggle value={changeMode} onChange={onChangeModeChange} />
+        <PeriodTabs value={period} onChange={onPeriodChange} />
+      </div>
     </div>
   )
 }

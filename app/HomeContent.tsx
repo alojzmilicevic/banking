@@ -17,6 +17,8 @@ import { Sidebar, type ViewSelection } from './components/Sidebar'
 import { Timeline, type TimelineSnapshot } from './components/Timeline'
 import { Topbar } from './components/Topbar'
 import { SummaryCards, buildSummaryRows } from './components/SummaryCards'
+import { type ChangeMode } from './components/ChangeModeToggle'
+import { ChangeModeProvider } from './components/change-mode-context'
 import { type Period } from './components/PeriodTabs'
 import { Alert } from '@/components/ui/alert'
 import {
@@ -32,10 +34,7 @@ const EMPTY_SNAP: TimelineSnapshot = {
   total: null,
   shared: null,
   byHolder: {},
-  changeByKey: {},
   currency: null,
-  changeAbsolute: null,
-  changePct: null,
 }
 
 export function HomeContent({
@@ -55,6 +54,7 @@ export function HomeContent({
     {},
   )
   const [showShared, setShowShared] = useLocalStorage<boolean>('aloma:legend-shared', false)
+  const [changeMode, setChangeMode] = useLocalStorage<ChangeMode>('aloma:change-mode', 'abs')
   const [pageError, setPageError] = useState<string | null>(initialError)
   const [snap, setSnap] = useState<TimelineSnapshot>(EMPTY_SNAP)
 
@@ -105,16 +105,22 @@ export function HomeContent({
     bulkToggle((a) => a.bucket.kind === 'shared' && !a.possibleDuplicateOf)
   }
 
-  // Topbar values: pick the slice that matches the current view.
+  // Topbar values: pick the slice that matches the current view. The
+  // displayed total tracks the chart's latest point (via snap) so the
+  // topbar number stays anchored to the chart, but change comes from
+  // the dashboard's deposit-adjusted bucket math (single source of truth).
   const topbarTotal =
     view === 'all'
       ? snap.total
       : view === 'shared'
         ? snap.shared
         : snap.byHolder[view] ?? null
-  const topbarChange = snap.changeByKey[view] ?? null
-  const topbarDelta = topbarChange?.absolute ?? null
-  const topbarPct = topbarChange?.pct ?? null
+  const topbarChange =
+    view === 'all'
+      ? data?.totals.change ?? null
+      : view === 'shared'
+        ? data?.shared.change ?? null
+        : data?.holders.find((h) => h.id === view)?.change ?? null
   const topbarLabel =
     view === 'all'
       ? 'All Accounts'
@@ -125,11 +131,8 @@ export function HomeContent({
   const summaryRows = data
     ? buildSummaryRows({
         totalAll: snap.total ?? data.totals.total,
-        pctAll: snap.changePct,
+        changeAll: data.totals.change,
         holders: data.holders,
-        pctByHolder: Object.fromEntries(
-          data.holders.map((h) => [h.id, snap.changeByKey[h.id]?.pct ?? null]),
-        ),
       })
     : []
 
@@ -153,7 +156,7 @@ export function HomeContent({
     null
 
   return (
-    <>
+    <ChangeModeProvider value={changeMode}>
       {data ? (
         <>
           {/* Desktop: sidebar + main panel. Hidden below `lg` (1024px). */}
@@ -174,11 +177,12 @@ export function HomeContent({
               <Topbar
                 label={topbarLabel}
                 total={topbarTotal}
-                delta={topbarDelta}
-                pct={topbarPct}
-                currency={snap.currency}
+                change={topbarChange}
+                currency={snap.currency ?? data.baseCurrency}
                 period={period}
                 onPeriodChange={setPeriod}
+                changeMode={changeMode}
+                onChangeModeChange={setChangeMode}
               />
 
               <div className="flex flex-1 flex-col gap-5 overflow-hidden px-7 py-6">
@@ -232,6 +236,8 @@ export function HomeContent({
             syncingAll={syncAll.isPending}
             topError={topError}
             onDismissError={() => setPageError(null)}
+            changeMode={changeMode}
+            onChangeModeChange={setChangeMode}
           />
         </>
       ) : (
@@ -258,6 +264,6 @@ export function HomeContent({
           <MobileDashboardSkeleton />
         </>
       )}
-    </>
+    </ChangeModeProvider>
   )
 }

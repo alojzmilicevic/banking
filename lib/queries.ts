@@ -126,8 +126,29 @@ export function useTimeseries(period: string) {
 export function useSyncAll() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => fetchJson('/api/sync', { method: 'POST' }),
-    onSuccess: () => invalidateWealth(qc),
+    mutationFn: async () => {
+      // /api/sync returns 207 with per-connection error strings on
+      // partial failure. fetchJson treats 207 as a 2xx and resolves, so
+      // without inspecting the body the user would never see that one
+      // bank failed while others succeeded. Promote any per-result
+      // error into a thrown Error so it lands in syncAll.error and the
+      // topbar alert.
+      const r = await fetchJson<SyncOneResponse>('/api/sync', { method: 'POST' })
+      const failed = r.results.filter((x) => x.error)
+      if (failed.length > 0) {
+        const summary =
+          failed.length === 1
+            ? `Sync failed: ${failed[0].error}`
+            : `${failed.length}/${r.results.length} connections failed: ${failed
+                .map((f) => f.error)
+                .join('; ')}`
+        throw new Error(summary)
+      }
+      return r
+    },
+    // Refresh the dashboard regardless of outcome — partial successes
+    // updated some accounts and the user should see those.
+    onSettled: () => invalidateWealth(qc),
   })
 }
 

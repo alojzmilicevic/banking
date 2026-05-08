@@ -25,6 +25,7 @@ import { fmtMoneyCompact } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { holderBg, holderBorder } from '@/lib/holders'
 import { cn } from '@/lib/utils'
+import { ChangePill } from './ChangePill'
 import { HolderAvatar } from './HolderAvatar'
 import { PersonMenuPopover } from './PersonMenuPopover'
 import { SidebarAccountRow } from './SidebarAccountRow'
@@ -68,22 +69,14 @@ export function PersonSection({
             {visibleAccounts.length + hiddenAccounts.length === 1 ? 'account' : 'accounts'}
           </div>
         </div>
-        <Sensitive className="flex shrink-0 flex-col whitespace-nowrap text-right">
-          <span className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
-            {fmtMoneyCompact(holder.total)}
-          </span>
-          {holder.change && (
-            <span
-              className={cn(
-                'mt-px text-11',
-                holder.change.absolute >= 0 ? 'text-pos' : 'text-neg',
-              )}
-            >
-              {holder.change.absolute >= 0 ? '+' : ''}
-              {fmtMoneyCompact(Math.abs(holder.change.absolute))}
+        <div className="flex shrink-0 flex-col whitespace-nowrap text-right">
+          <Sensitive>
+            <span className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
+              {fmtMoneyCompact(holder.total)}
             </span>
-          )}
-        </Sensitive>
+          </Sensitive>
+          <ChangePill change={holder.change} variant="compact" className="mt-px" />
+        </div>
         <PersonMenuPopover
           triggerLabel={`${holder.label} options`}
           accounts={holder.accounts.filter((a) => !a.possibleDuplicateOf)}

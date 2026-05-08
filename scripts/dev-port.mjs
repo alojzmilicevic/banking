@@ -50,13 +50,15 @@ const url = `https://localhost:${port}`
 const urlFile = join(root, '.dev-url')
 const pidFile = join(root, '.dev-pid')
 
-rmSync(join(root, '.next'), { recursive: true, force: true })
+if (process.argv.includes('--fresh')) {
+  rmSync(join(root, '.next'), { recursive: true, force: true })
+}
 writeFileSync(urlFile, url + '\n')
 
 console.log(`[dev] worktree=${name} port=${port}`)
 console.log(`[dev] ${url}`)
 
-const child = spawn('next', ['dev', '--experimental-https', '-p', String(port)], {
+const child = spawn('next', ['dev', '--turbopack', '--experimental-https', '-p', String(port)], {
   stdio: 'inherit',
   env: { ...process.env, ...(isMain ? {} : { WORKTREE_NAME: name }) },
 })
