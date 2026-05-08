@@ -126,6 +126,11 @@ export interface NormalizedDailyValue {
   date: string // YYYY-MM-DD
   value: number
   currency: string
+  // Cumulative SEK gain since the chart's anchor day. Avanza ships this
+  // as `absoluteSeries`; subtracting two days' values gives real growth
+  // over that subwindow, deposits-excluded. Null when the provider
+  // doesn't expose it.
+  growth?: number | null
 }
 
 export interface SyncResult {

@@ -129,9 +129,12 @@ function buildAccount(
   if (spark && spark.values.length >= 2) {
     const today = spark.values[0]
     const past = spark.values[spark.values.length - 1]
-    // Real growth = balance delta minus money the user moved in or out.
-    // Without this, depositing 1 000 SEK looks identical to earning 1 000.
-    const growth = today - past - spark.netDeposits
+    // Prefer provider-reported growth (Avanza's absoluteSeries diff) — it's
+    // already deposit-adjusted and correct even when we have no
+    // transactions to subtract. Fall back to the tx-based estimate for
+    // providers that ship transactions but no growth series (EB).
+    const growth =
+      spark.growth != null ? spark.growth : today - past - spark.netDeposits
     const absolute = Math.round(growth * 100) / 100
     let pct: number | null = null
     if (isInvestment && past !== 0) {

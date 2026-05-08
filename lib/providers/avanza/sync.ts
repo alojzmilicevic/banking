@@ -1,6 +1,6 @@
 import { AvanzaApi, type AvanzaSession } from './api'
 import { paths } from './constants'
-import { chartDate, fetchChartTimeperiod } from './chart'
+import { chartDate, fetchChartTimeperiod, type ChartTimePeriodResponse } from './chart'
 import { loginWithPassword, type AvanzaCredentials } from './auth/login'
 import { loadAvanzaCredentials, saveAvanzaCredentials } from './auth/credentials-store'
 import {
@@ -162,14 +162,7 @@ async function fetchDailyValueSeries(
   if (idMap.size === 1) {
     // Single-call path — already fetched.
     const a = Array.from(idMap.values())[0]
-    for (const p of chart.valueSeries) {
-      out.push({
-        accountId: a.id,
-        date: chartDate(p.timestamp),
-        value: p.performance.value,
-        currency: p.performance.unit,
-      })
-    }
+    out.push(...mergeValueAndGrowth(a.id, chart.valueSeries, chart.absoluteSeries))
     onProgress?.(1, 1)
     return out
   }
@@ -183,10 +176,10 @@ async function fetchDailyValueSeries(
     Array.from(idMap.entries()).map(async ([scrambledId, account]) => {
       try {
         const r = await fetchChartTimeperiod(api, [scrambledId], period)
-        return { account, series: r.valueSeries }
+        return { account, valueSeries: r.valueSeries, absoluteSeries: r.absoluteSeries }
       } catch (e) {
         console.warn(`[avanza] chart for ${account.id} failed:`, (e as Error).message)
-        return { account, series: [] }
+        return { account, valueSeries: [], absoluteSeries: [] }
       } finally {
         completed += 1
         onProgress?.(completed, total)
@@ -194,15 +187,39 @@ async function fetchDailyValueSeries(
     }),
   )
 
-  for (const { account, series } of perAccount) {
-    for (const p of series) {
-      out.push({
-        accountId: account.id,
-        date: chartDate(p.timestamp),
-        value: p.performance.value,
-        currency: p.performance.unit,
-      })
-    }
+  for (const { account, valueSeries, absoluteSeries } of perAccount) {
+    out.push(...mergeValueAndGrowth(account.id, valueSeries, absoluteSeries))
+  }
+  return out
+}
+
+// valueSeries is per calendar day (~366 entries for ONE_YEAR); absoluteSeries
+// is per trading day (~250) — the cumulative SEK gain since the chart's
+// anchor. We zip them by date and carry the last known growth forward across
+// weekends/holidays so the dashboard can read a value on any day.
+function mergeValueAndGrowth(
+  accountId: string,
+  valueSeries: ChartTimePeriodResponse['valueSeries'],
+  absoluteSeries: ChartTimePeriodResponse['absoluteSeries'],
+): NormalizedDailyValue[] {
+  const growthByDate = new Map<string, number>()
+  for (const p of absoluteSeries) {
+    growthByDate.set(chartDate(p.timestamp), p.performance.value)
+  }
+  const sorted = [...valueSeries].sort((a, b) => a.timestamp - b.timestamp)
+  const out: NormalizedDailyValue[] = []
+  let lastGrowth: number | null = null
+  for (const p of sorted) {
+    const date = chartDate(p.timestamp)
+    const g = growthByDate.get(date)
+    if (g !== undefined) lastGrowth = g
+    out.push({
+      accountId,
+      date,
+      value: p.performance.value,
+      currency: p.performance.unit,
+      growth: lastGrowth,
+    })
   }
   return out
 }
