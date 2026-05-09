@@ -4,7 +4,7 @@
 // issue. Used by PeriodTabs and ChangeModeToggle.
 
 import { motion } from 'motion/react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 export type SegmentedControlItem<T extends string> = {
@@ -27,7 +27,7 @@ export function SegmentedControl<T extends string>({
   const buttonRefs = useRef<Map<T, HTMLButtonElement>>(new Map())
   const [pill, setPill] = useState<{ x: number; width: number } | null>(null)
 
-  const measure = useCallback(() => {
+  useLayoutEffect(() => {
     const btn = buttonRefs.current.get(value)
     if (!btn) return
     setPill((prev) => {
@@ -37,20 +37,24 @@ export function SegmentedControl<T extends string>({
     })
   }, [value])
 
-  useLayoutEffect(() => {
-    measure()
-  }, [measure])
-
   // Track container resizes — fonts loading late or a parent layout
   // (e.g. sidebar drag) shifting button offsets shouldn't leave the pill
   // stuck on its old measurement.
   useEffect(() => {
     const el = containerRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(() => measure())
+    const ro = new ResizeObserver(() => {
+      const btn = buttonRefs.current.get(value)
+      if (!btn) return
+      setPill((prev) => {
+        const next = { x: btn.offsetLeft, width: btn.offsetWidth }
+        if (prev && prev.x === next.x && prev.width === next.width) return prev
+        return next
+      })
+    })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [measure])
+  }, [value])
 
   return (
     <div

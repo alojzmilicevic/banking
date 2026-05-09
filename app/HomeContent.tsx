@@ -181,17 +181,7 @@ export function HomeContent({
 
               <div className="flex flex-1 flex-col gap-5 overflow-hidden px-7 py-6">
                 {topError && (
-                  <Alert>
-                    <button
-                      type="button"
-                      className="float-right -mr-1 -mt-0.5 text-xs opacity-60 hover:opacity-100"
-                      onClick={() => setPageError(null)}
-                      aria-label="Dismiss"
-                    >
-                      ✕
-                    </button>
-                    {topError}
-                  </Alert>
+                  <Alert onDismiss={() => setPageError(null)}>{topError}</Alert>
                 )}
 
                 <Timeline
@@ -241,17 +231,7 @@ export function HomeContent({
               staring at an infinite shimmer with no way to recover. */}
           {topError && (
             <div className="fixed left-1/2 top-4 z-50 w-[min(35rem,calc(100%-2rem))] -translate-x-1/2">
-              <Alert>
-                <button
-                  type="button"
-                  className="float-right -mr-1 -mt-0.5 text-xs opacity-60 hover:opacity-100"
-                  onClick={() => setPageError(null)}
-                  aria-label="Dismiss"
-                >
-                  ✕
-                </button>
-                {topError}
-              </Alert>
+              <Alert onDismiss={() => setPageError(null)}>{topError}</Alert>
             </div>
           )}
           <DashboardSkeleton sidebarWidth={initialSidebarWidth} />

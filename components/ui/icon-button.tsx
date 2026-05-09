@@ -26,16 +26,24 @@ const iconButtonVariants = cva(
 
 export interface IconButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof iconButtonVariants> {}
+    VariantProps<typeof iconButtonVariants> {
+  ref?: React.Ref<HTMLButtonElement>
+}
 
-export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
-  ({ className, variant, size, type = 'button', ...props }, ref) => (
+export function IconButton({
+  className,
+  variant,
+  size,
+  type = 'button',
+  ref,
+  ...props
+}: IconButtonProps) {
+  return (
     <button
       ref={ref}
       type={type}
       className={cn(iconButtonVariants({ variant, size, className }))}
       {...props}
     />
-  ),
-)
-IconButton.displayName = 'IconButton'
+  )
+}

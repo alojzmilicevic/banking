@@ -17,16 +17,30 @@ const alertVariants = cva(
 
 export interface AlertProps
   extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof alertVariants> {}
+    VariantProps<typeof alertVariants> {
+  ref?: React.Ref<HTMLDivElement>
+  onDismiss?: () => void
+}
 
-export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
-  ({ className, variant, ...props }, ref) => (
+export function Alert({ className, variant, ref, onDismiss, children, ...props }: AlertProps) {
+  return (
     <div
       ref={ref}
       role="alert"
       className={cn(alertVariants({ variant, className }))}
       {...props}
-    />
-  ),
-)
-Alert.displayName = 'Alert'
+    >
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          className="float-right -mr-1 -mt-0.5 text-xs opacity-60 hover:opacity-100"
+        >
+          ✕
+        </button>
+      )}
+      {children}
+    </div>
+  )
+}

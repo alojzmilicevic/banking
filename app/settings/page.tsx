@@ -5,6 +5,7 @@ import { Loader2, Plus } from 'lucide-react'
 import { useAddHolder, useHolders } from '@/lib/queries'
 import { SensitiveToggle, useSensitiveData } from '@/components/sensitive-data'
 import { Alert } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useLocalStorage } from '@/hooks/use-local-storage'
 import { HolderAvatar } from '@/app/components/HolderAvatar'
@@ -33,11 +34,17 @@ export default function GeneralPage() {
     }
   }
 
+  function cancelAdd() {
+    setAdding(false)
+    setDraftLabel('')
+    setError(null)
+  }
+
   return (
     <>
       <SettingsSection title="Household">
         {holders.data?.map((h) => (
-          <SettingsRow key={h.id} label={h.label} description={h.initials}>
+          <SettingsRow key={h.id} label={h.label}>
             <HolderAvatar color={h.color}>{h.initials}</HolderAvatar>
           </SettingsRow>
         ))}
@@ -46,7 +53,13 @@ export default function GeneralPage() {
         )}
 
         {adding ? (
-          <div className="flex flex-col gap-2 border-t border-border-subtle pt-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void submitAdd()
+            }}
+            className="flex flex-col gap-2 border-t border-border-subtle pt-3"
+          >
             <Input
               autoFocus
               type="text"
@@ -54,41 +67,32 @@ export default function GeneralPage() {
               value={draftLabel}
               onChange={(e) => setDraftLabel(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void submitAdd()
-                if (e.key === 'Escape') {
-                  setAdding(false)
-                  setDraftLabel('')
-                  setError(null)
-                }
+                if (e.key === 'Escape') cancelAdd()
               }}
               disabled={addHolder.isPending}
               className="px-3 text-14"
             />
             {error && <Alert>{error}</Alert>}
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={submitAdd}
+              <Button
+                type="submit"
+                size="xs"
                 disabled={!draftLabel.trim() || addHolder.isPending}
-                className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-12 font-medium text-primary-foreground transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1"
               >
                 {addHolder.isPending && <Loader2 className="size-3.5 animate-spin" />}
                 Add member
-              </button>
+              </Button>
               <button
                 type="button"
-                onClick={() => {
-                  setAdding(false)
-                  setDraftLabel('')
-                  setError(null)
-                }}
+                onClick={cancelAdd}
                 disabled={addHolder.isPending}
                 className="rounded-md border border-border bg-white/5 px-3 py-1.5 text-12 font-medium text-foreground transition-colors hover:bg-white/9"
               >
                 Cancel
               </button>
             </div>
-          </div>
+          </form>
         ) : (
           <button
             type="button"
@@ -124,6 +128,7 @@ export default function GeneralPage() {
             type="button"
             onClick={() => setShowCombined((v) => !v)}
             aria-pressed={showCombined}
+            aria-label="Toggle combined line"
             className={cn(
               'inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border border-border-subtle p-0.5 transition-colors',
               showCombined ? 'bg-primary/30' : 'bg-white/5',

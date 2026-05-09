@@ -1,4 +1,4 @@
-import { useCallback, useRef, useSyncExternalStore } from 'react'
+import { useRef, useSyncExternalStore } from 'react'
 
 const STORAGE_SYNC_EVENT = '__BANKING_STORAGE_SYNC__'
 
@@ -22,36 +22,33 @@ function useStorage<T>(
 ) {
   const storage = getStorage(type)
 
-  const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      const handleStorageChange = (e: StorageEvent) => {
-        if (e.key === key && e.storageArea === storage) {
-          onStoreChange()
-        }
+  const subscribe = (onStoreChange: () => void) => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === key && e.storageArea === storage) {
+        onStoreChange()
       }
+    }
 
-      const handleSyncEvent = (e: Event) => {
-        const customEvent = e as CustomEvent<StorageSyncDetail>
-        const { key: eventKey, storageType } = customEvent.detail
-        if (eventKey === key && storageType === type) {
-          onStoreChange()
-        }
+    const handleSyncEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<StorageSyncDetail>
+      const { key: eventKey, storageType } = customEvent.detail
+      if (eventKey === key && storageType === type) {
+        onStoreChange()
       }
+    }
 
-      window.addEventListener('storage', handleStorageChange)
-      window.addEventListener(STORAGE_SYNC_EVENT, handleSyncEvent)
+    window.addEventListener('storage', handleStorageChange)
+    window.addEventListener(STORAGE_SYNC_EVENT, handleSyncEvent)
 
-      return () => {
-        window.removeEventListener('storage', handleStorageChange)
-        window.removeEventListener(STORAGE_SYNC_EVENT, handleSyncEvent)
-      }
-    },
-    [storage, key, type],
-  )
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener(STORAGE_SYNC_EVENT, handleSyncEvent)
+    }
+  }
 
   const lastRawRef = useRef<string | null | undefined>(undefined)
   const valueRef = useRef<T>(initialValue)
-  const getSnapshot = useCallback((): T => {
+  const getSnapshot = (): T => {
     if (!storage) return initialValue
     const raw = storage.getItem(key)
     if (raw === lastRawRef.current) return valueRef.current
@@ -66,11 +63,9 @@ function useStorage<T>(
       }
     }
     return valueRef.current
-  }, [storage, key, initialValue])
+  }
 
-  const getServerSnapshot = useCallback((): T => {
-    return initialValue
-  }, [initialValue])
+  const getServerSnapshot = (): T => initialValue
 
   const storedValue = useSyncExternalStore(
     subscribe,
@@ -79,30 +74,27 @@ function useStorage<T>(
   )
 
   const initialJson = JSON.stringify(initialValue)
-  const setValue = useCallback(
-    (param: T | ((previousValue: T) => T)) => {
-      try {
-        const newValue = isSetValueCallback<T>(param)
-          ? param(getSnapshot())
-          : param
+  const setValue = (param: T | ((previousValue: T) => T)) => {
+    try {
+      const newValue = isSetValueCallback<T>(param)
+        ? param(getSnapshot())
+        : param
 
-        const newJson = JSON.stringify(newValue)
-        if (newJson === initialJson) {
-          storage!.removeItem(key)
-        } else {
-          storage!.setItem(key, newJson)
-        }
-        window.dispatchEvent(
-          new CustomEvent<StorageSyncDetail>(STORAGE_SYNC_EVENT, {
-            detail: { key, storageType: type },
-          }),
-        )
-      } catch (error) {
-        console.error(`Failed to set storage key '${key}'`, error)
+      const newJson = JSON.stringify(newValue)
+      if (newJson === initialJson) {
+        storage!.removeItem(key)
+      } else {
+        storage!.setItem(key, newJson)
       }
-    },
-    [storage, key, type, getSnapshot, initialJson],
-  )
+      window.dispatchEvent(
+        new CustomEvent<StorageSyncDetail>(STORAGE_SYNC_EVENT, {
+          detail: { key, storageType: type },
+        }),
+      )
+    } catch (error) {
+      console.error(`Failed to set storage key '${key}'`, error)
+    }
+  }
 
   return [storedValue, setValue] as const
 }
@@ -117,4 +109,3 @@ function getStorage(type: 'local' | 'session') {
   if (typeof window === 'undefined') return undefined
   return type === 'local' ? window.localStorage : window.sessionStorage
 }
-

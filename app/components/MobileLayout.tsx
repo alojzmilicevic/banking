@@ -181,17 +181,7 @@ export function MobileLayout({
       <div className="flex flex-1 flex-col overflow-y-auto">
         {topError && (
           <div className="px-5 pt-3">
-            <Alert>
-              <button
-                type="button"
-                className="float-right -mr-1 -mt-0.5 text-xs opacity-60 hover:opacity-100"
-                onClick={onDismissError}
-                aria-label="Dismiss"
-              >
-                ✕
-              </button>
-              {topError}
-            </Alert>
+            <Alert onDismiss={onDismissError}>{topError}</Alert>
           </div>
         )}
 

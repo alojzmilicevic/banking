@@ -4,11 +4,23 @@
 
 import type { DashboardAccount } from '@/lib/api/dashboard'
 
+// Structural type so this works for both the dashboard view-model
+// (DashboardAccount) and the raw DB row (Account from drizzle), since
+// both share these fields.
+type AccountLabelable = {
+  id: string
+  name: string | null
+  details: string | null
+  product: string | null
+  iban: string | null
+}
+
 // What to show in a row's primary line. Falls back through the most
-// human-friendly fields first; id is the last resort so empty rows never
-// render blank.
-export function accountLabel(a: DashboardAccount): string {
-  return a.details || a.product || a.name || a.iban || a.id
+// human-friendly fields first; if none are set, the optional `fallback`
+// is used (e.g. "Account" on the detail page) before giving up and
+// returning the raw id so empty rows never render blank.
+export function accountLabel(a: AccountLabelable, fallback?: string): string {
+  return a.details || a.product || a.name || a.iban || fallback || a.id
 }
 
 export interface AccountPartition {

@@ -13,17 +13,14 @@
 // live in the PersonMenuPopover hung off the ⋮ trigger.
 //
 // Card shell (wrapper + hidden collapsible) lives in HolderCard so the
-// shared section renders identical chrome.
+// shared section renders identical chrome. Header markup lives in
+// HolderCardHeader so the same applies to the avatar/label/total/popover row.
 
 import type { DashboardAccount, DashboardHolder } from '@/lib/api/dashboard'
-import { fmtMoneyCompact } from '@/lib/format'
-import { Sensitive } from '@/components/sensitive-data'
 import { partitionAccounts } from '@/lib/accounts'
 import { holderBg, holderBorder } from '@/lib/holders'
-import { ChangePill } from './ChangePill'
-import { HolderAvatar } from './HolderAvatar'
 import { HolderCard } from './HolderCard'
-import { PersonMenuPopover } from './PersonMenuPopover'
+import { HolderCardHeader } from './HolderCardHeader'
 import { SidebarAccountRow } from './SidebarAccountRow'
 
 export function PersonSection({
@@ -35,45 +32,27 @@ export function PersonSection({
   onToggleAll: () => void
   onToggleAccount: (a: DashboardAccount) => void
 }) {
-  const { canonicals, visible, hidden, allHidden } = partitionAccounts(holder.accounts)
-
-  const header = (
-    <div className="mb-3.5 flex items-center gap-2.5">
-      <HolderAvatar color={holder.color}>
-        {holder.initials ?? holder.label.slice(0, 2).toUpperCase()}
-      </HolderAvatar>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-14 font-medium text-foreground">{holder.label}</div>
-        <div className="mt-px text-11 text-text-faint">
-          {visible.length}
-          {hidden.length > 0 ? ` of ${canonicals.length}` : ''}{' '}
-          {canonicals.length === 1 ? 'account' : 'accounts'}
-        </div>
-      </div>
-      <div className="flex shrink-0 flex-col whitespace-nowrap text-right">
-        <Sensitive>
-          <span className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
-            {fmtMoneyCompact(holder.total)}
-          </span>
-        </Sensitive>
-        <ChangePill change={holder.change} variant="compact" className="mt-px" />
-      </div>
-      <PersonMenuPopover
-        triggerLabel={`${holder.label} options`}
-        accounts={canonicals}
-        allHidden={allHidden}
-        onToggleAll={onToggleAll}
-        onToggleAccount={onToggleAccount}
-      />
-    </div>
-  )
+  const partition = partitionAccounts(holder.accounts)
+  const { visible, hidden } = partition
 
   return (
     <HolderCard
       bg={holderBg(holder.color)}
       border={holderBorder(holder.color)}
       color={holder.color}
-      header={header}
+      header={
+        <HolderCardHeader
+          avatar={holder.initials ?? holder.label.slice(0, 2).toUpperCase()}
+          color={holder.color}
+          label={holder.label}
+          total={holder.total}
+          change={holder.change}
+          partition={partition}
+          triggerLabel={`${holder.label} options`}
+          onToggleAll={onToggleAll}
+          onToggleAccount={onToggleAccount}
+        />
+      }
       hiddenAccounts={hidden}
     >
       {visible.map((a) => (

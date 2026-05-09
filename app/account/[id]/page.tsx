@@ -1,8 +1,9 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getAccountDetails } from '@/lib/services/account'
+import { accountLabel } from '@/lib/accounts'
 import { fmtMoney } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
+import { BackLink } from '@/app/components/BackLink'
 import { Card, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -12,10 +13,22 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 
 function signClass(amount: number) {
   if (amount === 0) return ''
   return amount > 0 ? 'text-pos' : 'text-neg'
+}
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return new Intl.DateTimeFormat('sv-SE', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(d)
 }
 
 function Amount({ amount, currency }: { amount: number; currency: string }) {
@@ -32,13 +45,11 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
   const details = getAccountDetails(id)
   if (!details) notFound()
 
-  const { account, connection, balances: accountBalances, transactions: accountTransactions } =
-    details
+  const { account, connection, balances, transactions } = details
 
-  const title = account.details || account.product || account.name || account.iban || 'Account'
+  const title = accountLabel(account, 'Account')
 
   const detailRows: Array<[string, string | null | undefined]> = [
-    ['', connection?.label],
     ['Holder', account.name],
     ['Product', account.product],
     ['IBAN', account.iban],
@@ -50,24 +61,26 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
 
   return (
     <main className="mx-auto max-w-240 px-6 pb-16 pt-8">
-      <p className="mt-0">
-        <Link href="/">← back</Link>
-      </p>
+      <div className="mb-4">
+        <BackLink href="/">Back</BackLink>
+      </div>
       <h1 className="mb-6 text-24 font-semibold">{title}</h1>
 
       <Card>
         <CardTitle>Details</CardTitle>
+        {connection?.label && (
+          <p className="my-1 text-sm text-muted-foreground">{connection.label}</p>
+        )}
         {detailRows.map(([label, value]) =>
           value ? (
-            <p key={label || 'connection'} className="my-1 text-sm text-muted-foreground">
-              {label ? `${label}: ` : ''}
-              {value}
+            <p key={label} className="my-1 text-sm text-muted-foreground">
+              {label}: {value}
             </p>
           ) : null,
         )}
       </Card>
 
-      {accountBalances.length > 0 && (
+      {balances.length > 0 && (
         <Card>
           <CardTitle>Balances</CardTitle>
           <Table>
@@ -79,10 +92,10 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
               </TableRow>
             </TableHeader>
             <TableBody>
-              {accountBalances.map((b) => (
+              {balances.map((b) => (
                 <TableRow key={b.balanceType}>
                   <TableCell>{b.balanceType}</TableCell>
-                  <TableCell className="text-muted-foreground">{b.referenceDate ?? '—'}</TableCell>
+                  <TableCell className="text-muted-foreground">{fmtDate(b.referenceDate)}</TableCell>
                   <TableCell className="text-right tabular-nums whitespace-nowrap">
                     <Amount amount={b.amount} currency={b.currency} />
                   </TableCell>
@@ -96,14 +109,14 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
       <Card>
         <CardTitle>
           Transactions{' '}
-          <span className="font-normal text-muted-foreground">({accountTransactions.length})</span>
+          <span className="font-normal text-muted-foreground">({transactions.length})</span>
         </CardTitle>
-        {accountTransactions.length === 0 && (
+        {transactions.length === 0 && (
           <p className="text-sm text-muted-foreground">
             No transactions stored yet — try Sync now.
           </p>
         )}
-        {accountTransactions.length > 0 && (
+        {transactions.length > 0 && (
           <Table>
             <TableHeader>
               <TableRow>
@@ -114,12 +127,12 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
               </TableRow>
             </TableHeader>
             <TableBody>
-              {accountTransactions.map((t) => (
+              {transactions.map((t) => (
                 <TableRow
                   key={t.fingerprint}
-                  className={t.status && t.status !== 'BOOK' ? 'opacity-60' : ''}
+                  className={cn(t.status && t.status !== 'BOOK' && 'opacity-60')}
                 >
-                  <TableCell>{t.date}</TableCell>
+                  <TableCell>{fmtDate(t.date)}</TableCell>
                   <TableCell>{t.description || t.counterparty || '—'}</TableCell>
                   <TableCell className="text-muted-foreground">{t.status || ''}</TableCell>
                   <TableCell className="text-right tabular-nums whitespace-nowrap">

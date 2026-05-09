@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Building2, Link2, Link2Off, Loader2, Plus, RefreshCw, TrendingUp } from 'lucide-react'
+import { Building2, Link2, Link2Off, Loader2, Plus, RefreshCw, TrendingUp } from 'lucide-react'
+import { BackLink } from '@/app/components/BackLink'
 import { Alert } from '@/components/ui/alert'
 import { IconButton } from '@/components/ui/icon-button'
 import {
@@ -357,14 +358,9 @@ function AddConnectorPanel({
 }) {
   return (
     <div className="rounded-12 border border-border-subtle bg-card/40 p-4">
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-3 inline-flex items-center gap-1 text-11 text-text-faint transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-3" />
+      <BackLink onClick={onBack} className="mb-3">
         Pick a different provider
-      </button>
+      </BackLink>
       {children}
     </div>
   )
