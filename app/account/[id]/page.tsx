@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-function fmtAmount(amount: number, currency: string) {
+function Amount({ amount, currency }: { amount: number; currency: string }) {
   const cls = amount < 0 ? 'text-neg' : amount > 0 ? 'text-pos' : ''
   return (
     <span className={cls}>
@@ -33,6 +33,17 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
 
   const title = account.details || account.product || account.name || account.iban || 'Account'
 
+  const detailRows: Array<[string, string | null | undefined]> = [
+    ['', connection?.label],
+    ['Holder', account.name],
+    ['Product', account.product],
+    ['IBAN', account.iban],
+    ['BBAN', account.bban],
+    ['BIC', account.bic],
+    ['Currency', account.currency],
+    ['Type', account.accountType],
+  ]
+
   return (
     <main className="mx-auto max-w-240 px-6 pb-16 pt-8">
       <p className="mt-0">
@@ -42,23 +53,13 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
 
       <Card>
         <CardTitle>Details</CardTitle>
-        {connection?.label && (
-          <p className="my-1 text-sm text-muted-foreground">{connection.label}</p>
-        )}
-        {account.name && (
-          <p className="my-1 text-sm text-muted-foreground">Holder: {account.name}</p>
-        )}
-        {account.product && (
-          <p className="my-1 text-sm text-muted-foreground">Product: {account.product}</p>
-        )}
-        {account.iban && <p className="my-1 text-sm text-muted-foreground">IBAN: {account.iban}</p>}
-        {account.bban && <p className="my-1 text-sm text-muted-foreground">BBAN: {account.bban}</p>}
-        {account.bic && <p className="my-1 text-sm text-muted-foreground">BIC: {account.bic}</p>}
-        {account.currency && (
-          <p className="my-1 text-sm text-muted-foreground">Currency: {account.currency}</p>
-        )}
-        {account.accountType && (
-          <p className="my-1 text-sm text-muted-foreground">Type: {account.accountType}</p>
+        {detailRows.map(([label, value]) =>
+          value ? (
+            <p key={label || 'connection'} className="my-1 text-sm text-muted-foreground">
+              {label ? `${label}: ` : ''}
+              {value}
+            </p>
+          ) : null,
         )}
       </Card>
 
@@ -74,12 +75,12 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
               </TableRow>
             </TableHeader>
             <TableBody>
-              {accountBalances.map((b, i) => (
-                <TableRow key={i}>
+              {accountBalances.map((b) => (
+                <TableRow key={b.balanceType}>
                   <TableCell>{b.balanceType}</TableCell>
                   <TableCell className="text-muted-foreground">{b.referenceDate ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums whitespace-nowrap">
-                    {fmtAmount(b.amount, b.currency)}
+                    <Amount amount={b.amount} currency={b.currency} />
                   </TableCell>
                 </TableRow>
               ))}
@@ -118,7 +119,7 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
                   <TableCell>{t.description || t.counterparty || '—'}</TableCell>
                   <TableCell className="text-muted-foreground">{t.status || ''}</TableCell>
                   <TableCell className="text-right tabular-nums whitespace-nowrap">
-                    {fmtAmount(t.amount, t.currency)}
+                    <Amount amount={t.amount} currency={t.currency} />
                   </TableCell>
                 </TableRow>
               ))}
