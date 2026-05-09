@@ -37,6 +37,20 @@ export type {
 
 const BASE_CURRENCY = 'SEK'
 
+// Empty payload returned when the DB hasn't been bootstrapped yet (no
+// users row). Routes should reach for this instead of building the shape
+// inline so the keys/types stay aligned with `getDashboard`.
+export function getEmptyDashboard(): DashboardResponse {
+  return {
+    holders: [],
+    shared: { total: 0, change: null, accounts: [] },
+    unassigned: null,
+    totals: { total: 0, cash: 0, investment: 0, change: null },
+    baseCurrency: BASE_CURRENCY,
+    errors: [],
+  }
+}
+
 interface AccountClassification {
   account: Account
   connection: Connection

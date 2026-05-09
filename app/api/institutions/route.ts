@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getProvider } from '@/lib/providers/registry'
 import { InstitutionsQuerySchema } from '@/lib/api/schemas'
 import { validateQuery } from '@/lib/api/validate'
+import { internalServerError } from '@/lib/api/route-helpers'
 
 // In-memory cache for the (mostly static) institutions list. This data
 // changes rarely and is the only thing we cache outside the DB.
@@ -37,6 +38,6 @@ export async function GET(req: Request) {
     cache.set(key, { data: personal, expiresAt: Date.now() + TTL_MS })
     return NextResponse.json(personal)
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    return internalServerError(e)
   }
 }

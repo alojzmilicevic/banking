@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import * as connectionsRepo from '@/lib/repositories/connections'
-import * as usersRepo from '@/lib/repositories/users'
 import { syncConnection, type SyncOutcome } from '@/lib/services/wealth'
 import { rateLimit } from '@/lib/sync/rate-limit'
 import { SyncQuerySchema } from '@/lib/api/schemas'
 import { validateQuery } from '@/lib/api/validate'
+import { errorMessage, internalServerError, requireUser } from '@/lib/api/route-helpers'
 
 // POST /api/sync                  → sync all active connections
 // POST /api/sync?id=<connId>      → sync one connection
@@ -42,10 +42,9 @@ export async function POST(req: Request) {
   // Sync is a per-user operation — no user means nothing to do (and
   // rate-limiting an "anon" bucket would let unauth callers exhaust the
   // shared key for the real user).
-  const user = usersRepo.getDefault()
-  if (!user) {
-    return NextResponse.json({ error: 'No user' }, { status: 401 })
-  }
+  const auth = requireUser()
+  if (auth.response) return auth.response
+  const user = auth.user
 
   try {
     if (id) {
@@ -67,11 +66,7 @@ export async function POST(req: Request) {
         })
       } catch (e) {
         return NextResponse.json(
-          {
-            results: [
-              ownershipError(id, e instanceof Error ? e.message : String(e)),
-            ],
-          },
+          { results: [ownershipError(id, errorMessage(e))] },
           { status: 207 },
         )
       }
@@ -97,13 +92,13 @@ export async function POST(req: Request) {
         : {
             connectionId: allowed[i].id,
             outcome: null,
-            error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+            error: errorMessage(r.reason),
           },
     )
     const results = [...ranResults, ...limited]
     const anyFailed = results.some((r) => r.error)
     return NextResponse.json({ results }, { status: anyFailed ? 207 : 200 })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    return internalServerError(e)
   }
 }

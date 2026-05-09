@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import * as authStatesRepo from '@/lib/repositories/auth-states'
-import * as connectionsRepo from '@/lib/repositories/connections'
 import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/services/wealth'
 import { PollAuthQuerySchema } from '@/lib/api/schemas'
 import { validateQuery } from '@/lib/api/validate'
+import { recordInitialSyncError } from '@/lib/api/route-helpers'
 
 // GET /api/auth/poll?state=...
 // Returns the same AuthChallenge shape as /api/auth/start. The frontend
@@ -53,13 +53,7 @@ export async function GET(req: Request) {
     try {
       await syncConnection(result.connectionId)
     } catch (e) {
-      console.error(`[poll] initial sync of ${result.connectionId} failed:`, e)
-      try {
-        const msg = e instanceof Error ? e.message : String(e)
-        connectionsRepo.update(result.connectionId, { lastSyncError: `[initial] ${msg}` })
-      } catch (persistErr) {
-        console.error('[poll] could not persist initial sync error:', persistErr)
-      }
+      recordInitialSyncError(result.connectionId, e, 'poll')
     }
   }
 

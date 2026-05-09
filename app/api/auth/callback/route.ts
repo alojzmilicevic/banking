@@ -7,6 +7,7 @@ import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/services/wealth'
 import { AuthCallbackQuerySchema } from '@/lib/api/schemas'
 import { validateQuery } from '@/lib/api/validate'
+import { errorMessage, recordInitialSyncError } from '@/lib/api/route-helpers'
 
 // OAuth-style return URL (Enable Banking, future redirect-based providers).
 // Cookie-based providers (Avanza) never hit this endpoint — they create
@@ -81,8 +82,7 @@ export async function GET(req: Request) {
     try {
       await syncConnection(connectionId)
     } catch (e) {
-      console.error('[callback] initial sync failed:', e)
-      await persistInitialSyncError(connectionId, e)
+      recordInitialSyncError(connectionId, e, 'callback')
     }
 
     return NextResponse.redirect(`${url.origin}/?connected=${connectionId}`)
@@ -90,21 +90,7 @@ export async function GET(req: Request) {
     // Anything that throws here is recoverable on retry, so leave the
     // auth state row in place. (Stale rows time out on `expiresAt`.)
     return NextResponse.redirect(
-      `${url.origin}/?error=${encodeURIComponent((e as Error).message)}`,
+      `${url.origin}/?error=${encodeURIComponent(errorMessage(e))}`,
     )
-  }
-}
-
-// Belt-and-braces: the orchestrator already persists provider errors via
-// `connectionsRepo.update({ lastSyncError })`, but errors from later
-// stages (snapshot rebuild, persist) bubble up unhandled. Make sure
-// every initial-sync failure leaves a trail on the connection row so
-// the FE can surface "this just-linked connection didn't sync".
-async function persistInitialSyncError(connectionId: string, e: unknown): Promise<void> {
-  try {
-    const msg = e instanceof Error ? e.message : String(e)
-    connectionsRepo.update(connectionId, { lastSyncError: `[initial] ${msg}` })
-  } catch (persistErr) {
-    console.error('[callback] could not persist initial sync error:', persistErr)
   }
 }

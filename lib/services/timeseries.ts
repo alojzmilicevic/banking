@@ -59,6 +59,20 @@ export function daysForPeriod(period: Period, userId: string): number {
   }
 }
 
+// Empty payload for the no-user bootstrap state. Mirrors the live
+// response shape so the FE can render a chart with zero points without
+// special-casing.
+export function getEmptyTimeseries(period: Period): TimeseriesResponse {
+  return {
+    series: [],
+    current: { total: 0, cash: 0, investment: 0, byHolder: {}, shared: 0, unassigned: 0 },
+    currency: null,
+    period,
+    points: 0,
+    errors: [],
+  }
+}
+
 export function getTimeseries(userId: string, period: Period): TimeseriesResponse {
   const today = computeTodaySnapshot(userId)
   const fromIso = fromDateForPeriod(period, new Date(), userId)

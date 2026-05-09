@@ -10,6 +10,7 @@ import { deriveInitials, pickHolderColor } from '@/lib/holders'
 import type { HolderRow } from '@/lib/db/schema'
 import { HolderBodySchema } from '@/lib/api/schemas'
 import { validateJson } from '@/lib/api/validate'
+import { requireUser } from '@/lib/api/route-helpers'
 
 function toListItem(h: HolderRow): HolderListItem {
   return {
@@ -28,20 +29,18 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const user = usersRepo.getDefault()
-  if (!user) {
-    return NextResponse.json({ error: 'No user' }, { status: 400 })
-  }
+  const auth = requireUser()
+  if (auth.response) return auth.response
   const parsed = await validateJson(req, HolderBodySchema)
   if (!parsed.ok) return parsed.response
   const { label, initials: initialsInput, color: colorInput } = parsed.data
-  const existing = holdersRepo.listForUser(user.id)
+  const existing = holdersRepo.listForUser(auth.user.id)
   const initials = initialsInput
     ? initialsInput.toUpperCase().slice(0, 3)
     : deriveInitials(label)
   const color = colorInput ?? pickHolderColor(existing.map((h) => h.color))
   const created = holdersRepo.create({
-    userId: user.id,
+    userId: auth.user.id,
     label,
     color,
     initials,

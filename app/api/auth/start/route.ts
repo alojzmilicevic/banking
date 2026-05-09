@@ -6,6 +6,7 @@ import * as usersRepo from '@/lib/repositories/users'
 import { getProvider } from '@/lib/providers/registry'
 import { StartAuthBodySchema } from '@/lib/api/schemas'
 import { validateJson } from '@/lib/api/validate'
+import { internalServerError } from '@/lib/api/route-helpers'
 
 // POST /api/auth/start
 //   body: { providerId: string; flow?: AuthFlow; holderId?: string; input?: Record<string, unknown> }
@@ -80,6 +81,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json(challenge)
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    return internalServerError(e)
   }
 }
