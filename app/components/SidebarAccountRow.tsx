@@ -7,17 +7,13 @@
 // the parent's PersonMenuPopover.
 
 import Link from 'next/link'
-import { tracksPerformance } from '@/lib/account-types'
 import type { DashboardAccount } from '@/lib/api/dashboard'
+import { accountLabel } from '@/lib/accounts'
 import { fmtMoney, shortProduct } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { holderAvatarBg } from '@/lib/holders'
 import { cn } from '@/lib/utils'
-import { ChangePill } from './ChangePill'
-
-function accountLabel(a: DashboardAccount): string {
-  return a.details || a.product || a.name || a.iban || a.id
-}
+import { AccountChangePill } from './ChangePill'
 
 export function SidebarAccountRow({
   account,
@@ -27,11 +23,6 @@ export function SidebarAccountRow({
   color: string
 }) {
   const visible = !account.excludedFromTotal
-  // Cash accounts get a `change.absolute` from EB tx-based estimation,
-  // but the number is essentially "deposits in − withdrawals out, minus
-  // what we could attribute as deposits" — noise, not performance. Only
-  // surface the pill for accounts whose period change is actually meaningful.
-  const showChange = tracksPerformance(account.accountType)
 
   return (
     <div
@@ -74,9 +65,7 @@ export function SidebarAccountRow({
             {fmtMoney(account.balance, account.balanceCurrency)}
           </span>
         </Sensitive>
-        {showChange && (
-          <ChangePill change={account.change} variant="row" className="mt-0.5" />
-        )}
+        <AccountChangePill account={account} variant="row" className="mt-0.5" />
       </div>
     </div>
   )

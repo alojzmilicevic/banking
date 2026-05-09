@@ -10,6 +10,8 @@
 // — read from context — controls *which* number renders. One bug-fix
 // here propagates to every change pill in the app.
 
+import { tracksPerformance, type AccountType } from '@/lib/account-types'
+import type { DashboardAccount } from '@/lib/api/dashboard'
 import { fmtMoney, fmtMoneyCompact } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { cn } from '@/lib/utils'
@@ -72,6 +74,25 @@ export type PillVariant =
 // "+1 234 567 kr" doesn't blow out the layout.
 const COMPACT_VARIANTS: ReadonlySet<PillVariant> = new Set(['compact', 'row', 'chip-sm'])
 
+// Filled-chip variants color the background; the rest only color the text.
+const CHIP_VARIANTS: ReadonlySet<PillVariant> = new Set(['chip', 'chip-sm'])
+
+const VARIANT_CLASSES: Record<PillVariant, string> = {
+  hero: 'text-14 font-medium',
+  chip: 'rounded-full px-2.5 py-0.75 text-14 font-semibold',
+  'chip-sm': 'inline-block rounded-full px-1.75 py-px text-11 font-medium',
+  card: 'text-12',
+  compact: 'text-11',
+  row: 'text-11 leading-none',
+}
+
+function toneClasses(variant: PillVariant, positive: boolean): string {
+  if (CHIP_VARIANTS.has(variant)) {
+    return positive ? 'bg-pos-bg text-pos' : 'bg-white/6 text-neg'
+  }
+  return positive ? 'text-pos' : 'text-neg'
+}
+
 export function ChangePill({
   change,
   variant,
@@ -91,7 +112,7 @@ export function ChangePill({
   if (!change) {
     if (variant === 'card') {
       return (
-        <span className={cn('text-12 text-pos', className)}>
+        <span className={cn(VARIANT_CLASSES.card, 'text-pos', className)}>
           {`— · ${period ?? ''}`}
         </span>
       )
@@ -100,62 +121,34 @@ export function ChangePill({
   }
 
   const positive = change.absolute >= 0
-  const colorClass = positive ? 'text-pos' : 'text-neg'
   const display = pickDisplay(change, mode)
   const text =
     display === 'pct'
       ? fmtPct(change.pct!, positive)
       : fmtAbs(change.absolute, currency, COMPACT_VARIANTS.has(variant), positive)
 
-  switch (variant) {
-    case 'hero':
-      return (
-        <span className={cn('text-14 font-medium', colorClass, className)}>
-          <Sensitive>{text}</Sensitive>
-        </span>
-      )
-    case 'chip':
-      return (
-        <span
-          className={cn(
-            'rounded-full px-2.5 py-0.75 text-14 font-semibold',
-            positive ? 'bg-pos-bg text-pos' : 'bg-white/6 text-neg',
-            className,
-          )}
-        >
-          <Sensitive>{text}</Sensitive>
-        </span>
-      )
-    case 'chip-sm':
-      return (
-        <span
-          className={cn(
-            'inline-block rounded-full px-1.75 py-px text-11 font-medium',
-            positive ? 'bg-pos-bg text-pos' : 'bg-white/6 text-neg',
-            className,
-          )}
-        >
-          <Sensitive>{text}</Sensitive>
-        </span>
-      )
-    case 'card':
-      return (
-        <span className={cn('text-12', colorClass, className)}>
-          <Sensitive>{text}</Sensitive>
-          {` · ${period ?? ''}`}
-        </span>
-      )
-    case 'compact':
-      return (
-        <span className={cn('text-11', colorClass, className)}>
-          <Sensitive>{text}</Sensitive>
-        </span>
-      )
-    case 'row':
-      return (
-        <span className={cn('text-11 leading-none', colorClass, className)}>
-          <Sensitive>{text}</Sensitive>
-        </span>
-      )
-  }
+  return (
+    <span className={cn(VARIANT_CLASSES[variant], toneClasses(variant, positive), className)}>
+      <Sensitive>{text}</Sensitive>
+      {variant === 'card' && ` · ${period ?? ''}`}
+    </span>
+  )
+}
+
+// Account-row gate. Cash accounts get a `change.absolute` derived from
+// EB transaction flow, but the number is "deposits − withdrawals" noise,
+// not performance — so the sidebar/mobile rows only render the pill for
+// accounts whose accountType is in tracksPerformance(). Centralised here
+// so the gate isn't reimplemented at every callsite.
+export function AccountChangePill({
+  account,
+  variant,
+  className,
+}: {
+  account: Pick<DashboardAccount, 'change' | 'accountType'> & { accountType: AccountType | null | undefined }
+  variant: PillVariant
+  className?: string
+}) {
+  if (!tracksPerformance(account.accountType)) return null
+  return <ChangePill change={account.change} variant={variant} className={className} />
 }

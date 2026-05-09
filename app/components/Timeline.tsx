@@ -78,20 +78,23 @@ export function Timeline({
   }
 
   // Push the snapshot upward whenever the relevant inputs change. The
-  // byHolder map is rebuilt every render (new ref), so we dep on its
-  // JSON signature and rehydrate inside the effect — keeps the effect
-  // body free of references that exhaustive-deps would flag, and avoids
-  // ref-mutation-during-render that the React Compiler skips.
+  // byHolder map is rebuilt every render (new ref), so depending on it
+  // directly would refire the effect every render. Build a primitive
+  // key from the values in stable (server-ordered) order, and pull the
+  // live map through a ref that's updated post-commit (refs assigned
+  // during render confuse the React Compiler).
   const onSnapshotChangeRef = useRef(onSnapshotChange)
+  const byHolderRef = useRef(byHolder)
   useEffect(() => {
     onSnapshotChangeRef.current = onSnapshotChange
-  }, [onSnapshotChange])
-  const byHolderKey = JSON.stringify(byHolder)
+    byHolderRef.current = byHolder
+  })
+  const byHolderKey = holders.map((h) => byHolder[h.id] ?? '').join('|')
   useEffect(() => {
     onSnapshotChangeRef.current?.({
       total,
       shared,
-      byHolder: JSON.parse(byHolderKey) as Record<string, number | null>,
+      byHolder: { ...byHolderRef.current },
       currency,
     })
   }, [total, shared, currency, byHolderKey])

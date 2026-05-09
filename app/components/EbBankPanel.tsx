@@ -6,6 +6,7 @@ import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { useInstitutions, useStartEbAuth, type ASPSP } from '@/lib/queries'
+import { cn } from '@/lib/utils'
 
 function key(a: ASPSP) {
   return `${a.name}||${a.country}`
@@ -76,11 +77,12 @@ export function EbBankPanel({ holderId }: { holderId: string }) {
                 key={key(a)}
                 type="button"
                 onClick={() => setSelected(key(a))}
-                className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                className={cn(
+                  'rounded-lg border px-3 py-2 text-left text-sm transition-colors',
                   selected === key(a)
                     ? 'border-primary/60 bg-primary/10'
-                    : 'border-border bg-card hover:border-input-border'
-                }`}
+                    : 'border-border bg-card hover:border-input-border',
+                )}
               >
                 {a.name}
               </button>

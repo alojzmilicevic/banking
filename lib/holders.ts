@@ -41,6 +41,18 @@ export const SHARED_META: HolderMeta = {
 // Holder rows arrive with a single `color` (oklch). We derive bg/border
 // at render time so the API contract stays minimal — adding a holder
 // means setting one color, not three.
+//
+// The four densities are tuned for distinct contexts and shouldn't be
+// swapped:
+//   - holderBg (0.14): section card / summary card backgrounds (large
+//     surface against the dark sidebar; alpha stacks visibly with
+//     children that reuse the same colour).
+//   - holderBorder (0.30): outline of those cards.
+//   - holderTint (0.25): mid-density accent (currently unused but kept
+//     for hover states / chips that need more punch than holderBg).
+//   - holderAvatarBg (0.20): small product-code avatar in
+//     SidebarAccountRow. Sits inside `bg-white/3` rows (no holder tint
+//     in the parent), so it needs more density than holderBg to read.
 export function holderBg(color: string): string {
   return color.replace(/\)$/, ' / 0.14)')
 }

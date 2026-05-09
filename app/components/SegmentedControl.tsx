@@ -5,6 +5,7 @@
 
 import { motion } from 'motion/react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 export type SegmentedControlItem<T extends string> = {
   id: T
@@ -80,9 +81,10 @@ export function SegmentedControl<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(item.id)}
-            className={`relative cursor-pointer rounded-7 px-3.25 py-1.25 text-xs font-medium transition-colors ${
-              active ? 'text-foreground' : 'text-text-faint hover:text-foreground'
-            }`}
+            className={cn(
+              'relative cursor-pointer rounded-7 px-3.25 py-1.25 text-xs font-medium transition-colors',
+              active ? 'text-foreground' : 'text-text-faint hover:text-foreground',
+            )}
           >
             {item.label}
           </button>

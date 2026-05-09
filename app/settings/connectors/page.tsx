@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { ArrowLeft, Building2, Link2, Link2Off, Loader2, Plus, RefreshCw, TrendingUp } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { IconButton } from '@/components/ui/icon-button'
@@ -61,7 +61,7 @@ type AddView =
 
 export default function ConnectorsPage() {
   const dashboard = useDashboard('1Y')
-  const slots = useMemo(() => buildHolderSlots(dashboard.data), [dashboard.data])
+  const slots = buildHolderSlots(dashboard.data)
   const [add, setAdd] = useState<AddView>({ kind: 'closed' })
   const [syncingId, setSyncingId] = useState<string | null>(null)
   const [ebError, setEbError] = useState<string | null>(null)

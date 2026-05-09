@@ -9,24 +9,20 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { Eye, EyeOff, Loader2, Plus, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
+import { Loader2, Plus, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { IconButton } from '@/components/ui/icon-button'
-import { tracksPerformance } from '@/lib/account-types'
-import { fmtMoney, fmtMoneyCompact, shortProduct } from '@/lib/format'
+import { fmtMoney, fmtMoneyCompact } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { COMBINED_META, SHARED_META } from '@/lib/holders'
 import { cn } from '@/lib/utils'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
 import { ChangePill } from './ChangePill'
 import { ChangeModeToggle, type ChangeMode } from './ChangeModeToggle'
+import { MobileAccountRow } from './MobileAccountRow'
 import { PeriodTabs, type Period } from './PeriodTabs'
 import type { ViewSelection } from './Sidebar'
 import { Timeline, type TimelineSnapshot } from './Timeline'
-
-function accountLabel(a: DashboardAccount): string {
-  return a.details || a.product || a.name || a.iban || a.id
-}
 
 function bucketColor(a: DashboardAccount, holderColorById: Map<string, string>): string {
   switch (a.bucket.kind) {
@@ -326,63 +322,3 @@ export function MobileLayout({
   )
 }
 
-function MobileAccountRow({
-  account,
-  connectionLabel,
-  color,
-  onToggleVisibility,
-}: {
-  account: DashboardAccount
-  connectionLabel: string
-  color: string
-  onToggleVisibility: () => void
-}) {
-  const visible = !account.excludedFromTotal
-  // Same gate as SidebarAccountRow — cash accounts have noisy
-  // tx-derived change numbers; only investment accounts surface a pill.
-  const showChange = tracksPerformance(account.accountType)
-  const Icon = visible ? Eye : EyeOff
-
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-3 border-b border-border-subtle px-5 py-3.25 transition-opacity',
-        !visible && 'opacity-40',
-      )}
-    >
-      <div
-        style={{ '--stripe': color } as React.CSSProperties}
-        className={cn('h-8 w-0.75 shrink-0 rounded-2 bg-(--stripe)', !visible && 'opacity-40')}
-        aria-hidden
-      />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-14 font-medium leading-[1.2] text-foreground">
-          <Link href={`/account/${account.id}`} className="text-foreground hover:underline">
-            {accountLabel(account)}
-          </Link>
-        </div>
-        <div className="mt-0.5 truncate text-12 text-text-faint">
-          {[shortProduct(account.accountType) ?? shortProduct(account.product), connectionLabel]
-            .filter(Boolean)
-            .join(' · ')}
-        </div>
-      </div>
-      <div className="shrink-0 whitespace-nowrap text-right">
-        <div className="font-mono text-14 font-normal tracking-tight text-foreground tabular-nums">
-          <Sensitive>{fmtMoney(account.balance, account.balanceCurrency)}</Sensitive>
-        </div>
-        {showChange && (
-          <ChangePill change={account.change} variant="chip-sm" className="mt-0.75" />
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={onToggleVisibility}
-        aria-label={visible ? 'Hide account' : 'Show account'}
-        className="flex size-7 shrink-0 items-center justify-center rounded-6 text-text-faint"
-      >
-        <Icon className="size-3.75" />
-      </button>
-    </div>
-  )
-}

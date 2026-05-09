@@ -11,6 +11,7 @@ import { Loader2, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { useResizableSidebar } from '@/hooks/use-resizable-sidebar'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
+import { cn } from '@/lib/utils'
 import { PersonSection } from './PersonSection'
 import { SharedSection } from './SharedSection'
 import {
@@ -101,7 +102,7 @@ export function Sidebar({
       ))}
 
       <SharedSection
-        accounts={dashboard.shared.accounts}
+        bucket={dashboard.shared}
         onToggleAll={onToggleAllShared}
         onToggleAccount={onToggleAccount}
       />
@@ -120,9 +121,10 @@ export function Sidebar({
         className="group/resize absolute inset-y-0 right-0 z-20 flex w-1.5 -translate-x-0.5 cursor-col-resize touch-none items-center justify-center"
       >
         <span
-          className={`h-full w-0.5 transition-colors ${
-            isResizing ? 'bg-primary' : 'bg-transparent group-hover/resize:bg-primary/40'
-          }`}
+          className={cn(
+            'h-full w-0.5 transition-colors',
+            isResizing ? 'bg-primary' : 'bg-transparent group-hover/resize:bg-primary/40',
+          )}
           aria-hidden
         />
       </div>

@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import { Settings as SettingsIcon } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import { ChartShape, PeriodTabsShape } from './skeleton-shapes'
 
 export function MobileDashboardSkeleton() {
@@ -70,7 +71,7 @@ export function MobileDashboardSkeleton() {
           {[0, 1].map((i) => (
             <div
               key={i}
-              className={`flex-1 px-4 py-3 ${i < 1 ? 'border-r border-border-subtle' : ''}`}
+              className={cn('flex-1 px-4 py-3', i < 1 && 'border-r border-border-subtle')}
             >
               <div className="mb-1.5 flex items-center gap-1.5">
                 <Skeleton className="size-1.5 rounded-full" />

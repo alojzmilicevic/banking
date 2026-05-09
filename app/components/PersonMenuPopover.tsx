@@ -1,18 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import type { DashboardAccount, DashboardAccountConnection } from '@/lib/api/dashboard'
+import { accountLabel } from '@/lib/accounts'
 import { fmtMoney } from '@/lib/format'
 import { Sensitive } from '@/components/sensitive-data'
 import { MenuPopover } from '@/components/ui/menu-popover'
 import { cn } from '@/lib/utils'
 import { BankIcon } from './BankIcon'
-
-function accountLabel(a: DashboardAccount): string {
-  return a.details || a.product || a.name || a.iban || a.id
-}
 
 function connectionLabel(c: DashboardAccountConnection): string {
   return c.label ?? c.providerId
@@ -78,13 +74,17 @@ function ConnectionTile({ group, onClose }: { group: ConnectionGroup; onClose: (
 }
 
 function ToggleAllRow({ allHidden, onClick }: { allHidden: boolean; onClick: () => void }) {
+  // Icon mirrors current state (matches AccountToggleRow + the rest of
+  // the app): EyeOff = currently hidden, Eye = currently visible. The
+  // label still describes the action.
+  const Icon = allHidden ? EyeOff : Eye
   return (
     <button
       type="button"
       onClick={onClick}
       className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
     >
-      {allHidden ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+      <Icon className="size-3.5" />
       {allHidden ? 'Show all in totals' : 'Hide all from totals'}
     </button>
   )
@@ -142,7 +142,7 @@ export function PersonMenuPopover({
   onToggleAll: () => void
   onToggleAccount: (a: DashboardAccount) => void
 }) {
-  const groups = useMemo(() => groupByConnection(accounts), [accounts])
+  const groups = groupByConnection(accounts)
   const hasAccounts = accounts.length > 0
 
   return (
