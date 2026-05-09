@@ -3,12 +3,14 @@
 import { Loader2 } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   useAvanzaConnectFlow,
   type AvanzaPhase,
 } from '@/hooks/use-avanza-connect-flow'
 import { syncStageLabel } from '@/hooks/use-sync-progress-label'
 import type { SyncProgressUpdate } from '@/lib/queries'
+import { cn } from '@/lib/utils'
 
 export function AvanzaPanel({
   holderId,
@@ -35,6 +37,8 @@ export function AvanzaPanel({
     closeAfterSyncError,
   } = flow
 
+  const errorMessage = errorMessageFor(phase)
+
   return (
     <div className="flex flex-col gap-3">
       <div className="rounded-lg border border-border bg-secondary/30 p-3 text-xs text-muted-foreground">
@@ -46,47 +50,40 @@ export function AvanzaPanel({
       <PhaseIndicator phase={phase} progress={progress} />
 
       <Field label="Username">
-        <input
+        <Input
           type="text"
           autoComplete="username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           disabled={!editable}
-          placeholder="alomi136"
-          className="w-full rounded-md border border-input-border bg-input px-2.5 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50"
+          placeholder="Username"
         />
       </Field>
 
       <Field label="Password">
-        <input
+        <Input
           type="password"
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           disabled={!editable}
-          className="w-full rounded-md border border-input-border bg-input px-2.5 py-2 text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50"
+          placeholder="Password"
         />
       </Field>
 
       <Field label="TOTP seed (base32)">
-        <input
+        <Input
           type="password"
           autoComplete="off"
           value={totpSeed}
           onChange={(e) => setTotpSeed(e.target.value)}
           disabled={!editable}
-          placeholder="MXF42B22ORYSEEONOZDCWEMOXVZ24AUQ"
-          className="w-full rounded-md border border-input-border bg-input px-2.5 py-2 font-mono text-xs text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50"
+          placeholder="TOTP seed"
+          className="font-mono"
         />
       </Field>
 
-      {(phase.kind === 'auth-error' || phase.kind === 'sync-error') && (
-        <Alert>
-          {phase.kind === 'auth-error'
-            ? phase.message
-            : `Connected, but initial sync failed: ${phase.message}. Click Retry sync, or close — the connection will sync next time.`}
-        </Alert>
-      )}
+      {errorMessage && <Alert>{errorMessage}</Alert>}
 
       <div className="flex gap-2">
         <Button
@@ -107,9 +104,16 @@ export function AvanzaPanel({
   )
 }
 
-// Two-step indicator with a sub-line that surfaces the live progress
-// stage during sync. The dot states are: pending (muted), active
-// (pulsing), done (green check), error (red).
+function errorMessageFor(phase: AvanzaPhase): string | null {
+  if (phase.kind === 'auth-error') return phase.message
+  if (phase.kind === 'sync-error') {
+    return `Connected, but initial sync failed: ${phase.message}. Click Retry sync, or close — the connection will sync next time.`
+  }
+  return null
+}
+
+type PhaseDotState = 'pending' | 'active' | 'done' | 'error'
+
 function PhaseIndicator({
   phase,
   progress,
@@ -119,27 +123,27 @@ function PhaseIndicator({
 }) {
   if (phase.kind === 'idle' || phase.kind === 'auth-error') return null
 
-  const authState =
-    phase.kind === 'authenticating'
-      ? 'active'
-      : phase.kind === 'syncing' || phase.kind === 'sync-error'
-        ? 'done'
-        : 'pending'
-  const syncState =
-    phase.kind === 'syncing'
-      ? 'active'
-      : phase.kind === 'sync-error'
-        ? 'error'
-        : 'pending'
-
-  const subtitle =
-    phase.kind === 'authenticating'
-      ? 'Verifying password + TOTP code with Avanza'
-      : phase.kind === 'syncing'
-        ? syncStageLabel(progress)
-        : phase.kind === 'sync-error'
-          ? 'Sync failed — credentials are saved, retry below'
-          : null
+  const view: Record<
+    'authenticating' | 'syncing' | 'sync-error',
+    { auth: PhaseDotState; sync: PhaseDotState; subtitle: string | null }
+  > = {
+    authenticating: {
+      auth: 'active',
+      sync: 'pending',
+      subtitle: 'Verifying password + TOTP code with Avanza',
+    },
+    syncing: {
+      auth: 'done',
+      sync: 'active',
+      subtitle: syncStageLabel(progress),
+    },
+    'sync-error': {
+      auth: 'done',
+      sync: 'error',
+      subtitle: 'Sync failed — credentials are saved, retry below',
+    },
+  }
+  const { auth: authState, sync: syncState, subtitle } = view[phase.kind]
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border bg-secondary/20 p-3 text-11">
@@ -153,29 +157,19 @@ function PhaseIndicator({
   )
 }
 
-function PhaseDot({
-  label,
-  state,
-}: {
-  label: string
-  state: 'pending' | 'active' | 'done' | 'error'
-}) {
-  const dotClass = {
-    pending: 'bg-text-faint/30',
-    active: 'bg-foreground animate-pulse',
-    done: 'bg-pos',
-    error: 'bg-neg',
-  }[state]
-  const textClass = {
-    pending: 'text-text-faint',
-    active: 'text-foreground font-medium',
-    done: 'text-pos',
-    error: 'text-neg font-medium',
-  }[state]
+const phaseDotStyles: Record<PhaseDotState, { dot: string; text: string }> = {
+  pending: { dot: 'bg-text-faint/30', text: 'text-text-faint' },
+  active: { dot: 'bg-foreground animate-pulse', text: 'text-foreground font-medium' },
+  done: { dot: 'bg-pos', text: 'text-pos' },
+  error: { dot: 'bg-neg', text: 'text-neg font-medium' },
+}
+
+function PhaseDot({ label, state }: { label: string; state: PhaseDotState }) {
+  const { dot, text } = phaseDotStyles[state]
   return (
     <div className="flex items-center gap-1.5">
-      <span className={`size-1.5 rounded-full ${dotClass}`} />
-      <span className={`uppercase tracking-6 ${textClass}`}>{label}</span>
+      <span className={cn('size-1.5 rounded-full', dot)} />
+      <span className={cn('uppercase tracking-6', text)}>{label}</span>
     </div>
   )
 }

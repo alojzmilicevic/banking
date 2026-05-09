@@ -210,13 +210,15 @@ function ConnectorRow({
   const label = connection.label ?? connection.providerId
   const broken =
     connection.status === 'expired' || !!connection.lastSyncError
-  const subline = broken
-    ? connection.status === 'expired'
-      ? 'Auth expired — reconnect to refresh'
-      : `Last sync failed: ${connection.lastSyncError ?? 'unknown error'}`
-    : connection.lastSyncedAt
-      ? `${accountCount} account${accountCount === 1 ? '' : 's'} · synced ${fmtRelative(connection.lastSyncedAt)}`
-      : `${accountCount} account${accountCount === 1 ? '' : 's'} · never synced`
+  const subline = buildSubline()
+
+  function buildSubline() {
+    if (broken && connection.status === 'expired') return 'Auth expired — reconnect to refresh'
+    if (broken) return `Last sync failed: ${connection.lastSyncError ?? 'unknown error'}`
+    const accountsLabel = `${accountCount} account${accountCount === 1 ? '' : 's'}`
+    if (connection.lastSyncedAt) return `${accountsLabel} · synced ${fmtRelative(connection.lastSyncedAt)}`
+    return `${accountsLabel} · never synced`
+  }
 
   return (
     <div className="flex items-center gap-3 border-b border-border-subtle py-3 last:border-b-0">

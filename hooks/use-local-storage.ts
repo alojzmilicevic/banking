@@ -20,12 +20,7 @@ function useStorage<T>(
   key: string,
   initialValue: T,
 ) {
-  const storage =
-    typeof window !== 'undefined'
-      ? type === 'local'
-        ? window.localStorage
-        : window.sessionStorage
-      : undefined
+  const storage = getStorage(type)
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
@@ -116,5 +111,10 @@ function isSetValueCallback<T>(
   thing: T | ((previousValue: T) => T),
 ): thing is (previousValue: T) => T {
   return typeof thing === 'function'
+}
+
+function getStorage(type: 'local' | 'session') {
+  if (typeof window === 'undefined') return undefined
+  return type === 'local' ? window.localStorage : window.sessionStorage
 }
 

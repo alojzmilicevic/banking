@@ -156,102 +156,7 @@ export function Timeline({
       </div>
 
       <div className="min-h-0 flex-1">
-        {isLoading && series.length === 0 ? (
-          <ChartShape />
-        ) : series.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            No history yet — connect a bank to see the chart.
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 10, right: 12, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id="combined-fill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={COMBINED_COLOR} stopOpacity={0.18} />
-                  <stop offset="100%" stopColor={COMBINED_COLOR} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="2 4" vertical={false} />
-              <XAxis
-                dataKey="date"
-                stroke="rgba(255,255,255,0.3)"
-                tick={{ fontSize: 11 }}
-                tickFormatter={tickFormatter}
-                minTickGap={40}
-                tickLine={false}
-                axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
-              />
-              <YAxis
-                stroke="rgba(255,255,255,0.3)"
-                tick={{ fontSize: 11 }}
-                tickFormatter={fmtMoneyCompact}
-                width={50}
-                domain={['auto', 'auto']}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip
-                cursor={{ stroke: 'rgba(255,255,255,0.15)', strokeWidth: 1 }}
-                contentStyle={{
-                  background: 'var(--color-elevated)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 10,
-                  fontSize: 12,
-                  padding: '8px 12px',
-                }}
-                labelStyle={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}
-                formatter={(v: number, name: string) => [
-                  fmtMoney(v, currency, { decimals: 2 }),
-                  name,
-                ]}
-                labelFormatter={(l: string) => l}
-              />
-
-              {showCombined && (
-                <Area
-                  type="monotone"
-                  dataKey="total"
-                  name="Combined"
-                  stroke={COMBINED_COLOR}
-                  strokeWidth={2}
-                  fill="url(#combined-fill)"
-                  activeDot={{ r: 4, fill: COMBINED_COLOR, strokeWidth: 0 }}
-                  isAnimationActive
-                  animationDuration={600}
-                />
-              )}
-              {holders
-                .filter((h) => visibleHolderIds.includes(h.id))
-                .map((h) => (
-                  <Line
-                    key={h.id}
-                    type="monotone"
-                    dataKey={h.id}
-                    name={h.label}
-                    stroke={h.color}
-                    strokeWidth={1.5}
-                    dot={false}
-                    activeDot={{ r: 3, fill: h.color, strokeWidth: 0 }}
-                    isAnimationActive
-                    animationDuration={600}
-                  />
-                ))}
-              {showShared && (
-                <Line
-                  type="monotone"
-                  dataKey="shared"
-                  name={SHARED_META.label}
-                  stroke={SHARED_META.color}
-                  strokeWidth={1.5}
-                  dot={false}
-                  activeDot={{ r: 3, fill: SHARED_META.color, strokeWidth: 0 }}
-                  isAnimationActive
-                  animationDuration={600}
-                />
-              )}
-            </ComposedChart>
-          </ResponsiveContainer>
-        )}
+        {renderChart()}
       </div>
 
       {data?.errors?.length ? (
@@ -261,6 +166,107 @@ export function Timeline({
       ) : null}
     </div>
   )
+
+  function renderChart() {
+    if (series.length === 0 && isLoading) return <ChartShape />
+    if (series.length === 0) {
+      return (
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          No history yet — connect a bank to see the chart.
+        </div>
+      )
+    }
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={chartData} margin={{ top: 10, right: 12, bottom: 0, left: 0 }}>
+          <defs>
+            <linearGradient id="combined-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={COMBINED_COLOR} stopOpacity={0.18} />
+              <stop offset="100%" stopColor={COMBINED_COLOR} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="2 4" vertical={false} />
+          <XAxis
+            dataKey="date"
+            stroke="rgba(255,255,255,0.3)"
+            tick={{ fontSize: 11 }}
+            tickFormatter={tickFormatter}
+            minTickGap={40}
+            tickLine={false}
+            axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+          />
+          <YAxis
+            stroke="rgba(255,255,255,0.3)"
+            tick={{ fontSize: 11 }}
+            tickFormatter={fmtMoneyCompact}
+            width={50}
+            domain={['auto', 'auto']}
+            tickLine={false}
+            axisLine={false}
+          />
+          <Tooltip
+            cursor={{ stroke: 'rgba(255,255,255,0.15)', strokeWidth: 1 }}
+            contentStyle={{
+              background: 'var(--color-elevated)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 10,
+              fontSize: 12,
+              padding: '8px 12px',
+            }}
+            labelStyle={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+            formatter={(v: number, name: string) => [
+              fmtMoney(v, currency, { decimals: 2 }),
+              name,
+            ]}
+            labelFormatter={(l: string) => l}
+          />
+
+          {showCombined && (
+            <Area
+              type="monotone"
+              dataKey="total"
+              name="Combined"
+              stroke={COMBINED_COLOR}
+              strokeWidth={2}
+              fill="url(#combined-fill)"
+              activeDot={{ r: 4, fill: COMBINED_COLOR, strokeWidth: 0 }}
+              isAnimationActive
+              animationDuration={600}
+            />
+          )}
+          {holders
+            .filter((h) => visibleHolderIds.includes(h.id))
+            .map((h) => (
+              <Line
+                key={h.id}
+                type="monotone"
+                dataKey={h.id}
+                name={h.label}
+                stroke={h.color}
+                strokeWidth={1.5}
+                dot={false}
+                activeDot={{ r: 3, fill: h.color, strokeWidth: 0 }}
+                isAnimationActive
+                animationDuration={600}
+              />
+            ))}
+          {showShared && (
+            <Line
+              type="monotone"
+              dataKey="shared"
+              name={SHARED_META.label}
+              stroke={SHARED_META.color}
+              strokeWidth={1.5}
+              dot={false}
+              activeDot={{ r: 3, fill: SHARED_META.color, strokeWidth: 0 }}
+              isAnimationActive
+              animationDuration={600}
+            />
+          )}
+        </ComposedChart>
+      </ResponsiveContainer>
+    )
+  }
 }
 
 function LegendItem({

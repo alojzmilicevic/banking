@@ -13,10 +13,14 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
+function signClass(amount: number) {
+  if (amount === 0) return ''
+  return amount > 0 ? 'text-pos' : 'text-neg'
+}
+
 function Amount({ amount, currency }: { amount: number; currency: string }) {
-  const cls = amount < 0 ? 'text-neg' : amount > 0 ? 'text-pos' : ''
   return (
-    <span className={cls}>
+    <span className={signClass(amount)}>
       <Sensitive>{fmtMoney(amount, currency, { decimals: 2 })}</Sensitive>
     </span>
   )

@@ -89,28 +89,36 @@ export function MobileLayout({
   ]
   const holderColorById = new Map(dashboard.holders.map((h) => [h.id, h.color]))
 
-  // Account list filtered by active tab.
-  const visibleItems: DashboardAccount[] =
-    view === 'all'
-      ? [
+  // Account list + topbar values for the active tab. Total tracks the
+  // chart's latest point (snap); change comes from the dashboard's
+  // deposit-adjusted bucket math.
+  const { visibleItems, total, change } = pickViewSlice()
+
+  function pickViewSlice() {
+    if (view === 'all') {
+      return {
+        visibleItems: [
           ...dashboard.holders.flatMap((h) => h.accounts),
           ...dashboard.shared.accounts.filter((a) => !a.possibleDuplicateOf),
-        ]
-      : view === 'shared'
-        ? dashboard.shared.accounts.filter((a) => !a.possibleDuplicateOf)
-        : (dashboard.holders.find((h) => h.id === view)?.accounts ?? [])
-
-  // Topbar values: pick the slice that matches the current view. Total
-  // tracks the chart's latest point (snap); change comes from the
-  // dashboard's deposit-adjusted bucket math.
-  const total =
-    view === 'all' ? snap.total : view === 'shared' ? snap.shared : (snap.byHolder[view] ?? null)
-  const change =
-    view === 'all'
-      ? dashboard.totals.change
-      : view === 'shared'
-        ? dashboard.shared.change
-        : dashboard.holders.find((h) => h.id === view)?.change ?? null
+        ],
+        total: snap.total,
+        change: dashboard.totals.change,
+      }
+    }
+    if (view === 'shared') {
+      return {
+        visibleItems: dashboard.shared.accounts.filter((a) => !a.possibleDuplicateOf),
+        total: snap.shared,
+        change: dashboard.shared.change,
+      }
+    }
+    const holder = dashboard.holders.find((h) => h.id === view)
+    return {
+      visibleItems: holder?.accounts ?? [],
+      total: snap.byHolder[view] ?? null,
+      change: holder?.change ?? null,
+    }
+  }
   const currency = snap.currency ?? dashboard.baseCurrency
 
   // Sub-totals row (only for the "All" view) — one chip per holder + Shared.

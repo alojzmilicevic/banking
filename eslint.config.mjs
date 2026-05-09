@@ -80,6 +80,7 @@ const config = tseslint.config(
       eqeqeq: ['error', 'always', { null: 'ignore' }],
       'no-console': ['error', { allow: ['warn', 'error', 'info'] }],
       'no-constant-binary-expression': 'error',
+      'no-nested-ternary': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
         {

@@ -99,24 +99,30 @@ export function HomeContent({
   // displayed total tracks the chart's latest point (via snap) so the
   // topbar number stays anchored to the chart, but change comes from
   // the dashboard's deposit-adjusted bucket math (single source of truth).
-  const topbarTotal =
-    view === 'all'
-      ? snap.total
-      : view === 'shared'
-        ? snap.shared
-        : snap.byHolder[view] ?? null
-  const topbarChange =
-    view === 'all'
-      ? data?.totals.change ?? null
-      : view === 'shared'
-        ? data?.shared.change ?? null
-        : data?.holders.find((h) => h.id === view)?.change ?? null
-  const topbarLabel =
-    view === 'all'
-      ? 'All Accounts'
-      : view === 'shared'
-        ? 'Shared'
-        : data?.holders.find((h) => h.id === view)?.label ?? 'Total balance'
+  const { topbarTotal, topbarChange, topbarLabel } = pickTopbarSlice()
+
+  function pickTopbarSlice() {
+    if (view === 'all') {
+      return {
+        topbarTotal: snap.total,
+        topbarChange: data?.totals.change ?? null,
+        topbarLabel: 'All Accounts',
+      }
+    }
+    if (view === 'shared') {
+      return {
+        topbarTotal: snap.shared,
+        topbarChange: data?.shared.change ?? null,
+        topbarLabel: 'Shared',
+      }
+    }
+    const holder = data?.holders.find((h) => h.id === view)
+    return {
+      topbarTotal: snap.byHolder[view] ?? null,
+      topbarChange: holder?.change ?? null,
+      topbarLabel: holder?.label ?? 'Total balance',
+    }
+  }
 
   const summaryRows = data
     ? buildSummaryRows({
