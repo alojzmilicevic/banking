@@ -111,6 +111,27 @@ export function useAddHolder() {
   })
 }
 
+// Patch one holder. Today only color is mutable from the UI; expand the
+// input shape if rename/initials land here later. The dashboard cache
+// owns the rendered color, so we invalidate it (alongside qk.holders)
+// to flip the four tinted elements (card bg/border, header avatar,
+// per-account product badge).
+export function useUpdateHolder() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string; color?: string }) =>
+      fetchJson<HolderListItem>(`/api/holders/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.holders })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
 export function useTimeseries(period: string) {
   return useQuery({
     queryKey: qk.timeseries(period),

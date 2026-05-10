@@ -2,6 +2,7 @@
 // handlers thin and makes it easy to share types between client + server.
 
 import { z } from 'zod'
+import { isHolderPaletteColor } from '@/lib/holders'
 
 const AuthFlowSchema = z.enum(['redirect', 'bankid', 'credentials', 'apikey'])
 
@@ -49,6 +50,16 @@ export const HolderBodySchema = z.object({
   label: z.string().trim().min(1, 'Label required').max(100),
   initials: z.string().trim().min(1).max(3).optional(),
   color: z.string().trim().min(1).max(32).optional(),
+})
+
+// PATCH only allows fields the user can edit from the UI. Color is
+// whitelisted against the preset palette so a stray request can't store
+// an arbitrary OKLCH string and break the four derived tints.
+export const PatchHolderBodySchema = z.object({
+  color: z
+    .string()
+    .refine(isHolderPaletteColor, 'color must be one of the preset palette values')
+    .optional(),
 })
 
 export const SyncQuerySchema = z.object({

@@ -94,6 +94,27 @@ export function create(
   return executor === db ? db.transaction(writeAll) : writeAll(executor)
 }
 
+// Partial update for fields the user can edit (currently just color).
+// Returns the updated row, or null if no holder with that id exists for
+// the given user. The userId scope is enforced here so route handlers
+// can't accidentally let one household edit another's holders.
+export function update(
+  id: string,
+  userId: string,
+  patch: { color?: string },
+  executor: Executor = db,
+): HolderRow | null {
+  const existing = executor
+    .select()
+    .from(holders)
+    .where(eq(holders.id, id))
+    .get()
+  if (!existing || existing.userId !== userId) return null
+  if (Object.keys(patch).length === 0) return existing
+  executor.update(holders).set(patch).where(eq(holders.id, id)).run()
+  return { ...existing, ...patch }
+}
+
 export function setForConnection(
   connectionId: string,
   holderIds: string[],

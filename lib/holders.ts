@@ -68,9 +68,13 @@ export function holderAvatarBg(color: string): string {
 
 // Default palette for newly-added holders. Hues picked to be visually
 // distinct from each other and from SHARED_META (350). Cycles back to
-// the start when exhausted; collisions are tolerated since Settings
-// lets the user re-pick if needed (future feature).
-const HOLDER_PALETTE = [
+// the start when exhausted; collisions are tolerated since users can
+// re-pick from the same list via the per-holder color switcher.
+//
+// Lightness/chroma sit in a tight band (L 65–80, C 0.14–0.18) so the
+// four alpha tints derived in holderBg/Border/Tint/AvatarBg stay
+// balanced. Don't stray outside that band when adding entries.
+export const HOLDER_PALETTE = [
   'oklch(65% 0.18 265)', // blue (default first)
   'oklch(70% 0.16 30)', // orange
   'oklch(70% 0.16 145)', // green
@@ -78,6 +82,12 @@ const HOLDER_PALETTE = [
   'oklch(80% 0.14 80)', // amber
   'oklch(70% 0.15 320)', // magenta
 ] as const
+
+export type HolderPaletteColor = (typeof HOLDER_PALETTE)[number]
+
+export function isHolderPaletteColor(color: string): color is HolderPaletteColor {
+  return (HOLDER_PALETTE as readonly string[]).includes(color)
+}
 
 // Pick a palette colour not already used by any of the holders passed
 // in. Falls back to cycling through the palette if all six are taken.

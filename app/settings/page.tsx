@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useLocalStorage } from '@/hooks/use-local-storage'
 import { HolderAvatar } from '@/app/components/HolderAvatar'
+import { HolderColorPicker } from '@/app/components/HolderColorPicker'
 import { cn } from '@/lib/utils'
 import { SettingsRow, SettingsSection } from './SettingsSection'
 
@@ -45,7 +46,10 @@ export default function GeneralPage() {
       <SettingsSection title="Household">
         {holders.data?.map((h) => (
           <SettingsRow key={h.id} label={h.label}>
-            <HolderAvatar color={h.color}>{h.initials}</HolderAvatar>
+            <div className="flex items-center gap-3">
+              <HolderColorPicker holderId={h.id} currentColor={h.color} />
+              <HolderAvatar color={h.color}>{h.initials}</HolderAvatar>
+            </div>
           </SettingsRow>
         ))}
         {holders.isLoading && (
