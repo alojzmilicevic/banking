@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { setupTestDb, teardownTestDb } from '../../tests/helpers/test-db'
 import {
+  accountDailySnapshots,
   accountValueHistory,
   accounts,
   balances,
   connectionHolders,
   connections,
-  dailySnapshots,
   holders,
   positions,
   transactions,
@@ -25,7 +25,7 @@ afterAll(() => {
 })
 
 beforeEach(() => {
-  testDb.delete(dailySnapshots).run()
+  testDb.delete(accountDailySnapshots).run()
   testDb.delete(accountValueHistory).run()
   testDb.delete(transactions).run()
   testDb.delete(positions).run()

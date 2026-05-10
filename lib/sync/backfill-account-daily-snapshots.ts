@@ -1,11 +1,9 @@
-// One-shot post-migration backfill.
+// First-run backfill for `account_daily_snapshots`.
 //
-// The chart's read path now reads `account_daily_snapshots`, which is
-// empty for any user whose data was last computed against the legacy
-// `daily_snapshots` table. Calling `rebuildSnapshotsForUser` once per
-// affected user populates the new table from current account state.
-// After the next regular sync this becomes a no-op and the daily_snapshots
-// table can be dropped in a follow-up migration.
+// Any user with accounts but no rows in the table gets a one-shot
+// rebuild from current account state. Covers fresh DBs and edge cases
+// where rows were cleared manually; after the next regular sync this
+// becomes a no-op.
 //
 // Lives in lib/sync/ (not lib/db/) because it depends on the rebuild
 // pipeline; lib/db/client.ts imports this module so the backfill runs

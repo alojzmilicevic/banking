@@ -59,7 +59,8 @@ export function BankIcon({
         className,
       )}
       title={label ?? providerId}
->
+      aria-label={label ?? providerId}
+    >
       {showFallback ? (
         <Building2 className="size-[60%] text-text-faint" />
       ) : (

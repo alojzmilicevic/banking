@@ -231,29 +231,6 @@ export const transactions = sqliteTable(
   }),
 )
 
-// DEPRECATED — replaced by `accountDailySnapshots`. Kept around so
-// drizzle-kit doesn't flag the new table as a rename. Will be dropped
-// in a follow-up migration once the new table is fully populated and
-// the read path has been verified.
-export const dailySnapshots = sqliteTable(
-  'daily_snapshots',
-  {
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    date: text('date').notNull(),
-    baseCurrency: text('base_currency').notNull(),
-    totalAmount: real('total_amount').notNull(),
-    cashAmount: real('cash_amount').notNull(),
-    investmentAmount: real('investment_amount').notNull(),
-    detailJson: text('detail_json').notNull(),
-    computedAt: integer('computed_at').notNull().default(sql`(unixepoch() * 1000)`),
-  },
-  (t) => ({
-    pk: uniqueIndex('snapshots_pk').on(t.userId, t.date),
-  }),
-)
-
 // One row per (account × date). Computed after every sync. The chart
 // aggregates these at read time, joining `accounts.excluded_from_total`
 // so that toggling an account's "include in totals" flag is an O(1)
@@ -327,5 +304,4 @@ export type Balance = typeof balances.$inferSelect
 export type Instrument = typeof instruments.$inferSelect
 export type Position = typeof positions.$inferSelect
 export type Transaction = typeof transactions.$inferSelect
-export type DailySnapshot = typeof dailySnapshots.$inferSelect
 export type AccountDailySnapshot = typeof accountDailySnapshots.$inferSelect

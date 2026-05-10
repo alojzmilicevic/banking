@@ -230,6 +230,17 @@ export function Mask({
 // while masked and snaps back on reveal — a visible jump on toggle.
 // Hard width prevents that. Callers needing more room (e.g. decimals=2)
 // must override via className with their own `w-[Nch]`.
+function formatMoney(
+  amount: number | null | undefined,
+  currency: string | null | undefined,
+  compact: boolean,
+  decimals: number | undefined,
+): string {
+  if (amount == null) return '—'
+  if (compact) return fmtMoneyCompact(amount)
+  return fmtMoney(amount, currency ?? null, decimals != null ? { decimals } : undefined)
+}
+
 export function Money({
   amount,
   currency = null,
@@ -243,12 +254,7 @@ export function Money({
   decimals?: number
   className?: string
 }) {
-  const value =
-    amount == null
-      ? '—'
-      : compact
-        ? fmtMoneyCompact(amount)
-        : fmtMoney(amount, currency, decimals != null ? { decimals } : undefined)
+  const value = formatMoney(amount, currency, compact, decimals)
   // 13ch fits up to "1 234 567 kr"; 9ch fits any compact value plus
   // " kr". Override via className for outliers (e.g. /account uses
   // decimals=2 → wider).
