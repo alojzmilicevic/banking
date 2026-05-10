@@ -1,17 +1,17 @@
 // Wealth mutations — the SINGLE entry point for any operation that
 // changes the household's net worth state.
 //
-// Invariant: every function in this module performs the DB mutation AND
-// rebuilds `daily_snapshots` (directly or via syncConnection) so the
-// chart and totals stay in sync with the live balances. Routes must
-// never call drizzle directly for these operations — go through the
-// service. The architecture goal: forgetting to rebuild becomes
-// structurally impossible because the route doesn't have access to the
-// raw write.
+// Invariant: every function in this module performs the DB mutation
+// AND, when the mutation actually changes per-day account contributions
+// (sync, disconnect — anything that adds, removes, or rewrites balances /
+// positions / transactions / value history / holder bucketing), rebuilds
+// `account_daily_snapshots` so the chart stays in sync. The
+// `excluded_from_total` toggle does NOT need a rebuild because the read
+// path joins the live flag at aggregation time.
 //
 // Operations that mutate wealth:
 //   - disconnectConnection: removes a bank link (cascade-deletes accounts)
-//   - setAccountExcluded:   toggles whether an account contributes to totals
+//   - setAccountExcluded:   toggles whether an account contributes (no rebuild — read-time filter)
 //   - syncConnection:       refreshes data from one provider (rebuilds inside)
 //   - syncAllForUser:       runs sync across every active connection
 //
@@ -69,8 +69,10 @@ export interface SetAccountExcludedResult {
 }
 
 // Toggles whether an account contributes to the household total. The
-// chart updates immediately because rebuild walks back through every
-// daily_snapshots row using the new excluded flag.
+// chart updates immediately because the read path joins
+// `accounts.excluded_from_total` over the per-account daily rows in
+// `account_daily_snapshots` — toggling the flag changes what the next
+// read aggregates without rewriting any history.
 //
 // Ownership is enforced by walking account → connection.userId; mismatches
 // return null so the route maps to 404.
@@ -86,6 +88,5 @@ export function setAccountExcluded(
   const conn = connectionsRepo.getById(account.connectionId)
   if (!conn || conn.userId !== userId) return null
   accountsRepo.setExcluded(accountId, excluded)
-  rebuildSnapshotsForUser(conn.userId, { daysBack: 365 })
   return { id: accountId, excludedFromTotal: excluded }
 }

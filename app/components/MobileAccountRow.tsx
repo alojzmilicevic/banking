@@ -8,10 +8,9 @@ import Link from 'next/link'
 import { Eye, EyeOff } from 'lucide-react'
 import type { DashboardAccount } from '@/lib/api/dashboard'
 import { accountLabel } from '@/lib/accounts'
-import { fmtMoney, shortProduct } from '@/lib/format'
-import { Sensitive } from '@/components/sensitive-data'
+import { shortProduct } from '@/lib/format'
+import { Money, Sensitive } from '@/components/sensitive-data'
 import { cn } from '@/lib/utils'
-import { AccountChangePill } from './ChangePill'
 
 export function MobileAccountRow({
   account,
@@ -51,12 +50,9 @@ export function MobileAccountRow({
             .join(' · ')}
         </div>
       </div>
-      <div className="shrink-0 whitespace-nowrap text-right">
-        <div className="font-mono text-14 font-normal tracking-tight text-foreground tabular-nums">
-          <Sensitive>{fmtMoney(account.balance, account.balanceCurrency)}</Sensitive>
-        </div>
-        <AccountChangePill account={account} variant="chip-sm" className="mt-0.75" />
-      </div>
+      <Sensitive className="shrink-0 whitespace-nowrap text-right font-mono text-14 font-normal tracking-tight text-foreground tabular-nums">
+        <Money amount={account.balance} currency={account.balanceCurrency} />
+      </Sensitive>
       <button
         type="button"
         onClick={onToggleVisibility}

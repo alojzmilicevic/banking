@@ -71,6 +71,13 @@
       "when": 1778228365146,
       "tag": "0009_dashing_cyclops",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1778313039953,
+      "tag": "0010_add_account_daily_snapshots",
+      "breakpoints": true
     }
   ]
 }

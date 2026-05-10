@@ -4,8 +4,7 @@ import Link from 'next/link'
 import { Eye, EyeOff } from 'lucide-react'
 import type { DashboardAccount, DashboardAccountConnection } from '@/lib/api/dashboard'
 import { accountLabel } from '@/lib/accounts'
-import { fmtMoney } from '@/lib/format'
-import { Sensitive } from '@/components/sensitive-data'
+import { Money, Sensitive } from '@/components/sensitive-data'
 import { MenuPopover } from '@/components/ui/menu-popover'
 import { cn } from '@/lib/utils'
 import { BankIcon } from './BankIcon'
@@ -120,7 +119,7 @@ function AccountToggleRow({
         </div>
       </div>
       <Sensitive className="shrink-0 whitespace-nowrap font-mono text-12 text-text-faint tabular-nums">
-        {fmtMoney(account.balance, account.balanceCurrency)}
+        <Money amount={account.balance} currency={account.balanceCurrency} />
       </Sensitive>
       <span className="ml-1 flex size-6 shrink-0 items-center justify-center rounded-sm text-text-faint transition-colors group-hover:text-foreground">
         {visible ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}

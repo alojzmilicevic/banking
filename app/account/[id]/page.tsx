@@ -1,8 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getAccountDetails } from '@/lib/services/account'
 import { accountLabel } from '@/lib/accounts'
-import { fmtMoney } from '@/lib/format'
-import { Sensitive } from '@/components/sensitive-data'
+import { Money, Sensitive } from '@/components/sensitive-data'
 import { BackLink } from '@/app/components/BackLink'
 import { Card, CardTitle } from '@/components/ui/card'
 import {
@@ -34,7 +33,9 @@ function fmtDate(iso: string | null | undefined): string {
 function Amount({ amount, currency }: { amount: number; currency: string }) {
   return (
     <span className={signClass(amount)}>
-      <Sensitive>{fmtMoney(amount, currency, { decimals: 2 })}</Sensitive>
+      <Sensitive>
+        <Money amount={amount} currency={currency} decimals={2} className="w-[16ch]" />
+      </Sensitive>
     </span>
   )
 }

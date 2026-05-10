@@ -16,7 +16,6 @@ import { MobileLayout } from './components/MobileLayout'
 import { Sidebar, type ViewSelection } from './components/Sidebar'
 import { Timeline, type TimelineSnapshot } from './components/Timeline'
 import { Topbar } from './components/Topbar'
-import { SummaryCards, buildSummaryRows } from './components/SummaryCards'
 import { type ChangeMode } from './components/ChangeModeToggle'
 import { ChangeModeProvider } from './components/change-mode-context'
 import { type Period } from './components/PeriodTabs'
@@ -95,42 +94,13 @@ export function HomeContent({
     bulkToggle((a) => a.bucket.kind === 'shared' && !a.possibleDuplicateOf)
   }
 
-  // Topbar values: pick the slice that matches the current view. The
-  // displayed total tracks the chart's latest point (via snap) so the
-  // topbar number stays anchored to the chart, but change comes from
-  // the dashboard's deposit-adjusted bucket math (single source of truth).
-  const { topbarTotal, topbarChange, topbarLabel } = pickTopbarSlice()
-
-  function pickTopbarSlice() {
-    if (view === 'all') {
-      return {
-        topbarTotal: snap.total,
-        topbarChange: data?.totals.change ?? null,
-        topbarLabel: 'All Accounts',
-      }
-    }
-    if (view === 'shared') {
-      return {
-        topbarTotal: snap.shared,
-        topbarChange: data?.shared.change ?? null,
-        topbarLabel: 'Shared',
-      }
-    }
-    const holder = data?.holders.find((h) => h.id === view)
-    return {
-      topbarTotal: snap.byHolder[view] ?? null,
-      topbarChange: holder?.change ?? null,
-      topbarLabel: holder?.label ?? 'Total balance',
-    }
-  }
-
-  const summaryRows = data
-    ? buildSummaryRows({
-        totalAll: snap.total ?? data.totals.total,
-        changeAll: data.totals.change,
-        holders: data.holders,
-      })
-    : []
+  // Desktop topbar always shows the combined total — the desktop layout
+  // has no view switcher (only MobileLayout does, and it renders its own
+  // header). Total tracks the chart's latest point (snap); change comes
+  // from the dashboard's deposit-adjusted bucket math.
+  const topbarTotal = snap.total
+  const topbarChange = data?.totals.change ?? null
+  const topbarLabel = 'All Accounts'
 
   // Chart line visibility is user-controlled via the legend (clickable
   // dots in Timeline). Combined defaults on; per-holder + Shared default
@@ -156,7 +126,7 @@ export function HomeContent({
       {data ? (
         <>
           {/* Desktop: sidebar + main panel. Hidden below `lg` (1024px). */}
-          <div className="hidden h-screen w-screen overflow-hidden lg:flex">
+          <div className="hidden h-screen w-screen select-none overflow-hidden lg:flex">
             <Sidebar
               dashboard={data}
               onToggleAllForHolder={onToggleAllForHolder}
@@ -195,8 +165,6 @@ export function HomeContent({
                   onToggleShared={onToggleShared}
                   onSnapshotChange={setSnap}
                 />
-
-                <SummaryCards rows={summaryRows} period={period} currency={snap.currency} />
               </div>
             </main>
           </div>

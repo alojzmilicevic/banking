@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { computeSnapshotPoints, type AccountSnapshot } from './snapshots'
+import {
+  aggregateContributions,
+  computeAccountContributions,
+  computeSnapshotPoints,
+  type AccountSnapshot,
+} from './snapshots'
 
 // Fixed "today" so day arithmetic is deterministic across runs / TZs.
 const TODAY = new Date('2026-04-28T00:00:00.000Z')
@@ -16,6 +21,7 @@ function snap(over: Partial<AccountSnapshot> = {}): AccountSnapshot {
     txs: [],
     history: new Map(),
     earliestHistoryDate: null,
+    excludedFromTotal: false,
     ...over,
   }
 }
@@ -319,5 +325,131 @@ describe('computeSnapshotPoints — rounding', () => {
     )
     expect(points[0].totalAmount).toBe(100.12)
     expect(points[0].cashAmount).toBe(100.12)
+  })
+})
+
+describe('computeAccountContributions — emits per-account-per-day rows', () => {
+  it('emits daysBack+1 rows per (non-mismatched) account', () => {
+    const { contributions } = computeAccountContributions(
+      [
+        snap({ accountId: 'a', todayAmount: 1000 }),
+        snap({ accountId: 'b', kind: 'investment', todayAmount: 500, balanceIncludesInvestments: true }),
+      ],
+      TODAY,
+      3,
+    )
+    // 2 accounts × 4 days
+    expect(contributions).toHaveLength(8)
+    expect(contributions.filter((c) => c.accountId === 'a')).toHaveLength(4)
+    expect(contributions.filter((c) => c.accountId === 'b')).toHaveLength(4)
+  })
+
+  it('drops currency-mismatched accounts and reports them', () => {
+    const { contributions, currencyMismatches } = computeAccountContributions(
+      [
+        snap({ accountId: 'usd', currency: 'USD', todayAmount: 1000 }),
+        snap({ accountId: 'sek', currency: 'SEK', todayAmount: 500 }),
+      ],
+      TODAY,
+      1,
+    )
+    expect(currencyMismatches).toEqual(['usd: USD ≠ SEK'])
+    expect(contributions.every((c) => c.accountId === 'sek')).toBe(true)
+    expect(contributions).toHaveLength(2)
+  })
+
+  it('preserves the per-account walkback even for excluded accounts', () => {
+    // Excluded accounts still get rows persisted — the read path filters
+    // them out using the live flag, not the snapshot at compute time.
+    const { contributions } = computeAccountContributions(
+      [snap({ excludedFromTotal: true, todayAmount: 1000 })],
+      TODAY,
+      1,
+    )
+    expect(contributions).toHaveLength(2)
+    expect(contributions.every((c) => c.amount === 1000)).toBe(true)
+  })
+})
+
+describe('aggregateContributions — read-time exclusion', () => {
+  it('drops rows flagged as excluded', () => {
+    const points = aggregateContributions(
+      [
+        {
+          accountId: 'a',
+          date: '2026-04-28',
+          amount: 100,
+          kind: 'cash',
+          holderBucket: 'unassigned',
+          excludedFromTotal: false,
+        },
+        {
+          accountId: 'b',
+          date: '2026-04-28',
+          amount: 999,
+          kind: 'cash',
+          holderBucket: 'unassigned',
+          excludedFromTotal: true,
+        },
+      ],
+      [],
+    )
+    expect(points).toHaveLength(1)
+    expect(points[0].totalAmount).toBe(100)
+    expect(points[0].unassignedAmount).toBe(100)
+  })
+
+  it('still emits a zero point on a day with only excluded contributions', () => {
+    const points = aggregateContributions(
+      [
+        {
+          accountId: 'a',
+          date: '2026-04-28',
+          amount: 999,
+          kind: 'cash',
+          holderBucket: 'unassigned',
+          excludedFromTotal: true,
+        },
+      ],
+      [],
+    )
+    expect(points).toHaveLength(1)
+    expect(points[0].totalAmount).toBe(0)
+  })
+
+  it('buckets investment vs cash and per-holder using the row data', () => {
+    const points = aggregateContributions(
+      [
+        {
+          accountId: 'a',
+          date: '2026-04-28',
+          amount: 1000,
+          kind: 'cash',
+          holderBucket: 'h1',
+          excludedFromTotal: false,
+        },
+        {
+          accountId: 'b',
+          date: '2026-04-28',
+          amount: 5000,
+          kind: 'investment',
+          holderBucket: 'h2',
+          excludedFromTotal: false,
+        },
+        {
+          accountId: 'c',
+          date: '2026-04-28',
+          amount: 200,
+          kind: 'pension',
+          holderBucket: 'shared',
+          excludedFromTotal: false,
+        },
+      ],
+      ['h1', 'h2', 'h3'],
+    )
+    expect(points[0].cashAmount).toBe(1000)
+    expect(points[0].investmentAmount).toBe(5200)
+    expect(points[0].byHolder).toEqual({ h1: 1000, h2: 5000, h3: 0 })
+    expect(points[0].sharedAmount).toBe(200)
   })
 })

@@ -1,7 +1,10 @@
-// Daily wealth snapshots — rebuilt across the last 365 days on every sync.
+// Daily wealth snapshots — per-account-per-day storage, aggregated at
+// read time so toggling an account's `excluded_from_total` flag is a
+// single UPDATE rather than a 365-day rebuild.
 //
-// For each calendar day, total wealth = sum of (per-account amount on that
-// day). Per-account amount comes from one of two sources, in priority:
+// For each calendar day, total wealth = sum of (per-account amount on
+// that day) over accounts that aren't currently excluded. Per-account
+// amount comes from one of two sources, in priority:
 //
 //   1. accountValueHistory(account, date)  — Avanza's chart valueSeries.
 //      Captures real market drift between transactions for investment
@@ -22,10 +25,10 @@
 // Bucketed totals (cash vs investment) come from accounts.kind so the
 // chart can show a stacked breakdown if we want one later.
 
+import * as accountDailySnapshotsRepo from '@/lib/repositories/account-daily-snapshots'
 import * as accountsRepo from '@/lib/repositories/accounts'
 import * as accountValueHistoryRepo from '@/lib/repositories/account-value-history'
 import * as balancesRepo from '@/lib/repositories/balances'
-import * as dailySnapshotsRepo from '@/lib/repositories/daily-snapshots'
 import * as holdersRepo from '@/lib/repositories/holders'
 import * as positionsRepo from '@/lib/repositories/positions'
 import * as transactionsRepo from '@/lib/repositories/transactions'
@@ -79,6 +82,11 @@ export interface AccountSnapshot {
   // are treated as "account didn't exist yet" → 0, instead of flat-lining
   // at today's value via walkback.
   earliestHistoryDate: string | null
+  // Whether the account is currently flagged as excluded from totals.
+  // Carried through compute → persistence so the rebuild captures the
+  // current state, but reads always re-read the live flag from the DB
+  // (the persisted value is informational only).
+  excludedFromTotal: boolean
 }
 
 function isoDay(d: Date): string {
@@ -86,7 +94,7 @@ function isoDay(d: Date): string {
 }
 
 function loadAccountSnapshots(userId: string, sinceIso: string): AccountSnapshot[] {
-  const rawUserAccounts = accountsRepo.listIncludedForUser(userId)
+  const rawUserAccounts = accountsRepo.listForUser(userId)
   if (rawUserAccounts.length === 0) return []
 
   // Per-connection holder set from the M:N table.
@@ -203,6 +211,7 @@ function loadAccountSnapshots(userId: string, sinceIso: string): AccountSnapshot
       txs,
       history,
       earliestHistoryDate,
+      excludedFromTotal: a.excludedFromTotal === 1,
     }
   })
 }
@@ -212,12 +221,23 @@ export interface SnapshotPoint {
   totalAmount: number
   cashAmount: number
   investmentAmount: number
-  // Per-holder breakdown — drives the chart's per-person lines and the
-  // SummaryCards. Keyed by `holders.id`. `shared` and `unassigned` are
-  // separate fields below since they're not holders.
+  // Per-holder breakdown — drives the chart's per-person lines.
+  // Keyed by `holders.id`. `shared` and `unassigned` are separate
+  // fields below since they're not holders.
   byHolder: Record<string, number>
   sharedAmount: number
   unassignedAmount: number
+}
+
+// One per (account, day). The walker emits these; the aggregator groups
+// them by date. Persisted in `account_daily_snapshots` so the read path
+// can re-aggregate with the live `excluded_from_total` flag.
+export interface AccountDailyContribution {
+  accountId: string
+  date: string
+  amount: number
+  kind: string | null
+  holderBucket: HolderBucket
 }
 
 export interface RebuildResult {
@@ -227,101 +247,191 @@ export interface RebuildResult {
   currencyMismatches: string[]
 }
 
-// Pure walkback math: given today's per-account state, project a per-day
-// total wealth series back `daysBack` days. Side-effect free — callers
-// (rebuildSnapshotsForUser) handle the surrounding DB I/O. This is the
-// part that actually matters for testing; the I/O wrappers are dumb.
+// Pure walkback math: given today's per-account state, project each
+// account's per-day contribution back `daysBack` days. Side-effect free —
+// callers handle DB I/O. Currency-mismatched accounts are dropped from
+// the contribution stream and reported separately.
+//
+// Currently-excluded accounts are still included in the contributions
+// (with their flag carried) so the persisted rows can be re-aggregated
+// after a future toggle without recomputing history. The aggregator is
+// responsible for filtering them out.
+export function computeAccountContributions(
+  snapshots: AccountSnapshot[],
+  today: Date,
+  daysBack: number,
+): { contributions: AccountDailyContribution[]; currencyMismatches: string[] } {
+  const currencyMismatches: string[] = []
+  const contributions: AccountDailyContribution[] = []
+
+  for (const s of snapshots) {
+    if (s.currency !== BASE_CURRENCY) {
+      currencyMismatches.push(`${s.accountId}: ${s.currency} ≠ ${BASE_CURRENCY}`)
+      continue
+    }
+
+    let running = s.balanceIncludesInvestments
+      ? s.todayAmount
+      : s.todayAmount + s.positionsValue
+    let cursor = 0
+
+    for (let d = 0; d <= daysBack; d++) {
+      const day = new Date(today.getTime() - d * MS_DAY)
+      const dayIso = isoDay(day)
+
+      // Subtract every tx with date strictly after dayIso so `running`
+      // becomes the end-of-day-`dayIso` amount.
+      while (cursor < s.txs.length && s.txs[cursor].date > dayIso) {
+        running -= s.txs[cursor].amount
+        cursor++
+      }
+
+      // Real history (Avanza chart) wins over walkback when present.
+      // `!= null` keeps a real 0 from being treated as missing.
+      const realHistory = s.history.get(dayIso)
+      let amount: number
+      if (realHistory != null) {
+        amount = realHistory
+      } else if (s.earliestHistoryDate != null && dayIso < s.earliestHistoryDate) {
+        // Account has chart history but not for this day, and the day is
+        // before the chart's earliest point — treat as "didn't exist yet".
+        // Without this, Avanza accounts (which sync no transactions) would
+        // flat-line at today's totalBalance going back 365 days.
+        amount = 0
+      } else {
+        amount = running
+      }
+
+      contributions.push({
+        accountId: s.accountId,
+        date: dayIso,
+        amount: Math.round(amount * 100) / 100,
+        kind: s.kind,
+        holderBucket: s.holder,
+      })
+    }
+  }
+
+  return { contributions, currencyMismatches }
+}
+
+// Aggregate per-account contributions into per-day totals. Drops rows
+// flagged as excluded so the read path can re-bucket on demand. Used by
+// both the rebuild path (excludedFromTotal taken from the live DB at
+// load time) and the read path (taken from the join in the repo query).
 //
 // `holderIds` seeds the byHolder map so holders with zero accounts still
 // produce a flat line in the chart instead of being absent from the data.
+//
+// `seedDates` (optional): explicit list of dates to guarantee in the
+// output even when no contribution row references them — used when the
+// caller wants `daysBack+1` zero-points regardless of account presence
+// (e.g. the legacy `computeSnapshotPoints` contract).
+export function aggregateContributions(
+  rows: Array<AccountDailyContribution & { excludedFromTotal: boolean }>,
+  holderIds: string[] = [],
+  seedDates: string[] = [],
+): SnapshotPoint[] {
+  const byDate = new Map<
+    string,
+    {
+      cash: number
+      investment: number
+      shared: number
+      unassigned: number
+      byHolder: Record<string, number>
+    }
+  >()
+
+  function bucketFor(date: string) {
+    let b = byDate.get(date)
+    if (b) return b
+    const byHolder: Record<string, number> = {}
+    for (const id of holderIds) byHolder[id] = 0
+    b = { cash: 0, investment: 0, shared: 0, unassigned: 0, byHolder }
+    byDate.set(date, b)
+    return b
+  }
+
+  // Seed every date the caller asked for, plus every date that appears
+  // in the row stream — that way an excluded-only day still produces a
+  // zero point and a fully empty input still produces the requested
+  // window of zeros.
+  for (const d of seedDates) bucketFor(d)
+  for (const r of rows) bucketFor(r.date)
+
+  for (const r of rows) {
+    if (r.excludedFromTotal) continue
+    const b = bucketFor(r.date)
+    const isInvestment = r.kind === 'investment' || r.kind === 'pension'
+    if (isInvestment) b.investment += r.amount
+    else b.cash += r.amount
+
+    if (r.holderBucket === SHARED_BUCKET) b.shared += r.amount
+    else if (r.holderBucket === UNASSIGNED_BUCKET) b.unassigned += r.amount
+    else b.byHolder[r.holderBucket] = (b.byHolder[r.holderBucket] ?? 0) + r.amount
+  }
+
+  const points: SnapshotPoint[] = []
+  for (const [date, b] of byDate.entries()) {
+    const roundedByHolder: Record<string, number> = {}
+    for (const [k, v] of Object.entries(b.byHolder)) {
+      roundedByHolder[k] = Math.round(v * 100) / 100
+    }
+    points.push({
+      date,
+      totalAmount: Math.round((b.cash + b.investment) * 100) / 100,
+      cashAmount: Math.round(b.cash * 100) / 100,
+      investmentAmount: Math.round(b.investment * 100) / 100,
+      byHolder: roundedByHolder,
+      sharedAmount: Math.round(b.shared * 100) / 100,
+      unassignedAmount: Math.round(b.unassigned * 100) / 100,
+    })
+  }
+  // Walker emits dates today→backwards; aggregator returns same order so
+  // existing tests on `computeSnapshotPoints` stay valid.
+  points.sort((a, b) => b.date.localeCompare(a.date))
+  return points
+}
+
+// Backwards-compatible helper for unit tests: walk + aggregate in one
+// pass. Real code paths call walker + aggregator separately so the
+// per-account rows can be persisted between them.
 export function computeSnapshotPoints(
   snapshots: AccountSnapshot[],
   today: Date,
   daysBack: number,
   holderIds: string[] = [],
 ): { points: SnapshotPoint[]; currencyMismatches: string[] } {
-  const currencyMismatches: string[] = []
-
-  type AccountWalker = AccountSnapshot & { running: number; cursor: number }
-  const walkers: AccountWalker[] = snapshots.map((s) => {
-    if (s.currency !== BASE_CURRENCY) {
-      currencyMismatches.push(`${s.accountId}: ${s.currency} ≠ ${BASE_CURRENCY}`)
-    }
-    const startingTotal = s.balanceIncludesInvestments
-      ? s.todayAmount
-      : s.todayAmount + s.positionsValue
-    return { ...s, running: startingTotal, cursor: 0 }
+  const { contributions, currencyMismatches } = computeAccountContributions(
+    snapshots,
+    today,
+    daysBack,
+  )
+  const rows = contributions.map((c) => {
+    const src = snapshots.find((s) => s.accountId === c.accountId)
+    return { ...c, excludedFromTotal: src?.excludedFromTotal ?? false }
   })
-
-  const points: SnapshotPoint[] = []
-
+  // Seed the full daysBack window so an empty `snapshots` input still
+  // returns daysBack+1 zero-points (the legacy contract this helper
+  // preserves).
+  const seedDates: string[] = []
   for (let d = 0; d <= daysBack; d++) {
-    const day = new Date(today.getTime() - d * MS_DAY)
-    const dayIso = isoDay(day)
-
-    let cashAmount = 0
-    let investmentAmount = 0
-    let sharedAmount = 0
-    let unassignedAmount = 0
-    const byHolder: Record<string, number> = {}
-    for (const id of holderIds) byHolder[id] = 0
-
-    for (const w of walkers) {
-      if (w.currency !== BASE_CURRENCY) continue
-
-      // Subtract every tx with date strictly after dayIso so `running`
-      // becomes the end-of-day-`dayIso` amount.
-      while (w.cursor < w.txs.length && w.txs[w.cursor].date > dayIso) {
-        w.running -= w.txs[w.cursor].amount
-        w.cursor++
-      }
-
-      // Real history (Avanza chart) wins over walkback when present.
-      // `!= null` keeps a real 0 from being treated as missing.
-      const realHistory = w.history.get(dayIso)
-      let contribution: number
-      if (realHistory != null) {
-        contribution = realHistory
-      } else if (w.earliestHistoryDate != null && dayIso < w.earliestHistoryDate) {
-        // Account has chart history but not for this day, and the day is
-        // before the chart's earliest point — treat as "didn't exist yet".
-        // Without this, Avanza accounts (which sync no transactions) would
-        // flat-line at today's totalBalance going back 365 days.
-        contribution = 0
-      } else {
-        contribution = w.running
-      }
-
-      const isInvestment = w.kind === 'investment' || w.kind === 'pension'
-      if (isInvestment) investmentAmount += contribution
-      else cashAmount += contribution
-
-      if (w.holder === SHARED_BUCKET) sharedAmount += contribution
-      else if (w.holder === UNASSIGNED_BUCKET) unassignedAmount += contribution
-      else byHolder[w.holder] = (byHolder[w.holder] ?? 0) + contribution
-    }
-
-    const roundedByHolder: Record<string, number> = {}
-    for (const [k, v] of Object.entries(byHolder)) roundedByHolder[k] = Math.round(v * 100) / 100
-
-    points.push({
-      date: dayIso,
-      totalAmount: Math.round((cashAmount + investmentAmount) * 100) / 100,
-      cashAmount: Math.round(cashAmount * 100) / 100,
-      investmentAmount: Math.round(investmentAmount * 100) / 100,
-      byHolder: roundedByHolder,
-      sharedAmount: Math.round(sharedAmount * 100) / 100,
-      unassignedAmount: Math.round(unassignedAmount * 100) / 100,
-    })
+    seedDates.push(isoDay(new Date(today.getTime() - d * MS_DAY)))
   }
-
-  return { points, currencyMismatches }
+  return {
+    points: aggregateContributions(rows, holderIds, seedDates),
+    currencyMismatches,
+  }
 }
 
-// Recompute every daily_snapshots row for a user. Call this AFTER any
-// mutation that changes a value the chart reads (balances, positions,
-// transactions, account_value_history, the excluded flag, the M:N
-// connection_holders, or the connection set itself).
+// Recompute every account_daily_snapshots row for a user. Call this AFTER
+// any mutation that changes a value the chart reads (balances, positions,
+// transactions, account_value_history, the M:N connection_holders, or
+// the connection set itself).
+//
+// Notably NOT needed for `excluded_from_total` toggles — that filter is
+// applied at read time, so the toggle is a single UPDATE.
 //
 // Don't call this directly from a route handler — the wealth service
 // (lib/services/wealth.ts) is the single funnel for wealth-mutating
@@ -337,32 +447,26 @@ export function rebuildSnapshotsForUser(
   const sinceIso = isoDay(new Date(today.getTime() - daysBack * MS_DAY))
 
   const snapshots = loadAccountSnapshots(userId, sinceIso)
-  const holderIds = holdersRepo.listLinkedIdsForUser(userId)
-  const { points, currencyMismatches } = computeSnapshotPoints(
+  const { contributions, currencyMismatches } = computeAccountContributions(
     snapshots,
     today,
     daysBack,
-    holderIds,
   )
 
-  dailySnapshotsRepo.upsertMany(
-    points.map((p) => ({
+  accountDailySnapshotsRepo.replaceForUser(
+    userId,
+    contributions.map((c) => ({
       userId,
-      date: p.date,
-      baseCurrency: BASE_CURRENCY,
-      totalAmount: p.totalAmount,
-      cashAmount: p.cashAmount,
-      investmentAmount: p.investmentAmount,
-      detailJson: JSON.stringify({
-        byHolder: p.byHolder,
-        sharedAmount: p.sharedAmount,
-        unassignedAmount: p.unassignedAmount,
-      }),
+      accountId: c.accountId,
+      date: c.date,
+      amount: c.amount,
+      kind: c.kind,
+      holderBucket: c.holderBucket,
     })),
   )
 
   return {
-    written: points.length,
+    written: contributions.length,
     daysBack,
     baseCurrency: BASE_CURRENCY,
     currencyMismatches,
@@ -370,7 +474,8 @@ export function rebuildSnapshotsForUser(
 }
 
 // Convenience: today-only computation (used by /api/timeseries for the
-// current totals card without re-walking history).
+// current totals card without re-walking history). Filters excluded
+// accounts at aggregation time so the totals match what the chart shows.
 export function computeTodaySnapshot(userId: string): {
   date: string
   totalAmount: number
@@ -399,6 +504,7 @@ export function computeTodaySnapshot(userId: string): {
       currencyMismatches.push(`${s.accountId}: ${s.currency} ≠ ${BASE_CURRENCY}`)
       continue
     }
+    if (s.excludedFromTotal) continue
     const accountTotal = s.balanceIncludesInvestments
       ? s.todayAmount
       : s.todayAmount + s.positionsValue
@@ -437,68 +543,47 @@ export interface SnapshotRangeRow {
   unassignedAmount: number
 }
 
-interface ParsedDetail {
-  byHolder: Record<string, number>
-  sharedAmount: number
-  unassignedAmount: number
-}
-
-function emptyDetail(): ParsedDetail {
-  return { byHolder: {}, sharedAmount: 0, unassignedAmount: 0 }
-}
-
-// Detail-JSON shape evolved during the N-holder migration:
-//   • Legacy: { byHolder: { alma, alojz, joint, unassigned } }
-//   • Current: { byHolder: { [holderId]: n }, sharedAmount, unassignedAmount }
-// Legacy rows are folded into the new shape (alma/alojz drop into the
-// returned byHolder map verbatim under their old keys, joint becomes
-// sharedAmount). Once the user re-syncs, every row gets rewritten in
-// the new shape and this fallback stops firing.
-function parseDetail(detailJson: string | null | undefined): ParsedDetail {
-  if (!detailJson) return emptyDetail()
-  try {
-    const parsed = JSON.parse(detailJson) as {
-      byHolder?: Record<string, number>
-      sharedAmount?: number
-      unassignedAmount?: number
-    }
-    const src = parsed.byHolder ?? {}
-    const byHolder: Record<string, number> = {}
-    let sharedAmount = parsed.sharedAmount ?? 0
-    let unassignedAmount = parsed.unassignedAmount ?? 0
-    for (const [k, v] of Object.entries(src)) {
-      if (k === 'joint') sharedAmount += v
-      else if (k === 'unassigned') unassignedAmount += v
-      else byHolder[k] = v // includes legacy 'alma'/'alojz' (post-migration backfill rewrites these)
-    }
-    return { byHolder, sharedAmount, unassignedAmount }
-  } catch {
-    return emptyDetail()
-  }
-}
-
+// Read-time aggregation. The repo already joined `excluded_from_total`,
+// so per-row exclusion reflects the live DB state — toggling the flag
+// changes what appears in the next read without a rebuild.
 export function getSnapshotsRange(
   userId: string,
   fromDate: string,
   toDate: string,
 ): SnapshotRangeRow[] {
-  const rows = dailySnapshotsRepo.getRange(userId, fromDate, toDate)
-  return rows.map((r) => {
-    const d = parseDetail(r.detailJson)
-    return {
+  const rows = accountDailySnapshotsRepo.getRangeForUser(userId, fromDate, toDate)
+  if (rows.length === 0) return []
+  const holderIds = holdersRepo.listLinkedIdsForUser(userId)
+  const points = aggregateContributions(
+    rows.map((r) => ({
+      accountId: r.accountId,
       date: r.date,
-      totalAmount: r.totalAmount,
-      cashAmount: r.cashAmount,
-      investmentAmount: r.investmentAmount,
-      byHolder: d.byHolder,
-      sharedAmount: d.sharedAmount,
-      unassignedAmount: d.unassignedAmount,
-    }
-  })
+      amount: r.amount,
+      kind: r.kind,
+      holderBucket: r.holderBucket,
+      excludedFromTotal: r.excludedFromTotal === 1,
+    })),
+    holderIds,
+  )
+  // Range reads expect ascending date order (caller iterates oldest →
+  // newest into the chart), but the aggregator returns descending to
+  // match the legacy `computeSnapshotPoints` shape. Reverse here.
+  points.reverse()
+  return points.map((p) => ({
+    date: p.date,
+    totalAmount: p.totalAmount,
+    cashAmount: p.cashAmount,
+    investmentAmount: p.investmentAmount,
+    byHolder: p.byHolder,
+    sharedAmount: p.sharedAmount,
+    unassignedAmount: p.unassignedAmount,
+  }))
 }
 
 // Earliest snapshot date stored for a user (or null if none yet).
-// Used by /api/timeseries to anchor the "ALL" period correctly.
+// Used by /api/timeseries to anchor the "ALL" period correctly. Only
+// considers non-excluded accounts so the period anchor doesn't jump
+// when an excluded account predates everything else.
 export function getEarliestSnapshotDate(userId: string): string | null {
-  return dailySnapshotsRepo.getEarliestDate(userId)
+  return accountDailySnapshotsRepo.getEarliestDateForUser(userId)
 }

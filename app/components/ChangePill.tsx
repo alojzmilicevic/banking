@@ -10,10 +10,8 @@
 // — read from context — controls *which* number renders. One bug-fix
 // here propagates to every change pill in the app.
 
-import { tracksPerformance, type AccountType } from '@/lib/account-types'
-import type { DashboardAccount } from '@/lib/api/dashboard'
 import { fmtMoney, fmtMoneyCompact } from '@/lib/format'
-import { Sensitive } from '@/components/sensitive-data'
+import { Mask } from '@/components/sensitive-data'
 import { cn } from '@/lib/utils'
 import { useChangeMode } from './change-mode-context'
 import type { Period } from './PeriodTabs'
@@ -78,12 +76,39 @@ const COMPACT_VARIANTS: ReadonlySet<PillVariant> = new Set(['compact', 'row', 'c
 const CHIP_VARIANTS: ReadonlySet<PillVariant> = new Set(['chip', 'chip-sm'])
 
 const VARIANT_CLASSES: Record<PillVariant, string> = {
-  hero: 'text-14 font-medium',
-  chip: 'rounded-full px-2.5 py-0.75 text-14 font-semibold',
-  'chip-sm': 'inline-block rounded-full px-1.75 py-px text-11 font-medium',
-  card: 'text-12',
-  compact: 'text-11',
-  row: 'text-11 leading-none',
+  hero: 'inline-block text-18 font-medium tabular-nums',
+  chip: 'inline-block text-right rounded-full px-2.5 py-0.75 text-14 font-semibold tabular-nums',
+  'chip-sm': 'inline-block rounded-full px-1.75 py-px text-11 font-medium tabular-nums',
+  card: 'text-12 tabular-nums',
+  compact: 'inline-block text-right text-11 tabular-nums',
+  row: 'text-11 leading-none tabular-nums',
+}
+
+// Fixed slot width per variant. Constant across all instances of the
+// same variant means peek doesn't reflow (mask and real both fit) and
+// the slot itself can't betray magnitude. Sized to fit the largest
+// expected real value at that variant's font scale (in ch units, so
+// the size scales with `text-*`). Used alongside text-right so the
+// peek-shift stays anchored to the right edge of the slot.
+const VARIANT_SLOTS: Record<PillVariant, number> = {
+  hero: 13,
+  chip: 14,
+  'chip-sm': 9,
+  card: 14,
+  compact: 9,
+  row: 9,
+}
+
+// Hard width (`w-[Nch]`), not min-width — bullets and "kr" are not
+// covered by tabular-nums, so a min-width slot grows slightly above N
+// while masked and snaps back on reveal (visible jump on toggle).
+const VARIANT_SLOT_CLASSES: Record<PillVariant, string> = {
+  hero: 'w-[13ch]',
+  chip: 'w-[14ch]',
+  'chip-sm': 'w-[9ch]',
+  card: 'w-[14ch]',
+  compact: 'w-[9ch]',
+  row: 'w-[9ch]',
 }
 
 function toneClasses(variant: PillVariant, positive: boolean): string {
@@ -109,15 +134,33 @@ export function ChangePill({
 }) {
   const mode = useChangeMode()
 
+  const slotCh = VARIANT_SLOTS[variant]
+  const slotClass = VARIANT_SLOT_CLASSES[variant]
+
   if (!change) {
     if (variant === 'card') {
       return (
-        <span className={cn(VARIANT_CLASSES.card, 'text-pos', className)}>
+        <span className={cn(VARIANT_CLASSES.card, slotClass, 'text-pos', className)}>
           {`— · ${period ?? ''}`}
         </span>
       )
     }
-    return null
+    // No data — render a placeholder so rows with and without growth
+    // data don't look layout-different (e.g. a holder whose only
+    // account is a cash account vs one with investments). Green to
+    // match positive change visually; revealed it shows "—".
+    return (
+      <span
+        className={cn(
+          VARIANT_CLASSES[variant],
+          slotClass,
+          toneClasses(variant, true),
+          className,
+        )}
+      >
+        <Mask value="—" unit=" kr" bullets={slotCh} hideMaskedUnit />
+      </span>
+    )
   }
 
   const positive = change.absolute >= 0
@@ -127,28 +170,24 @@ export function ChangePill({
       ? fmtPct(change.pct!, positive)
       : fmtAbs(change.absolute, currency, COMPACT_VARIANTS.has(variant), positive)
 
+  // Pct → "%", abs → " kr". Unit is only used when revealed (it's part
+  // of `text`); when masked we render bullets only via `hideMaskedUnit`,
+  // so the green pill stays visually quiet ("•••••" not "••• kr").
+  const unit = display === 'pct' ? '%' : ' kr'
+  // Bullets fill the whole slot since there's no unit suffix on mask.
+  const bullets = slotCh
+
   return (
-    <span className={cn(VARIANT_CLASSES[variant], toneClasses(variant, positive), className)}>
-      <Sensitive>{text}</Sensitive>
+    <span
+      className={cn(
+        VARIANT_CLASSES[variant],
+        slotClass,
+        toneClasses(variant, positive),
+        className,
+      )}
+    >
+      <Mask value={text} unit={unit} bullets={bullets} hideMaskedUnit />
       {variant === 'card' && ` · ${period ?? ''}`}
     </span>
   )
-}
-
-// Account-row gate. Cash accounts get a `change.absolute` derived from
-// EB transaction flow, but the number is "deposits − withdrawals" noise,
-// not performance — so the sidebar/mobile rows only render the pill for
-// accounts whose accountType is in tracksPerformance(). Centralised here
-// so the gate isn't reimplemented at every callsite.
-export function AccountChangePill({
-  account,
-  variant,
-  className,
-}: {
-  account: Pick<DashboardAccount, 'change' | 'accountType'> & { accountType: AccountType | null | undefined }
-  variant: PillVariant
-  className?: string
-}) {
-  if (!tracksPerformance(account.accountType)) return null
-  return <ChangePill change={account.change} variant={variant} className={className} />
 }

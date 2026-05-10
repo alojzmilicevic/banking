@@ -12,7 +12,6 @@ export function DashboardSkeleton({ sidebarWidth }: { sidebarWidth: number }) {
 
         <div className="flex flex-1 flex-col gap-5 overflow-hidden px-7 py-6">
           <TimelineSkeleton />
-          <SummaryCardsSkeleton />
         </div>
       </main>
     </div>
@@ -160,16 +159,3 @@ function TimelineSkeleton() {
   )
 }
 
-function SummaryCardsSkeleton() {
-  return (
-    <div className="grid shrink-0 grid-cols-3 gap-3.5">
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="rounded-14 border border-border-subtle bg-white/2 px-5 py-4">
-          <Skeleton className="mb-2 h-2.75 w-18" />
-          <Skeleton className="h-6 w-35" />
-          <Skeleton className="mt-1.5 h-3 w-22" />
-        </div>
-      ))}
-    </div>
-  )
-}

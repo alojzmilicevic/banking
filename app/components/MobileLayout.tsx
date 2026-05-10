@@ -12,8 +12,7 @@ import Link from 'next/link'
 import { Loader2, Plus, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { IconButton } from '@/components/ui/icon-button'
-import { fmtMoney, fmtMoneyCompact } from '@/lib/format'
-import { Sensitive } from '@/components/sensitive-data'
+import { Money, Sensitive } from '@/components/sensitive-data'
 import { COMBINED_META, SHARED_META } from '@/lib/holders'
 import { cn } from '@/lib/utils'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
@@ -124,7 +123,7 @@ export function MobileLayout({
   ]
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden lg:hidden">
+    <div className="flex h-screen w-screen select-none flex-col overflow-hidden lg:hidden">
       {/* ── Top nav: logo + settings ───────────────────────────────── */}
       <div className="flex shrink-0 items-center justify-between px-5 pt-3.5 pb-2.5">
         <div className="flex items-center gap-2.5">
@@ -190,12 +189,12 @@ export function MobileLayout({
           <div className="mb-1.5 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
             Total balance
           </div>
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <Sensitive className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span className="font-mono text-30 font-light leading-none tracking-hero text-foreground tabular-nums">
-              <Sensitive>{total != null ? fmtMoney(total, currency) : '—'}</Sensitive>
+              <Money amount={total} currency={currency} />
             </span>
             <ChangePill change={change} variant="chip" />
-          </div>
+          </Sensitive>
           {change && (
             <div className="mt-1.5 text-12 text-text-faint">
               {`Past ${period === 'ALL' ? 'all time' : period}`}
@@ -245,7 +244,9 @@ export function MobileLayout({
                   </span>
                 </div>
                 <div className="font-mono text-14 font-light tracking-display tabular-nums">
-                  <Sensitive>{fmtMoneyCompact(p.val)}</Sensitive>
+                  <Sensitive>
+                    <Money amount={p.val} compact />
+                  </Sensitive>
                 </div>
               </div>
             ))}

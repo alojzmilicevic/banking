@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import * as schema from './schema'
 import { importLegacyIfPresent } from '@/lib/sync/import-legacy'
+import { backfillAccountDailySnapshotsIfEmpty } from '@/lib/sync/backfill-account-daily-snapshots'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 const DB_FILE = path.join(DATA_DIR, 'banking.db')
@@ -36,6 +37,7 @@ function createDb(): Drizzle {
 }
 
 let _db: Drizzle | null = null
+let _backfillDone = false
 function getInstance(): Drizzle {
   if (_db) return _db
   if (globalThis.__bankingDb) {
@@ -44,6 +46,24 @@ function getInstance(): Drizzle {
   }
   _db = createDb()
   if (process.env.NODE_ENV !== 'production') globalThis.__bankingDb = _db
+  // Backfill must run AFTER `_db` is assigned: it uses the `db` proxy
+  // (via the snapshot rebuild's repos), and calling that proxy before
+  // `_db` is set would recursively re-enter `getInstance` and re-run
+  // `createDb` indefinitely. Keep a flag so we only attempt this once
+  // per process.
+  if (!_backfillDone) {
+    _backfillDone = true
+    try {
+      const backfilled = backfillAccountDailySnapshotsIfEmpty()
+      if (backfilled.users > 0) {
+        console.log(
+          `[db] Backfilled account_daily_snapshots for ${backfilled.users} user(s), ${backfilled.rows} rows`,
+        )
+      }
+    } catch (err) {
+      console.error('[db] account_daily_snapshots backfill failed', err)
+    }
+  }
   return _db
 }
 

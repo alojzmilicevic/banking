@@ -7,8 +7,7 @@
 import type { ReactNode } from 'react'
 import type { DashboardAccount } from '@/lib/api/dashboard'
 import type { AccountPartition } from '@/lib/accounts'
-import { fmtMoneyCompact } from '@/lib/format'
-import { Sensitive } from '@/components/sensitive-data'
+import { Money, Sensitive } from '@/components/sensitive-data'
 import { ChangePill, type ChangeValue } from './ChangePill'
 import { HolderAvatar } from './HolderAvatar'
 import { PersonMenuPopover } from './PersonMenuPopover'
@@ -47,14 +46,12 @@ export function HolderCardHeader({
           {canonicals.length === 1 ? 'account' : 'accounts'}
         </div>
       </div>
-      <div className="flex shrink-0 flex-col whitespace-nowrap text-right">
-        <Sensitive>
-          <span className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
-            {fmtMoneyCompact(total)}
-          </span>
-        </Sensitive>
+      <Sensitive className="flex shrink-0 flex-col whitespace-nowrap text-right">
+        <span className="font-mono text-16 font-light tracking-display text-foreground tabular-nums">
+          <Money amount={total} compact />
+        </span>
         <ChangePill change={change} variant="compact" className="mt-px" />
-      </div>
+      </Sensitive>
       <PersonMenuPopover
         triggerLabel={triggerLabel}
         accounts={canonicals}

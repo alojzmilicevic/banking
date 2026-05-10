@@ -1,6 +1,6 @@
 // Accounts repository — drizzle queries only.
 
-import { and, eq, inArray, ne } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { accounts, connections, db, type Executor } from '@/lib/db/client'
 import type { Account } from '@/lib/db/schema'
 
@@ -28,9 +28,10 @@ export function setExcluded(id: string, excluded: boolean, executor: Executor = 
     .run()
 }
 
-// Joined view used by the snapshot rebuilder. Only the columns the
-// rebuilder actually reads, with `excluded_from_total = 0` filtered in
-// SQL via the index instead of a JS .filter.
+// Joined view used by the snapshot rebuilder. The rebuilder loads ALL
+// accounts (including excluded ones) and persists per-account daily rows
+// — the `excluded_from_total` filter is applied at read time so toggling
+// the flag doesn't require recomputing 365 days of history.
 export interface UserAccountRow {
   id: string
   kind: string | null
@@ -39,6 +40,7 @@ export interface UserAccountRow {
   iban: string | null
   bban: string | null
   createdAt: number
+  excludedFromTotal: number
 }
 
 // All of a user's accounts joined with their connections — used by the
@@ -57,10 +59,10 @@ export function listAllForUser(
     .all()
 }
 
-export function listIncludedForUser(
-  userId: string,
-  executor: Executor = db,
-): UserAccountRow[] {
+// Joined view for the snapshot rebuilder. Returns every account
+// (excluded or not) — exclusion is applied at read time over the
+// per-account daily rows.
+export function listForUser(userId: string, executor: Executor = db): UserAccountRow[] {
   return executor
     .select({
       id: accounts.id,
@@ -70,9 +72,11 @@ export function listIncludedForUser(
       iban: accounts.iban,
       bban: accounts.bban,
       createdAt: accounts.createdAt,
+      excludedFromTotal: accounts.excludedFromTotal,
     })
     .from(accounts)
     .innerJoin(connections, eq(accounts.connectionId, connections.id))
-    .where(and(eq(connections.userId, userId), ne(accounts.excludedFromTotal, 1)))
+    .where(eq(connections.userId, userId))
     .all()
 }
+

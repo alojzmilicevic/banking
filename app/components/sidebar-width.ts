@@ -2,8 +2,8 @@
 // a cookie so the server can read it during SSR and render the HTML at
 // the right width on first paint — no client-side flicker.
 
-export const SIDEBAR_DEFAULT_WIDTH = 300
-export const SIDEBAR_MIN_WIDTH = 240
+export const SIDEBAR_DEFAULT_WIDTH = 320
+export const SIDEBAR_MIN_WIDTH = 290
 export const SIDEBAR_MAX_WIDTH = 520
 export const SIDEBAR_WIDTH_COOKIE = 'aloma-sidebar-width'
 

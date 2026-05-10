@@ -1,9 +1,9 @@
 // Ambient setting: render change pills as absolute value (kr) or
 // percentage (%). Drilling this through every layer (HomeContent →
 // Sidebar → PersonSection → SidebarAccountRow, plus MobileLayout's
-// inner row component, plus SummaryCards, plus Topbar) would touch
-// every component signature for what's effectively a UI preference,
-// so it lives in Context instead.
+// inner row component, plus Topbar) would touch every component
+// signature for what's effectively a UI preference, so it lives in
+// Context instead.
 
 'use client'
 

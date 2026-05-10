@@ -9,11 +9,10 @@
 import Link from 'next/link'
 import type { DashboardAccount } from '@/lib/api/dashboard'
 import { accountLabel } from '@/lib/accounts'
-import { fmtMoney, shortProduct } from '@/lib/format'
-import { Sensitive } from '@/components/sensitive-data'
+import { shortProduct } from '@/lib/format'
+import { Money, Sensitive } from '@/components/sensitive-data'
 import { holderAvatarBg } from '@/lib/holders'
 import { cn } from '@/lib/utils'
-import { AccountChangePill } from './ChangePill'
 
 export function SidebarAccountRow({
   account,
@@ -59,14 +58,9 @@ export function SidebarAccountRow({
           </Link>
         </div>
       </div>
-      <div className="ml-1.5 flex shrink-0 flex-col justify-center whitespace-nowrap text-right">
-        <Sensitive>
-          <span className="font-mono text-14 font-normal leading-none text-foreground tabular-nums">
-            {fmtMoney(account.balance, account.balanceCurrency)}
-          </span>
-        </Sensitive>
-        <AccountChangePill account={account} variant="row" className="mt-0.5" />
-      </div>
+      <Sensitive className="ml-1.5 shrink-0 whitespace-nowrap text-right font-mono text-14 font-normal text-foreground tabular-nums">
+        <Money amount={account.balance} currency={account.balanceCurrency} />
+      </Sensitive>
     </div>
   )
 }
