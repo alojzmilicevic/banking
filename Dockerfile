@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Multi-stage build for the banking Next.js app.
 # Targets linux/arm64 (Pi) and linux/amd64. better-sqlite3 builds against
-# glibc here (bookworm-slim), so prebuilt binaries are picked up cleanly.
+# glibc here (trixie-slim), so prebuilt binaries are picked up cleanly.
 
 ARG NODE_VERSION=24
 
