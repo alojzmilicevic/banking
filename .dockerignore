@@ -1,0 +1,27 @@
+node_modules
+.next
+.git
+.gitignore
+.gitattributes
+
+# Local-only state and secrets
+.env
+.env.local
+.env.*.local
+data
+keys
+
+# Dev/CI noise
+.worktrees
+.agent-context
+.claude
+.vscode
+.idea
+coverage
+tests
+*.log
+.DS_Store
+
+# Markdown not needed at build time
+*.md
+!CLAUDE.md

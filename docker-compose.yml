@@ -1,0 +1,17 @@
+services:
+  banking:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: banking:latest
+    container_name: banking
+    restart: unless-stopped
+    env_file: .env
+    # Bind to localhost only — Tailscale Serve (or Caddy) on the host
+    # reverse-proxies from the tailnet interface to here. Never publish
+    # this on 0.0.0.0 unless you really mean to.
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./keys:/app/keys:ro
