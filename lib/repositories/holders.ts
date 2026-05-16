@@ -66,6 +66,7 @@ export function create(
     label: string
     color: string
     initials: string
+    personnummer?: string | null
   },
   executor: Executor = db,
 ): HolderRow {
@@ -85,6 +86,7 @@ export function create(
       label: input.label,
       color: input.color,
       initials: input.initials,
+      personnummer: input.personnummer ?? null,
       displayOrder: nextOrder,
       createdAt: Date.now(),
     }
@@ -94,14 +96,14 @@ export function create(
   return executor === db ? db.transaction(writeAll) : writeAll(executor)
 }
 
-// Partial update for fields the user can edit (currently just color).
-// Returns the updated row, or null if no holder with that id exists for
-// the given user. The userId scope is enforced here so route handlers
-// can't accidentally let one household edit another's holders.
+// Partial update for fields the user can edit. Returns the updated row,
+// or null if no holder with that id exists for the given user. The
+// userId scope is enforced here so route handlers can't accidentally
+// let one household edit another's holders.
 export function update(
   id: string,
   userId: string,
-  patch: { color?: string },
+  patch: { color?: string; personnummer?: string | null },
   executor: Executor = db,
 ): HolderRow | null {
   const existing = executor

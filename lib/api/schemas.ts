@@ -46,10 +46,26 @@ export const InstitutionsQuerySchema = z.object({
   fresh: z.enum(['0', '1']).optional(),
 })
 
+// Swedish personnummer: 10 or 12 digits, optional dash between
+// YYMMDD and the last 4. We normalize to 12-digit no-dash on store
+// (transform strips non-digits and prepends century if needed).
+const personnummerSchema = z
+  .string()
+  .trim()
+  .refine((s) => /^\d{6,8}-?\d{4}$/.test(s), 'personnummer must be 10 or 12 digits, optional dash')
+  .transform((s) => {
+    const digits = s.replace(/\D/g, '')
+    // 10 digits → assume 1900s for older formats. The user-facing
+    // settings UI accepts both; HB's BankID field expects 12 digits.
+    if (digits.length === 10) return `19${digits}`
+    return digits
+  })
+
 export const HolderBodySchema = z.object({
   label: z.string().trim().min(1, 'Label required').max(100),
   initials: z.string().trim().min(1).max(3).optional(),
   color: z.string().trim().min(1).max(32).optional(),
+  personnummer: personnummerSchema.optional(),
 })
 
 // PATCH only allows fields the user can edit from the UI. Color is
@@ -60,6 +76,9 @@ export const PatchHolderBodySchema = z.object({
     .string()
     .refine(isHolderPaletteColor, 'color must be one of the preset palette values')
     .optional(),
+  // Empty string clears the stored value; the route handler converts
+  // it to null before writing.
+  personnummer: z.union([personnummerSchema, z.literal('')]).optional(),
 })
 
 export const SyncQuerySchema = z.object({

@@ -1,10 +1,12 @@
 import type { Provider } from './types'
 import { avanzaProvider } from './avanza'
 import { enableBankingProvider } from './enable-banking'
+import { handelsbankenProvider } from './handelsbanken'
 
 const defaultProviders: Record<string, Provider> = {
   [enableBankingProvider.id]: enableBankingProvider,
   [avanzaProvider.id]: avanzaProvider,
+  [handelsbankenProvider.id]: handelsbankenProvider,
   // Future: klarna, lunar, ...
 }
 

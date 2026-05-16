@@ -85,6 +85,13 @@
       "when": 1778411053367,
       "tag": "0011_drop_daily_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1778930757909,
+      "tag": "0012_add_holder_personnummer",
+      "breakpoints": true
     }
   ]
 }

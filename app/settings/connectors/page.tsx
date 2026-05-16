@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { AvanzaPanel } from '@/app/components/AvanzaPanel'
 import { BankIcon } from '@/app/components/BankIcon'
 import { EbBankPanel } from '@/app/components/EbBankPanel'
+import { HandelsbankenPanel } from '@/app/components/HandelsbankenPanel'
 import { SettingsRow, SettingsSection } from '../SettingsSection'
 import type {
   DashboardAccountConnection,
@@ -59,6 +60,7 @@ type AddView =
   | { kind: 'pick'; holderId: string }
   | { kind: 'avanza'; holderId: string }
   | { kind: 'eb'; holderId: string }
+  | { kind: 'handelsbanken'; holderId: string }
 
 export default function ConnectorsPage() {
   const dashboard = useDashboard('1Y')
@@ -91,6 +93,12 @@ export default function ConnectorsPage() {
   async function onReconnect(c: DashboardAccountConnection, holderId: string) {
     if (c.providerId === 'avanza') {
       setAdd({ kind: 'avanza', holderId })
+      return
+    }
+    // HB stores no credentials — a "broken" HB connection just needs
+    // another scrape attempt (fresh BankID). Treat Reconnect == Sync.
+    if (c.providerId === 'handelsbanken') {
+      onSync(c.id)
       return
     }
     if (c.providerId !== 'enable-banking') return
@@ -168,6 +176,14 @@ export default function ConnectorsPage() {
             {add.kind === 'eb' && add.holderId === holder.id && (
               <AddConnectorPanel onBack={() => setAdd({ kind: 'pick', holderId: holder.id })}>
                 <EbBankPanel holderId={holder.id} />
+              </AddConnectorPanel>
+            )}
+            {add.kind === 'handelsbanken' && add.holderId === holder.id && (
+              <AddConnectorPanel onBack={() => setAdd({ kind: 'pick', holderId: holder.id })}>
+                <HandelsbankenPanel
+                  holderId={holder.id}
+                  onDone={() => setAdd({ kind: 'closed' })}
+                />
               </AddConnectorPanel>
             )}
             {(add.kind === 'closed' || add.holderId !== holder.id) && (
@@ -286,7 +302,7 @@ function AddConnectorPicker({
   onPick,
   onCancel,
 }: {
-  onPick: (provider: 'avanza' | 'eb') => void
+  onPick: (provider: 'avanza' | 'eb' | 'handelsbanken') => void
   onCancel: () => void
 }) {
   return (
@@ -312,9 +328,15 @@ function AddConnectorPicker({
         />
         <PickerTile
           icon={<Building2 className="size-5" />}
-          title="A bank"
-          subtitle="Handelsbanken, Swedbank, SEB…"
+          title="A bank (PSD2)"
+          subtitle="Swedbank, SEB, HB cash…"
           onClick={() => onPick('eb')}
+        />
+        <PickerTile
+          icon={<Building2 className="size-5" />}
+          title="Handelsbanken funds"
+          subtitle="Fund holdings via scrape"
+          onClick={() => onPick('handelsbanken')}
         />
       </div>
     </div>

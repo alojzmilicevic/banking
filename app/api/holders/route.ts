@@ -18,6 +18,7 @@ function toListItem(h: HolderRow): HolderListItem {
     label: h.label,
     color: h.color,
     initials: h.initials,
+    personnummer: h.personnummer,
     displayOrder: h.displayOrder,
   }
 }
@@ -33,7 +34,12 @@ export async function POST(req: Request) {
   if (auth.response) return auth.response
   const parsed = await validateJson(req, HolderBodySchema)
   if (!parsed.ok) return parsed.response
-  const { label, initials: initialsInput, color: colorInput } = parsed.data
+  const {
+    label,
+    initials: initialsInput,
+    color: colorInput,
+    personnummer,
+  } = parsed.data
   const existing = holdersRepo.listForUser(auth.user.id)
   const initials = initialsInput
     ? initialsInput.toUpperCase().slice(0, 3)
@@ -44,6 +50,7 @@ export async function POST(req: Request) {
     label,
     color,
     initials,
+    personnummer: personnummer ?? null,
   })
   return NextResponse.json(toListItem(created))
 }

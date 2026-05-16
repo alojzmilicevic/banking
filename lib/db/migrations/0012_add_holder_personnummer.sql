@@ -1,0 +1,1 @@
+ALTER TABLE `holders` ADD `personnummer` text;

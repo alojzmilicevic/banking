@@ -31,6 +31,12 @@ export const holders = sqliteTable(
     label: text('label').notNull(),
     color: text('color').notNull(),
     initials: text('initials'),
+    // Swedish personnummer (12 digits, no dash). Used by the
+    // Handelsbanken Playwright scrape to autofill BankID. Nullable so
+    // pre-existing households without PIDs (and non-Swedish users)
+    // continue to work; only providers that need it complain when it's
+    // missing.
+    personnummer: text('personnummer'),
     displayOrder: integer('display_order').notNull().default(0),
     createdAt: integer('created_at').notNull().default(sql`(unixepoch() * 1000)`),
   },

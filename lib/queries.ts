@@ -119,7 +119,14 @@ export function useAddHolder() {
 export function useUpdateHolder() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...patch }: { id: string; color?: string }) =>
+    mutationFn: ({
+      id,
+      ...patch
+    }: {
+      id: string
+      color?: string
+      personnummer?: string
+    }) =>
       fetchJson<HolderListItem>(`/api/holders/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -307,6 +314,24 @@ export function useConnectAvanza() {
           flow: 'credentials',
           holderId,
           input: { username, password, totpSeed },
+        }),
+      }),
+    onSuccess: () => invalidateWealth(qc),
+  })
+}
+
+export function useConnectHandelsbanken() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ holderId }: { holderId?: string }) =>
+      fetchJson<AuthChallenge>('/api/auth/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: 'handelsbanken',
+          flow: 'credentials',
+          holderId,
+          input: {},
         }),
       }),
     onSuccess: () => invalidateWealth(qc),

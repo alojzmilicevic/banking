@@ -31,7 +31,7 @@ function isPctSane(pct: number | null): pct is number {
 }
 
 function fmtPct(pct: number, positive: boolean): string {
-  return `${positive ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`
+  return `${positive ? '+' : '−'}${Math.abs(pct).toFixed(2)}%`
 }
 
 function fmtAbs(

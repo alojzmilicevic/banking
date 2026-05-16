@@ -17,6 +17,7 @@ function toListItem(h: HolderRow): HolderListItem {
     label: h.label,
     color: h.color,
     initials: h.initials,
+    personnummer: h.personnummer,
     displayOrder: h.displayOrder,
   }
 }
@@ -29,7 +30,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsed = await validateJson(req, PatchHolderBodySchema)
   if (!parsed.ok) return parsed.response
 
-  const updated = holdersRepo.update(id, auth.user.id, parsed.data)
+  // Empty-string personnummer means "clear it" — translate to null
+  // for the repo so the column is set to SQL NULL rather than ''.
+  const patch: { color?: string; personnummer?: string | null } = { ...parsed.data }
+  if (patch.personnummer === '') patch.personnummer = null
+
+  const updated = holdersRepo.update(id, auth.user.id, patch)
   if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(toListItem(updated))
 }

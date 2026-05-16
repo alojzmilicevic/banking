@@ -17,6 +17,10 @@ export interface HolderListItem {
   label: string
   color: string
   initials: string | null
+  // Swedish personnummer (12 digits, no dash). Used by the
+  // Handelsbanken Playwright scrape to autofill BankID for the holder
+  // whose connection is being synced. Null until the user fills it in.
+  personnummer: string | null
   displayOrder: number
 }
 
