@@ -178,7 +178,12 @@ function buildAccount(
 
   return {
     id: c.account.id,
-    name: c.account.name,
+    // User-supplied alias wins over the provider name when set. The raw
+    // name is preserved so the detail page can still show what the bank
+    // calls it (and offer "Reset to provider name").
+    name: c.account.alias ?? c.account.name,
+    providerName: c.account.name,
+    alias: c.account.alias,
     details: c.account.details,
     product: c.account.product,
     accountType: c.account.accountType,
@@ -250,6 +255,20 @@ interface BucketTotals {
 
 function emptyBucketTotals(): BucketTotals {
   return { total: 0, cash: 0, investment: 0, absoluteGrowth: 0, deployedTotal: 0 }
+}
+
+// Returns false (and pushes a warning into `errors`) when an account's
+// balance currency doesn't match the household base currency. Without this
+// the dashboard would sum e.g. a USD account's numeric value into the SEK
+// total — snapshots correctly skip non-base accounts but the live totals
+// would silently include them.
+function isBaseCurrency(a: DashboardAccount, errors: string[]): boolean {
+  if (a.balance == null || a.balanceCurrency == null) return true
+  if (a.balanceCurrency === BASE_CURRENCY) return true
+  errors.push(
+    `${a.name ?? 'Account'} excluded from totals — ${a.balanceCurrency} can't be combined with ${BASE_CURRENCY}.`,
+  )
+  return false
 }
 
 function addToBucket(b: BucketTotals, a: DashboardAccount, isInvestment: boolean) {
@@ -339,6 +358,10 @@ export function getDashboard(userId: string, period: Period = '1Y'): DashboardRe
 
   for (const a of built) {
     const isInvestment = isInvestmentKind(a.kind)
+    // Non-base-currency accounts still appear in their bucket's account
+    // list (so the UI can show them), but don't contribute to totals —
+    // summing USD and SEK numerically would silently misreport wealth.
+    const countsTowardTotals = isBaseCurrency(a, errors)
     if (a.bucket.kind === 'holder') {
       const list = holderAccounts.get(a.bucket.holderId)
       const tot = holderTotals.get(a.bucket.holderId)
@@ -346,19 +369,19 @@ export function getDashboard(userId: string, period: Period = '1Y'): DashboardRe
         // Dangling holderId (holder was deleted but link wasn't cleaned up).
         // Treat as unassigned so the FE still surfaces the account.
         unassignedAccounts.push(a)
-        addToBucket(unassignedTotals, a, isInvestment)
+        if (countsTowardTotals) addToBucket(unassignedTotals, a, isInvestment)
       } else {
         list.push(a)
-        addToBucket(tot, a, isInvestment)
+        if (countsTowardTotals) addToBucket(tot, a, isInvestment)
       }
     } else if (a.bucket.kind === 'shared') {
       sharedAccounts.push(a)
-      addToBucket(sharedTotals, a, isInvestment)
+      if (countsTowardTotals) addToBucket(sharedTotals, a, isInvestment)
     } else {
       unassignedAccounts.push(a)
-      addToBucket(unassignedTotals, a, isInvestment)
+      if (countsTowardTotals) addToBucket(unassignedTotals, a, isInvestment)
     }
-    addToBucket(grand, a, isInvestment)
+    if (countsTowardTotals) addToBucket(grand, a, isInvestment)
   }
 
   return {

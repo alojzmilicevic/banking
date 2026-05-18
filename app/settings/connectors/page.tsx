@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Building2, Link2, Link2Off, Loader2, Plus, RefreshCw, TrendingUp } from 'lucide-react'
 import { BackLink } from '@/app/components/BackLink'
 import { Alert } from '@/components/ui/alert'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import {
   useDashboard,
@@ -69,6 +70,8 @@ export default function ConnectorsPage() {
   const [syncingId, setSyncingId] = useState<string | null>(null)
   const [ebError, setEbError] = useState<string | null>(null)
   const [reconnectingId, setReconnectingId] = useState<string | null>(null)
+  const [pendingDisconnect, setPendingDisconnect] =
+    useState<DashboardAccountConnection | null>(null)
 
   const sync = useSyncConnection()
   const disconnect = useDisconnect()
@@ -80,14 +83,13 @@ export default function ConnectorsPage() {
   }
 
   function onDisconnect(c: DashboardAccountConnection) {
-    const label = c.label ?? c.providerId
-    if (
-      !confirm(
-        `Disconnect ${label}?\n\nThis deletes its accounts, transactions and history. Snapshot history is recomputed on next sync.`,
-      )
-    )
-      return
-    disconnect.mutate(c.id)
+    setPendingDisconnect(c)
+  }
+
+  function confirmDisconnect() {
+    if (!pendingDisconnect) return
+    const id = pendingDisconnect.id
+    disconnect.mutate(id, { onSettled: () => setPendingDisconnect(null) })
   }
 
   async function onReconnect(c: DashboardAccountConnection, holderId: string) {
@@ -203,6 +205,19 @@ export default function ConnectorsPage() {
       {!dashboard.data && (
         <div className="text-12 text-text-faint">Loading connectors…</div>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDisconnect}
+        title={`Disconnect ${pendingDisconnect?.label ?? pendingDisconnect?.providerId ?? ''}?`}
+        description="This deletes its accounts, transactions and history. Snapshot history is recomputed on next sync."
+        confirmLabel="Disconnect"
+        busy={disconnect.isPending}
+        onConfirm={confirmDisconnect}
+        onCancel={() => {
+          if (disconnect.isPending) return
+          setPendingDisconnect(null)
+        }}
+      />
     </>
   )
 }

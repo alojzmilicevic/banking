@@ -1,6 +1,7 @@
 import type { ConnectionContext, SyncOptions, SyncResult } from '../types'
 import { clearSyncProgress, setSyncProgress } from '@/lib/sync/progress'
 import * as holdersRepo from '@/lib/repositories/holders'
+import { AuthExpiredError, NetworkError, SyncError } from '@/lib/sync/errors'
 import { scrapeHandelsbanken } from './scrape'
 import { normalizeHandelsbanken } from './normalize'
 import { fetchHbDailyValues } from './nav'
@@ -12,13 +13,40 @@ export async function hbSync(
   try {
     return await doSync(connection, opts)
   } catch (e) {
-    setSyncProgress(connection.id, { stage: 'error', message: (e as Error).message })
-    throw e
+    const classified = classifyHbError(e)
+    setSyncProgress(connection.id, { stage: 'error', message: classified.message })
+    throw classified
   } finally {
     // Same five-second hold as Avanza — gives the last poll a window to
     // see the terminal state before it clears.
     setTimeout(() => clearSyncProgress(connection.id), 5_000)
   }
+}
+
+// HB runs Playwright against the real netbank — the failure surface is
+// Playwright timeouts ("Timed out waiting for …", "Timeout 300000ms",
+// "Target page closed") and network errors. classifyError in lib/sync only
+// knows about fetch-shaped errors and HTTP status codes, so without this
+// every HB failure ends up `category: 'unknown'` and the UI loses the
+// auth-expired vs network signal.
+function classifyHbError(e: unknown): SyncError {
+  if (e instanceof SyncError) return e
+  const message = e instanceof Error ? e.message : String(e)
+
+  // BankID timeout — the user didn't complete the sign-in, or the page
+  // never reached an authenticated URL. Surface as auth-expired so the UI
+  // prompts them to reconnect.
+  if (/BankID|waiting for BankID|awaiting-login/i.test(message)) {
+    return new AuthExpiredError(message, { cause: e })
+  }
+
+  // Playwright navigation/XHR timeouts during the capture sequence — treat
+  // as network. The retry path is the same as fetch failures.
+  if (/Timed out waiting for|Timeout \d+ms|Target page closed|net::ERR_/i.test(message)) {
+    return new NetworkError(message, { cause: e })
+  }
+
+  return new SyncError('unknown', message, { cause: e })
 }
 
 async function doSync(

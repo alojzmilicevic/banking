@@ -90,3 +90,27 @@ export function setAccountExcluded(
   accountsRepo.setExcluded(accountId, excluded)
   return { id: accountId, excludedFromTotal: excluded }
 }
+
+// ─── Account alias ──────────────────────────────────────────────────────
+
+export interface SetAccountAliasResult {
+  id: string
+  alias: string | null
+}
+
+// User-supplied display name override. Empty string clears it back to the
+// provider name. No snapshot rebuild — alias is a presentation-only field
+// resolved at dashboard read time.
+export function setAccountAlias(
+  accountId: string,
+  alias: string,
+  userId: string,
+): SetAccountAliasResult | null {
+  const account = accountsRepo.getById(accountId)
+  if (!account) return null
+  const conn = connectionsRepo.getById(account.connectionId)
+  if (!conn || conn.userId !== userId) return null
+  const next = alias.length === 0 ? null : alias
+  accountsRepo.setAlias(accountId, next)
+  return { id: accountId, alias: next }
+}

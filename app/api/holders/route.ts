@@ -10,7 +10,7 @@ import { deriveInitials, pickHolderColor } from '@/lib/holders'
 import type { HolderRow } from '@/lib/db/schema'
 import { HolderBodySchema } from '@/lib/api/schemas'
 import { validateJson } from '@/lib/api/validate'
-import { requireUser } from '@/lib/api/route-helpers'
+import { requireOrBootstrapUser } from '@/lib/api/route-helpers'
 
 function toListItem(h: HolderRow): HolderListItem {
   return {
@@ -30,8 +30,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const auth = requireUser()
-  if (auth.response) return auth.response
+  // Adding the first holder is a legitimate cold-start step (the user
+  // wants to set up their household before linking a bank), so bootstrap
+  // the household row here instead of 401'ing.
+  const auth = requireOrBootstrapUser()
   const parsed = await validateJson(req, HolderBodySchema)
   if (!parsed.ok) return parsed.response
   const {

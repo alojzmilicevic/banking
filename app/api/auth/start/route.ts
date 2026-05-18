@@ -2,11 +2,10 @@ import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import * as authStatesRepo from '@/lib/repositories/auth-states'
 import * as holdersRepo from '@/lib/repositories/holders'
-import * as usersRepo from '@/lib/repositories/users'
 import { getProvider } from '@/lib/providers/registry'
 import { StartAuthBodySchema } from '@/lib/api/schemas'
 import { validateJson } from '@/lib/api/validate'
-import { internalServerError } from '@/lib/api/route-helpers'
+import { internalServerError, requireOrBootstrapUser } from '@/lib/api/route-helpers'
 
 // POST /api/auth/start
 //   body: { providerId: string; flow?: AuthFlow; holderId?: string; input?: Record<string, unknown> }
@@ -36,10 +35,11 @@ export async function POST(req: Request) {
     // Bootstrap on first link. The user row represents the household;
     // individual people become rows in `holders` (added later from the
     // settings UI or by the migration on existing DBs).
-    let user = usersRepo.getDefault()
-    if (!user) {
-      user = usersRepo.create({ id: randomUUID(), name: 'Household' })
-    }
+    const { user } = requireOrBootstrapUser()
+
+    // Opportunistic sweep of expired auth_state rows. Cheap and keeps the
+    // table bounded against loops of failed/abandoned link flows.
+    authStatesRepo.deleteExpired()
 
     // Validate that the supplied holderId belongs to this user. Reject
     // arbitrary uuids so a malicious client can't link connections under

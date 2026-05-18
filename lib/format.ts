@@ -62,3 +62,10 @@ export function fmtMoneyCompact(amount: number | null | undefined): string {
   if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}k`
   return `${sign}${Math.round(abs)}`
 }
+
+// Signed percent for change pills. `positive` is supplied by the caller
+// because some callers derive sign from a different field (e.g. the
+// absolute amount) than the pct itself.
+export function fmtPct(pct: number, positive: boolean): string {
+  return `${positive ? '+' : '−'}${Math.abs(pct).toFixed(2)}%`
+}

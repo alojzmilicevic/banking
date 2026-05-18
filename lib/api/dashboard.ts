@@ -45,7 +45,15 @@ export type DashboardBucket =
 
 export interface DashboardAccount {
   id: string
+  // Display name — resolves to alias when set, otherwise the provider's
+  // raw name. UI components should read `name` everywhere; only the
+  // account detail page distinguishes between alias and providerName so
+  // the user can reset back to the bank's label.
   name: string | null
+  // Always the bank's label — preserved even when an alias overrides it.
+  providerName: string | null
+  // null when the user hasn't customized — i.e. `name === providerName`.
+  alias: string | null
   details: string | null
   product: string | null
   accountType: AccountType | null

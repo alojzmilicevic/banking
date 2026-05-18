@@ -7,7 +7,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { Loader2, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
+import { Loader2, Plus, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { useResizableSidebar } from '@/hooks/use-resizable-sidebar'
 import type { DashboardAccount, DashboardResponse } from '@/lib/api/dashboard'
@@ -106,6 +106,21 @@ export function Sidebar({
         onToggleAll={onToggleAllShared}
         onToggleAccount={onToggleAccount}
       />
+
+      {/* First-run prompt — no holders + no shared accounts means a fresh
+          install. Without this the sidebar is just a logo + sync button. */}
+      {dashboard.holders.length === 0 && dashboard.shared.accounts.length === 0 && (
+        <div className="mt-2 rounded-12 border border-dashed border-border-subtle px-4 py-5 text-center">
+          <p className="text-14 text-text-faint">No accounts linked yet.</p>
+          <Link
+            href="/settings/connectors"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-12 border border-input-border px-4 py-2 text-14 transition-colors hover:bg-white/6 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <Plus className="size-3.5" />
+            Add your first account
+          </Link>
+        </div>
+      )}
 
       <div className="flex-1" />
 

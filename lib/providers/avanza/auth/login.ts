@@ -96,6 +96,21 @@ async function readJsonBody(res: Response): Promise<Record<string, unknown>> {
   }
 }
 
+// Map a non-OK response to a safe, user-facing label. The raw upstream
+// `message` is logged server-side but never forwarded to the client — a
+// future Avanza change could echo back the submitted username (or other
+// inputs) and we don't want that landing in the browser network tab.
+function safeMessageForStatus(stage: 'usercredentials' | 'totp', status: number): string {
+  if (status === 401 || status === 403) {
+    return stage === 'usercredentials'
+      ? 'Avanza rejected the username or password.'
+      : 'Avanza rejected the TOTP code — check the seed and clock skew.'
+  }
+  if (status === 429) return 'Avanza rate-limited the login — try again in a few minutes.'
+  if (status >= 500) return 'Avanza is having trouble responding — try again shortly.'
+  return `Avanza login failed (${stage} returned ${status}).`
+}
+
 export async function loginWithPassword(
   username: string,
   password: string,
@@ -125,12 +140,15 @@ export async function loginWithPassword(
   const credBody = await readJsonBody(credRes)
 
   if (!credRes.ok) {
+    if (typeof credBody.message === 'string') {
+      console.warn(
+        `[avanza] usercredentials ${credRes.status}: ${credBody.message}`,
+      )
+    }
     throw new AvanzaLoginError(
       'usercredentials',
       credRes.status,
-      typeof credBody.message === 'string'
-        ? credBody.message
-        : `usercredentials returned ${credRes.status}`,
+      safeMessageForStatus('usercredentials', credRes.status),
     )
   }
 
@@ -170,12 +188,13 @@ export async function loginWithPassword(
   const totpBody = await readJsonBody(totpRes)
 
   if (!totpRes.ok) {
+    if (typeof totpBody.message === 'string') {
+      console.warn(`[avanza] totp ${totpRes.status}: ${totpBody.message}`)
+    }
     throw new AvanzaLoginError(
       'totp',
       totpRes.status,
-      typeof totpBody.message === 'string'
-        ? totpBody.message
-        : `totp returned ${totpRes.status} (likely wrong TOTP seed or stale code)`,
+      safeMessageForStatus('totp', totpRes.status),
     )
   }
 

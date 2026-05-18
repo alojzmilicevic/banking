@@ -3,7 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: banking:latest
+    # Local-only tag — `banking:latest` could otherwise collide with a
+    # registry image of the same name on `docker compose pull`.
+    image: banking:local
     container_name: banking
     restart: unless-stopped
     env_file: .env
@@ -15,3 +17,10 @@ services:
     volumes:
       - ./data:/app/data
       - ./keys:/app/keys:ro
+    # Cap container log size — the default json-file driver grows
+    # unbounded, which will eventually fill a Pi's disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

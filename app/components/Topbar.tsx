@@ -34,9 +34,13 @@ export function Topbar({
         <div className="mb-1 text-11 font-medium uppercase tracking-eyebrow text-text-faint">
           {label}
         </div>
-        <Sensitive className="flex items-end gap-3">
+        <Sensitive className="flex items-end gap-2">
           <span className="font-mono text-30 font-normal tracking-hero text-foreground tabular-nums">
-            <Money amount={total} currency={currency} />
+            {/* `text-right` pins the value to the right edge of Money's
+                fixed 13ch slot — without it, "1 251 444 kr" leaves trailing
+                whitespace inside its slot, which reads as a wider visual
+                gap between the total and the change pill. */}
+            <Money amount={total} currency={currency} className="text-right" />
           </span>
           <ChangePill change={change} variant="hero" currency={currency} />
         </Sensitive>

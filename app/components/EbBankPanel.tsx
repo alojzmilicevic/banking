@@ -95,21 +95,27 @@ export function EbBankPanel({ holderId }: { holderId: string }) {
         <p className="mb-1.5 text-11 font-semibold uppercase tracking-eyebrow text-muted-foreground">
           All banks
         </p>
-        <Select value={selected} onChange={(e) => setSelected(e.target.value)}>
-          <option value="">{aspsps.isLoading ? 'Loading banks…' : 'Search and select…'}</option>
-          {aspsps.data?.map((a) => {
-            const days = a.maximum_consent_validity
-              ? Math.floor(a.maximum_consent_validity / 86400)
-              : null
-            return (
-              <option key={key(a)} value={key(a)}>
-                {a.name}
-                {days ? ` — ${days}d max consent` : ''}
-                {a.beta ? ' (beta)' : ''}
-              </option>
-            )
-          })}
-        </Select>
+        {!aspsps.isLoading && (aspsps.data?.length ?? 0) === 0 ? (
+          <p className="rounded-10 border border-dashed border-border-subtle px-3 py-2.5 text-12 text-text-faint">
+            No banks available for {country}. Try a different country.
+          </p>
+        ) : (
+          <Select value={selected} onChange={(e) => setSelected(e.target.value)}>
+            <option value="">{aspsps.isLoading ? 'Loading banks…' : 'Search and select…'}</option>
+            {aspsps.data?.map((a) => {
+              const days = a.maximum_consent_validity
+                ? Math.floor(a.maximum_consent_validity / 86400)
+                : null
+              return (
+                <option key={key(a)} value={key(a)}>
+                  {a.name}
+                  {days ? ` — ${days}d max consent` : ''}
+                  {a.beta ? ' (beta)' : ''}
+                </option>
+              )
+            })}
+          </Select>
+        )}
       </div>
 
       {error && <Alert>{error}</Alert>}

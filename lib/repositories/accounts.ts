@@ -28,6 +28,15 @@ export function setExcluded(id: string, excluded: boolean, executor: Executor = 
     .run()
 }
 
+// Pass null to clear the alias and fall back to the provider name.
+export function setAlias(id: string, alias: string | null, executor: Executor = db): void {
+  executor
+    .update(accounts)
+    .set({ alias, updatedAt: Date.now() })
+    .where(eq(accounts.id, id))
+    .run()
+}
+
 // Joined view used by the snapshot rebuilder. The rebuilder loads ALL
 // accounts (including excluded ones) and persists per-account daily rows
 // — the `excluded_from_total` filter is applied at read time so toggling

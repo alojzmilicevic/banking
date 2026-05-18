@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import * as authStatesRepo from '@/lib/repositories/auth-states'
 import * as connectionsRepo from '@/lib/repositories/connections'
 import * as holdersRepo from '@/lib/repositories/holders'
+import * as usersRepo from '@/lib/repositories/users'
 import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/services/wealth'
 import { AuthCallbackQuerySchema } from '@/lib/api/schemas'
@@ -30,6 +31,15 @@ export async function GET(req: Request) {
 
   const pending = authStatesRepo.getByState(state)
   if (!pending) {
+    return NextResponse.redirect(`${url.origin}/?error=unknown_state`)
+  }
+
+  // The auth state row carries its own userId from /api/auth/start, but
+  // we still verify the household exists and matches — a single-tenant
+  // sanity check that future multi-user changes won't silently break.
+  const householdUser = usersRepo.getDefault()
+  if (!householdUser || householdUser.id !== pending.userId) {
+    authStatesRepo.deleteByState(state)
     return NextResponse.redirect(`${url.origin}/?error=unknown_state`)
   }
 

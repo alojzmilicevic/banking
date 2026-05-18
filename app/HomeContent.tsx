@@ -121,6 +121,11 @@ export function HomeContent({
     bulkToggleExclude.error?.message ??
     null
 
+  // Dashboard data-level warnings (currency mismatches, per-account sync
+  // errors). Separate from topError because they're informational, not
+  // fatal — they shouldn't pre-empt a real query/mutation error.
+  const dataWarnings = data?.errors ?? []
+
   return (
     <ChangeModeProvider value={changeMode}>
       {data ? (
@@ -152,6 +157,14 @@ export function HomeContent({
               <div className="flex flex-1 flex-col gap-5 overflow-hidden px-7 py-6">
                 {topError && (
                   <Alert onDismiss={() => setPageError(null)}>{topError}</Alert>
+                )}
+
+                {dataWarnings.length > 0 && (
+                  <Alert variant="warn">
+                    {dataWarnings.length === 1
+                      ? dataWarnings[0]
+                      : `${dataWarnings.length} accounts excluded from totals: ${dataWarnings.join(' ')}`}
+                  </Alert>
                 )}
 
                 <Timeline
@@ -199,7 +212,23 @@ export function HomeContent({
               staring at an infinite shimmer with no way to recover. */}
           {topError && (
             <div className="fixed left-1/2 top-4 z-50 w-[min(35rem,calc(100%-2rem))] -translate-x-1/2">
-              <Alert onDismiss={() => setPageError(null)}>{topError}</Alert>
+              <Alert
+                onDismiss={() => setPageError(null)}
+                action={
+                  dashboard.error
+                    ? {
+                        label: 'Retry',
+                        loading: dashboard.isFetching,
+                        onClick: () => {
+                          setPageError(null)
+                          dashboard.refetch()
+                        },
+                      }
+                    : undefined
+                }
+              >
+                {topError}
+              </Alert>
             </div>
           )}
           <DashboardSkeleton sidebarWidth={initialSidebarWidth} />

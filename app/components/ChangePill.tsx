@@ -10,7 +10,7 @@
 // — read from context — controls *which* number renders. One bug-fix
 // here propagates to every change pill in the app.
 
-import { fmtMoney, fmtMoneyCompact } from '@/lib/format'
+import { fmtMoney, fmtMoneyCompact, fmtPct } from '@/lib/format'
 import { Mask } from '@/components/sensitive-data'
 import { cn } from '@/lib/utils'
 import { useChangeMode } from './change-mode-context'
@@ -28,10 +28,6 @@ const PCT_SANITY_LIMIT = 500
 
 function isPctSane(pct: number | null): pct is number {
   return pct != null && Number.isFinite(pct) && Math.abs(pct) <= PCT_SANITY_LIMIT
-}
-
-function fmtPct(pct: number, positive: boolean): string {
-  return `${positive ? '+' : '−'}${Math.abs(pct).toFixed(2)}%`
 }
 
 function fmtAbs(

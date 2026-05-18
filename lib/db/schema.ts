@@ -137,6 +137,12 @@ export const accounts = sqliteTable(
     // or empty/inactive accounts cluttering the list).
     excludedFromTotal: integer('excluded_from_total').notNull().default(0),
     name: text('name'),
+    // User-supplied override for `name`. Set from the account detail
+    // page to clean up awkward provider names (e.g. "Delat-Spar" →
+    // "Joint savings"). Falls back to `name` when null; survives sync
+    // (the orchestrator only writes provider-sourced fields) but drops
+    // on disconnect since the row is cascaded.
+    alias: text('alias'),
     details: text('details'),
     product: text('product'),
     accountType: text('account_type'), // raw provider type code (CACC, ISK, KF, …)

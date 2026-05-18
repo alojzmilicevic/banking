@@ -73,12 +73,21 @@ export function Sensitive({ children, className }: { children: ReactNode; classN
   return (
     <SensitiveStateContext.Provider value={{ blurred, nested: true }}>
       <span
+        // Keyboard peek: focusable when the data is hidden, Space/Enter
+        // holds reveal while pressed (matches the touch model — press to
+        // peek, release to re-hide). Without this there's no way to see
+        // a value without a pointer.
+        role={hidden ? 'button' : undefined}
+        tabIndex={hidden ? 0 : undefined}
+        aria-pressed={hidden ? peeking : undefined}
+        aria-label={hidden ? 'Press and hold to reveal' : undefined}
         className={cn(
           // Pseudo-element extends the pointer hit area ~4px beyond the
           // text box without affecting layout — peek is finicky on small
           // numbers.
           "relative inline-block before:absolute before:-inset-1 before:content-['']",
-          hidden && 'cursor-pointer touch-none select-none',
+          hidden &&
+            'cursor-pointer touch-none select-none rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
           className,
         )}
         onPointerDown={(e) => {
@@ -102,6 +111,17 @@ export function Sensitive({ children, className }: { children: ReactNode; classN
           e.currentTarget.releasePointerCapture(e.pointerId)
           setPeeking(false)
         }}
+        onKeyDown={(e) => {
+          if (!hidden) return
+          if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault()
+            setPeeking(true)
+          }
+        }}
+        onKeyUp={(e) => {
+          if (e.key === ' ' || e.key === 'Enter') setPeeking(false)
+        }}
+        onBlur={() => setPeeking(false)}
         onClick={(e) => {
           if (hidden) e.stopPropagation()
         }}

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Plus } from 'lucide-react'
 import type { DashboardAccount, DashboardAccountConnection } from '@/lib/api/dashboard'
 import { accountLabel } from '@/lib/accounts'
 import { Money, Sensitive } from '@/components/sensitive-data'
@@ -175,6 +175,22 @@ export function PersonMenuPopover({
                   onClick={() => onToggleAccount(a)}
                 />
               ))}
+            </div>
+          )}
+
+          {!hasAccounts && (
+            <div className="flex flex-col gap-2.5 p-3.5 text-center">
+              <p className="text-13 text-text-faint">
+                No banks linked for this member yet.
+              </p>
+              <Link
+                href="/settings/connectors"
+                onClick={close}
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-input-border bg-secondary px-3 py-1.5 text-12 font-medium text-foreground transition-colors hover:bg-secondary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              >
+                <Plus className="size-3.5" />
+                Link a bank
+              </Link>
             </div>
           )}
         </>

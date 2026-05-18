@@ -20,9 +20,18 @@ export interface AlertProps
     VariantProps<typeof alertVariants> {
   ref?: React.Ref<HTMLDivElement>
   onDismiss?: () => void
+  action?: { label: string; onClick: () => void; loading?: boolean }
 }
 
-export function Alert({ className, variant, ref, onDismiss, children, ...props }: AlertProps) {
+export function Alert({
+  className,
+  variant,
+  ref,
+  onDismiss,
+  action,
+  children,
+  ...props
+}: AlertProps) {
   return (
     <div
       ref={ref}
@@ -35,12 +44,24 @@ export function Alert({ className, variant, ref, onDismiss, children, ...props }
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss"
-          className="float-right -mr-1 -mt-0.5 text-xs opacity-60 hover:opacity-100"
+          className="float-right -mr-1 -mt-0.5 rounded text-xs opacity-60 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
         >
           ✕
         </button>
       )}
-      {children}
+      <div className="flex items-center gap-3">
+        <span className="flex-1">{children}</span>
+        {action && (
+          <button
+            type="button"
+            onClick={action.onClick}
+            disabled={action.loading}
+            className="shrink-0 rounded border border-current px-2 py-1 text-xs font-medium opacity-90 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current disabled:opacity-50"
+          >
+            {action.loading ? 'Retrying…' : action.label}
+          </button>
+        )}
+      </div>
     </div>
   )
 }

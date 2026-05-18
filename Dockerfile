@@ -5,6 +5,12 @@
 
 ARG NODE_VERSION=24
 
+# Tag tracks the latest patch of Node 24 on trixie-slim. For a fully
+# reproducible build, replace with a digest pin, e.g.
+#   FROM node:24-trixie-slim@sha256:<digest> AS base
+# and re-run `docker pull node:24-trixie-slim && docker image inspect ...
+# --format='{{index .RepoDigests 0}}'` to refresh the digest periodically.
+
 # ---------- base ----------
 FROM node:${NODE_VERSION}-trixie-slim AS base
 ENV PNPM_HOME=/pnpm

@@ -52,6 +52,12 @@ $EDITOR .env                      # fill in EB_APPLICATION_ID, BANKING_SECRET
 mkdir -p keys data
 cp /path/to/eb-private.pem keys/private.pem
 chmod 600 keys/private.pem
+chmod 700 keys
+
+# Container runs as uid 1001 — make sure the host bind-mount dirs are
+# readable/writable by it so SQLite can open the DB and the runtime can
+# read the EB key.
+sudo chown -R 1001:1001 data keys
 
 # In .env, point EB_PRIVATE_KEY_PATH at the container path:
 #   EB_PRIVATE_KEY_PATH=/app/keys/private.pem
@@ -105,6 +111,13 @@ you never copy a half-written file:
 docker compose exec -T banking \
   sh -c 'sqlite3 /app/data/banking.db ".backup /app/data/banking.backup.db"'
 # Then ship banking.backup.db wherever you keep backups.
+```
+
+Automate it with a daily cron entry — `crontab -e` and add:
+
+```cron
+# Banking DB backup, 03:15 every day. Rotates a 7-day window of files.
+15 3 * * * cd /srv/banking && docker compose exec -T banking sh -c 'sqlite3 /app/data/banking.db ".backup /app/data/banking.backup-$(date +\%u).db"' >/dev/null 2>&1
 ```
 
 `keys/private.pem` and `.env` are stable — back them up once, somewhere

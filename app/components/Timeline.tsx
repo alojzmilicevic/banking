@@ -14,6 +14,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import Link from 'next/link'
+import { Plus } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { useTimeseries } from '@/lib/queries'
 import { SHARED_META } from '@/lib/holders'
@@ -172,6 +174,28 @@ export function Timeline({
 
   function renderChart() {
     if (series.length === 0 && isLoading) return <ChartShape />
+    // Empty state: no accounts linked yet. timeseries returns a single
+    // zero-valued today point in this case (so series.length is 1, not 0)
+    // — without this check the chart renders a flatline at zero with no
+    // hint about what to do next.
+    const hasAccounts =
+      holders.some((h) => h.accounts.length > 0) || series.some((p) => p.total !== 0)
+    if (!hasAccounts) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+          <p className="text-14 text-text-faint">
+            No accounts linked yet. Link a bank to start tracking your household&apos;s wealth.
+          </p>
+          <Link
+            href="/settings/connectors"
+            className="inline-flex items-center gap-1.5 rounded-md border border-input-border bg-secondary px-3 py-1.5 text-12 font-medium text-foreground transition-colors hover:bg-secondary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
+            <Plus className="size-3.5" />
+            Link a bank
+          </Link>
+        </div>
+      )
+    }
     if (series.length === 0) {
       return (
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

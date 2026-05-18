@@ -21,7 +21,7 @@ export function MenuPopover({
           type="button"
           aria-label={triggerLabel}
           title={triggerLabel}
-          className="ml-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-7 border border-border bg-[rgba(255,255,255,0.05)] text-muted-foreground transition-colors hover:bg-[rgba(255,255,255,0.09)] hover:text-foreground"
+          className="ml-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-7 border border-border bg-secondary text-muted-foreground transition-colors hover:bg-secondary-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
         >
           <MoreVertical className="size-3.75" />
         </button>

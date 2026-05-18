@@ -97,7 +97,12 @@ export function useHolders() {
 export function useAddHolder() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { label: string; initials?: string; color?: string }) =>
+    mutationFn: (input: {
+      label: string
+      initials?: string
+      color?: string
+      personnummer?: string
+    }) =>
       fetchJson<HolderListItem>('/api/holders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -248,6 +253,21 @@ export function useToggleExclude() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ excludedFromTotal: exclude }),
+      }),
+    onSuccess: () => invalidateWealth(qc),
+  })
+}
+
+// Rename an account. Pass an empty string to clear the alias and fall
+// back to the provider name.
+export function useSetAccountAlias() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, alias }: { id: string; alias: string }) =>
+      fetchJson(`/api/accounts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias }),
       }),
     onSuccess: () => invalidateWealth(qc),
   })

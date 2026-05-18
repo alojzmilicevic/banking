@@ -2,6 +2,7 @@
 // the same five-line patterns drifting between routes (auth check,
 // error-shape, error-message extraction).
 
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import * as connectionsRepo from '@/lib/repositories/connections'
 import * as usersRepo from '@/lib/repositories/users'
@@ -29,6 +30,18 @@ export function requireUser(): RequireUserResult {
   const user = usersRepo.getDefault()
   if (!user) {
     return { response: NextResponse.json({ error: 'No user' }, { status: 401 }) }
+  }
+  return { user }
+}
+
+// Like requireUser, but bootstraps the household user row on first call
+// instead of 401'ing. Use for routes that legitimately run before any
+// bank is linked — adding a holder, /api/auth/start. Other routes should
+// stay on requireUser so they fail loudly when the DB isn't initialized.
+export function requireOrBootstrapUser(): { user: User } {
+  let user = usersRepo.getDefault()
+  if (!user) {
+    user = usersRepo.create({ id: randomUUID(), name: 'Household' })
   }
   return { user }
 }

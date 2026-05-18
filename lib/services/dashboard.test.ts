@@ -70,8 +70,9 @@ function addAccount(
   id: string,
   connectionId: string,
   amount: number,
-  opts: { kind?: string; iban?: string; excluded?: boolean } = {},
+  opts: { kind?: string; iban?: string; excluded?: boolean; currency?: string } = {},
 ): void {
+  const currency = opts.currency ?? 'SEK'
   testDb
     .insert(accounts)
     .values({
@@ -80,7 +81,7 @@ function addAccount(
       kind: opts.kind ?? 'cash',
       ownership: 'sole',
       excludedFromTotal: opts.excluded ? 1 : 0,
-      currency: 'SEK',
+      currency,
       iban: opts.iban ?? null,
     })
     .run()
@@ -90,7 +91,7 @@ function addAccount(
       accountId: id,
       balanceType: 'CLBD',
       amount,
-      currency: 'SEK',
+      currency,
     })
     .run()
 }
@@ -207,5 +208,25 @@ describe('getDashboard', () => {
     expect(almaBucket.accounts).toHaveLength(2)
     expect(almaBucket.total).toBe(1000)
     expect(out.totals.total).toBe(1000)
+  })
+
+  it('excludes non-base-currency accounts from totals and reports an error', async () => {
+    const { alma } = seedHousehold()
+    addConnection('c1', [alma])
+    addAccount('a-sek', 'c1', 1000)
+    addAccount('a-usd', 'c1', 500, { currency: 'USD' })
+
+    const getDashboard = await importGetDashboard()
+    const out = getDashboard('u1', '1Y')
+
+    // USD account appears in the holder's account list but does NOT add to
+    // the total — summing numerically with SEK would silently misreport
+    // wealth.
+    const almaBucket = out.holders.find((h) => h.id === alma)!
+    expect(almaBucket.accounts).toHaveLength(2)
+    expect(almaBucket.total).toBe(1000)
+    expect(out.totals.total).toBe(1000)
+    expect(out.errors.length).toBeGreaterThan(0)
+    expect(out.errors[0]).toMatch(/USD/)
   })
 })

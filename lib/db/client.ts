@@ -4,7 +4,6 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import fs from 'node:fs'
 import path from 'node:path'
 import * as schema from './schema'
-import { importLegacyIfPresent } from '@/lib/sync/import-legacy'
 import { backfillAccountDailySnapshotsIfEmpty } from '@/lib/sync/backfill-account-daily-snapshots'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
@@ -26,13 +25,6 @@ function createDb(): Drizzle {
   sqlite.pragma('busy_timeout = 5000')
   const instance = drizzle(sqlite, { schema })
   migrate(instance, { migrationsFolder: MIGRATIONS_FOLDER })
-
-  const result = importLegacyIfPresent(instance)
-  if (result.imported) {
-    console.log(
-      `[db] Imported legacy state.json: user=${result.userId} connections=${result.connections} accounts=${result.accounts}`,
-    )
-  }
   return instance
 }
 

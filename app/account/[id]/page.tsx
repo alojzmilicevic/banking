@@ -4,6 +4,7 @@ import { accountLabel } from '@/lib/accounts'
 import { Money, Sensitive } from '@/components/sensitive-data'
 import { BackLink } from '@/app/components/BackLink'
 import { Card, CardTitle } from '@/components/ui/card'
+import { AccountTitle } from './AccountTitle'
 import {
   Table,
   TableBody,
@@ -48,10 +49,15 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
 
   const { account, connection, balances, transactions } = details
 
-  const title = accountLabel(account, 'Account')
+  // Provider-name label, ignoring any alias. Used as the rename input
+  // placeholder + the "Bank label" affordance under the title.
+  const providerLabel = accountLabel(
+    { ...account, name: account.name },
+    'Account',
+  )
 
   const detailRows: Array<[string, string | null | undefined]> = [
-    ['Holder', account.name],
+    ['Account name', account.name],
     ['Product', account.product],
     ['IBAN', account.iban],
     ['BBAN', account.bban],
@@ -65,7 +71,11 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
       <div className="mb-4">
         <BackLink href="/">Back</BackLink>
       </div>
-      <h1 className="mb-6 text-24 font-semibold">{title}</h1>
+      <AccountTitle
+        accountId={account.id}
+        initialAlias={account.alias}
+        providerLabel={providerLabel}
+      />
 
       <Card>
         <CardTitle>Details</CardTitle>
@@ -118,31 +128,33 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
           </p>
         )}
         {transactions.length > 0 && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transactions.map((t) => (
-                <TableRow
-                  key={t.fingerprint}
-                  className={cn(t.status && t.status !== 'BOOK' && 'opacity-60')}
-                >
-                  <TableCell>{fmtDate(t.date)}</TableCell>
-                  <TableCell>{t.description || t.counterparty || '—'}</TableCell>
-                  <TableCell className="text-muted-foreground">{t.status || ''}</TableCell>
-                  <TableCell className="text-right tabular-nums whitespace-nowrap">
-                    <Amount amount={t.amount} currency={t.currency} />
-                  </TableCell>
+          <div className="-mx-4 overflow-x-auto sm:mx-0">
+            <Table className="min-w-md">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {transactions.map((t) => (
+                  <TableRow
+                    key={t.fingerprint}
+                    className={cn(t.status && t.status !== 'BOOK' && 'opacity-60')}
+                  >
+                    <TableCell>{fmtDate(t.date)}</TableCell>
+                    <TableCell>{t.description || t.counterparty || '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">{t.status || ''}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">
+                      <Amount amount={t.amount} currency={t.currency} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </Card>
     </main>

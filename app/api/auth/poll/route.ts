@@ -4,13 +4,16 @@ import { getProvider } from '@/lib/providers/registry'
 import { syncConnection } from '@/lib/services/wealth'
 import { PollAuthQuerySchema } from '@/lib/api/schemas'
 import { validateQuery } from '@/lib/api/validate'
-import { recordInitialSyncError } from '@/lib/api/route-helpers'
+import { recordInitialSyncError, requireUser } from '@/lib/api/route-helpers'
 
 // GET /api/auth/poll?state=...
 // Returns the same AuthChallenge shape as /api/auth/start. The frontend
 // keeps polling on `kind: 'polling'` and stops on `complete` or `error`.
 
 export async function GET(req: Request) {
+  const auth = requireUser()
+  if (auth.response) return auth.response
+
   const url = new URL(req.url)
   const parsed = validateQuery(url, PollAuthQuerySchema)
   if (!parsed.ok) {
@@ -19,7 +22,7 @@ export async function GET(req: Request) {
   const { state } = parsed.data
 
   const row = authStatesRepo.getByState(state)
-  if (!row) {
+  if (!row || row.userId !== auth.user.id) {
     return NextResponse.json({ kind: 'error', state, message: 'Unknown state' })
   }
 

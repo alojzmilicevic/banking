@@ -30,9 +30,19 @@ export const AuthCallbackQuerySchema = z.object({
   error_description: z.string().optional(),
 })
 
-export const PatchAccountBodySchema = z.object({
-  excludedFromTotal: z.boolean(),
-})
+// Account patch — every field optional, but at least one must be present
+// so a no-op PATCH returns a clear 400 instead of silently succeeding.
+//
+// `alias`: empty string clears the override (falls back to provider name);
+// any other string up to 100 chars is stored as-is.
+export const PatchAccountBodySchema = z
+  .object({
+    excludedFromTotal: z.boolean().optional(),
+    alias: z.string().trim().max(100).optional(),
+  })
+  .refine((v) => v.excludedFromTotal !== undefined || v.alias !== undefined, {
+    message: 'at least one field is required',
+  })
 
 export const PERIODS = ['1W', '1M', '3M', '1Y', 'ALL'] as const
 export const PeriodQuerySchema = z.object({
@@ -64,7 +74,13 @@ const personnummerSchema = z
 export const HolderBodySchema = z.object({
   label: z.string().trim().min(1, 'Label required').max(100),
   initials: z.string().trim().min(1).max(3).optional(),
-  color: z.string().trim().min(1).max(32).optional(),
+  // Whitelist creation colors against the preset palette too (same rule
+  // as PATCH), so the picker in the Add Member modal can't write an
+  // arbitrary OKLCH string and skew the four derived tints.
+  color: z
+    .string()
+    .refine(isHolderPaletteColor, 'color must be one of the preset palette values')
+    .optional(),
   personnummer: personnummerSchema.optional(),
 })
 
