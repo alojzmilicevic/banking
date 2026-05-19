@@ -1,15 +1,13 @@
 services:
   banking:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    # Local-only tag — `banking:latest` could otherwise collide with a
-    # registry image of the same name on `docker compose pull`.
-    image: banking:local
+    # Pulled from GHCR by Watchtower; CI builds and pushes on every merge to
+    # `main`. To pin a specific version (e.g. for rollback), replace `:latest`
+    # with `:sha-<short>` and remove the watchtower.enable label below.
+    image: ghcr.io/alojzmilicevic/banking:latest
     container_name: banking
     restart: unless-stopped
     env_file: .env
-    # Bind to localhost only — Tailscale Serve (or Caddy) on the host
+    # Bind to localhost only — Caddy (or Tailscale Serve) on the host
     # reverse-proxies from the tailnet interface to here. Never publish
     # this on 0.0.0.0 unless you really mean to.
     ports:
@@ -17,6 +15,16 @@ services:
     volumes:
       - ./data:/app/data
       - ./keys:/app/keys:ro
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     # Cap container log size — the default json-file driver grows
     # unbounded, which will eventually fill a Pi's disk.
     logging:
@@ -30,6 +38,28 @@ services:
     networks:
       - default
       - proxy
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+  # Polls GHCR every 60s for new `:latest` images on labeled containers,
+  # pulls + recreates them, and prunes the old image. `WATCHTOWER_LABEL_ENABLE`
+  # means it only touches containers with the explicit opt-in label above,
+  # so the Caddy stack at /srv/caddy/ is untouched.
+  #
+  # If you keep the GHCR package private, see DEPLOY.md → "Option B" for
+  # the two extra lines to mount a Docker auth config.
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: banking-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: "60"
+    networks:
+      - default
 
 networks:
   proxy:
