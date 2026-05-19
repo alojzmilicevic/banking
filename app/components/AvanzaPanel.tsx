@@ -42,7 +42,7 @@ export function AvanzaPanel({
   return (
     <div className="flex flex-col gap-3">
       <div className="rounded-lg border border-border bg-secondary/30 p-3 text-xs text-muted-foreground">
-        Stored in macOS Keychain. The TOTP seed is the base32 string under{' '}
+        Stored encrypted in the app database. The TOTP seed is the base32 string under{' '}
         <em>Kopiera nyckeln</em> when you set up 2FA — same one your authenticator app holds.
         Syncs refresh themselves silently when the cookie session expires.
       </div>

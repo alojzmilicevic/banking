@@ -40,13 +40,15 @@ async function doSync(
   connection: ConnectionContext,
   opts: SyncOptions,
 ): Promise<SyncResult> {
-  // Avanza creds live in the Keychain, not in connection.credentials —
-  // we ignore whatever the orchestrator hands us and read directly so
-  // the plaintext never even touches the orchestrator process briefly.
+  // Read creds directly from the encrypted store rather than using
+  // connection.credentials. The orchestrator's generic decrypt path
+  // works too, but going through credentials-store keeps the Avanza
+  // round-trip (sync re-saves a refreshed cookie jar below) symmetric
+  // with the load.
   const creds = loadAvanzaCredentials(connection.id)
   if (!creds) {
     throw new AuthExpiredError(
-      'Avanza connection has no Keychain credentials — re-link via Add bank',
+      'Avanza connection has no stored credentials — re-link via Add bank',
     )
   }
 
@@ -85,12 +87,12 @@ async function doSync(
 
   setSyncProgress(connection.id, { stage: 'done' })
 
-  // Round-trip the live cookie jar back into the Keychain — AZACSRF in
-  // particular rotates mid-sync, and dropping the new value here would
-  // leave the next sync sending the stale one and tripping CSRF. We
-  // persist directly (no refreshedCredentials in the SyncResult) since
-  // the orchestrator's persist path goes to the encrypted DB blob,
-  // which we've intentionally bypassed for Avanza.
+  // Round-trip the live cookie jar back into the credential store —
+  // AZACSRF in particular rotates mid-sync, and dropping the new value
+  // here would leave the next sync sending the stale one and tripping
+  // CSRF. We persist directly rather than via SyncResult.refreshedCredentials
+  // so the write is unconditional even if persistSyncResult bails for
+  // an unrelated reason.
   saveAvanzaCredentials(connection.id, {
     cookies: api.cookieMap(),
     username: creds.username,

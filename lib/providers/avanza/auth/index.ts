@@ -10,7 +10,6 @@
 import { randomUUID } from 'node:crypto'
 import * as connectionsRepo from '@/lib/repositories/connections'
 import * as holdersRepo from '@/lib/repositories/holders'
-import { deleteCredentials } from '@/lib/sync/credentials'
 import type {
   AuthChallenge,
   CompleteAuthInput,
@@ -102,12 +101,6 @@ export async function avanzaStartAuth(input: StartAuthInput): Promise<AuthChalle
     )
   }
 
-  // Avanza creds skip the encrypted-DB path used by other providers
-  // and land in macOS Keychain instead — see credentials-store.ts.
-  // Pre-Keychain rows in connection_credentials may exist for older
-  // connections — clear those so the same plaintext doesn't live in
-  // two places (and so a leaked BANKING_SECRET can't decrypt them).
-  deleteCredentials(connectionId)
   saveAvanzaCredentials(connectionId, credentials)
 
   // No auto-sync here — the client drives the initial sync as a

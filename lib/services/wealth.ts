@@ -23,7 +23,6 @@
 import * as accountsRepo from '@/lib/repositories/accounts'
 import * as connectionsRepo from '@/lib/repositories/connections'
 import { rebuildSnapshotsForUser } from '@/lib/sync/snapshots'
-import { deleteAvanzaCredentials } from '@/lib/providers/avanza/auth/credentials-store'
 
 // Re-export the sync entry points so the wealth service is the only
 // import path callers need to know. The implementation lives in
@@ -50,12 +49,6 @@ export function disconnectConnection(
 ): DisconnectResult | null {
   const row = connectionsRepo.getById(connectionId)
   if (!row || row.userId !== userId) return null
-  // For Avanza the encrypted-DB row would never have existed (creds
-  // live in Keychain, not connection_credentials), so the cascade
-  // can't reach them — clear the Keychain item explicitly.
-  if (row.providerId === 'avanza') {
-    deleteAvanzaCredentials(connectionId)
-  }
   connectionsRepo.deleteById(connectionId)
   rebuildSnapshotsForUser(row.userId)
   return { removed: connectionId }
