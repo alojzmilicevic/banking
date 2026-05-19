@@ -5,7 +5,7 @@ import { useConnectAvanza, useSyncConnection } from '@/lib/queries'
 import { useSyncProgressLabel } from './use-sync-progress-label'
 
 // The link flow has two visible phases on purpose: authentication (the
-// /usercredentials → /totp dance + Keychain save, ~1-2s) and sync
+// /usercredentials → /totp dance + credential save, ~1-2s) and sync
 // (categorizedAccounts + 12 months of chart data, ~5-30s). Each gets a
 // distinct label so the user isn't staring at a single "Logging in…"
 // spinner during what's mostly historical-data backfill. Sync errors

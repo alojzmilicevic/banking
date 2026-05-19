@@ -1,41 +1,39 @@
-// Avanza credentials live in the macOS Keychain rather than the
-// encrypted SQLite blob used by other providers. Rationale: the
-// password + TOTP seed together fully bypass 2FA (an attacker can
-// generate codes), so a single leak (DB file + .env.local) shouldn't
-// be enough to compromise the account. Keychain keeps the secret
-// material outside the project directory — backups, accidental
-// commits, and cloud sync no longer carry it.
+// Avanza credentials are persisted via the same encrypted-DB path as
+// every other provider (lib/sync/credentials.ts) — AES-256-GCM under
+// BANKING_SECRET, stored in connection_credentials. Earlier this lived
+// in the macOS Keychain for an extra layer of separation between the
+// ciphertext and the decryption key, but that only worked on Mac dev
+// boxes — the app deploys to Linux (Docker on a Pi), where there's no
+// headless-friendly equivalent. On a single-user self-hosted host the
+// Keychain layer was marginal anyway, so we collapse onto the
+// platform-independent encrypted-blob path.
 
 import {
-  deleteKeychainItem,
-  getKeychainItem,
-  setKeychainItem,
-} from '@/lib/crypto/keychain'
+  deleteCredentials,
+  loadCredentials,
+  saveCredentials,
+} from '@/lib/sync/credentials'
 import type { AvanzaCredentials } from './login'
-
-// One Keychain item per (service, account). Account = connectionId so
-// the household's per-holder Avanza connections each get their own
-// entry, and disconnect can target a single one cleanly.
-const SERVICE = 'banking-app-avanza'
 
 export function saveAvanzaCredentials(
   connectionId: string,
   credentials: AvanzaCredentials,
 ): void {
-  setKeychainItem(SERVICE, connectionId, JSON.stringify(credentials))
+  // Spread into an anonymous object literal so TS infers a structural
+  // shape assignable to Record<string, unknown>; passing the nominal
+  // AvanzaCredentials interface directly trips a type error.
+  saveCredentials(connectionId, { ...credentials })
 }
 
 export function loadAvanzaCredentials(connectionId: string): AvanzaCredentials | null {
-  const raw = getKeychainItem(SERVICE, connectionId)
-  if (!raw) return null
-  try {
-    return JSON.parse(raw) as AvanzaCredentials
-  } catch {
-    // Corrupted item — treat as missing so the user re-links.
-    return null
-  }
+  // loadCredentials returns Record<string, unknown> | null; the shape is
+  // whatever we wrote, so cast back to AvanzaCredentials. A null here
+  // means the row is missing OR decryption failed (corrupted / tampered
+  // / BANKING_SECRET changed) — callers treat both the same way: prompt
+  // re-link.
+  return loadCredentials(connectionId) as AvanzaCredentials | null
 }
 
 export function deleteAvanzaCredentials(connectionId: string): void {
-  deleteKeychainItem(SERVICE, connectionId)
+  deleteCredentials(connectionId)
 }

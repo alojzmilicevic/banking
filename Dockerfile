@@ -24,6 +24,11 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# scripts/ must be present so the root postinstall hook
+# (node scripts/build-info.mjs) can run. BUILD_SHA isn't set in this
+# stage so it stamps a 'dev' artifact; the builder stage's prebuild
+# overwrites it with the real SHA.
+COPY scripts ./scripts
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile
 
@@ -31,6 +36,13 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 FROM base AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+# Build identity: CI passes the commit SHA via --build-arg so the
+# generated lib/build-info.ts can attribute the image to a commit.
+# .dockerignore excludes .git, so the in-container `git rev-parse`
+# fallback in scripts/build-info.mjs won't work here — BUILD_SHA is
+# how the SHA reaches the build.
+ARG BUILD_SHA=""
+ENV BUILD_SHA=${BUILD_SHA}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build
