@@ -4,7 +4,10 @@
   "private": true,
   "packageManager": "pnpm@11.0.9",
   "scripts": {
+    "postinstall": "node scripts/build-info.mjs",
+    "predev": "node scripts/build-info.mjs",
     "dev": "node scripts/dev-port.mjs",
+    "prebuild": "node scripts/build-info.mjs",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",

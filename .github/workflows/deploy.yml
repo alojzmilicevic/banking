@@ -69,6 +69,11 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Pass the commit SHA into the build so scripts/build-info.mjs
+          # can stamp the image with a stable buildId + codename. The
+          # short form is enough; the script slices to 7 chars anyway.
+          build-args: |
+            BUILD_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false

@@ -5,6 +5,7 @@ import { SettingsNav } from './SettingsNav'
 const SECTIONS = [
   { label: 'General', href: '/settings' as const },
   { label: 'Connectors', href: '/settings/connectors' as const },
+  { label: 'About', href: '/settings/about' as const },
 ]
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {

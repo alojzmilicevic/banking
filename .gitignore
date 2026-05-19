@@ -12,3 +12,4 @@ next-env.d.ts
 .dev-url
 .dev-pid
 .eslintcache
+lib/build-info.ts
