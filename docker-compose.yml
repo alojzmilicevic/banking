@@ -46,10 +46,14 @@ services:
   # means it only touches containers with the explicit opt-in label above,
   # so the Caddy stack at /srv/caddy/ is untouched.
   #
+  # `nicholas-fedor/watchtower` is the maintained community fork of the
+  # original `containrrr/watchtower`, which is unmaintained as of 2024.
+  # Same author handle on Docker Hub: `nickfedor/watchtower`.
+  #
   # If you keep the GHCR package private, see DEPLOY.md → "Option B" for
   # the two extra lines to mount a Docker auth config.
   watchtower:
-    image: containrrr/watchtower:latest
+    image: ghcr.io/nicholas-fedor/watchtower:latest
     container_name: banking-watchtower
     restart: unless-stopped
     volumes:
