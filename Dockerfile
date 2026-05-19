@@ -24,6 +24,11 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# scripts/ must be present so the root postinstall hook
+# (node scripts/build-info.mjs) can run. BUILD_SHA isn't set in this
+# stage so it stamps a 'dev' artifact; the builder stage's prebuild
+# overwrites it with the real SHA.
+COPY scripts ./scripts
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile
 

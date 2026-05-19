@@ -19,8 +19,9 @@ export function saveAvanzaCredentials(
   connectionId: string,
   credentials: AvanzaCredentials,
 ): void {
-  // AvanzaCredentials is structurally a Record<string, unknown> but TS
-  // doesn't widen named interfaces to index signatures without a cast.
+  // Spread into an anonymous object literal so TS infers a structural
+  // shape assignable to Record<string, unknown>; passing the nominal
+  // AvanzaCredentials interface directly trips a type error.
   saveCredentials(connectionId, { ...credentials })
 }
 
