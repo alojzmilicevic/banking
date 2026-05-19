@@ -52,8 +52,14 @@ export async function POST(req: Request) {
     }
 
     const state = randomUUID()
-    const origin = new URL(req.url).origin
-    const redirectUrl = `${origin}/api/auth/callback`
+    // Behind a reverse proxy (Caddy on the Pi), the upstream connection is
+    // plain HTTP, so req.url's protocol is `http:`. EB validates redirect
+    // URLs as exact strings — read X-Forwarded-Proto/Host so the URL we
+    // send matches what's registered (https://…).
+    const url = new URL(req.url)
+    const proto = req.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', '')
+    const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? url.host
+    const redirectUrl = `${proto}://${host}/api/auth/callback`
 
     const challenge = await provider.startAuth({
       userId: user.id,

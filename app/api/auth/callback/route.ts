@@ -16,22 +16,27 @@ import { errorMessage, recordInitialSyncError } from '@/lib/api/route-helpers'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
+  // Public origin behind Caddy is https, but the upstream connection is http,
+  // so url.origin alone would redirect via http and force a Caddy bounce.
+  const proto = req.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', '')
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? url.host
+  const origin = `${proto}://${host}`
   const parsed = validateQuery(url, AuthCallbackQuerySchema)
   if (!parsed.ok) {
-    return NextResponse.redirect(`${url.origin}/?error=invalid_callback_query`)
+    return NextResponse.redirect(`${origin}/?error=invalid_callback_query`)
   }
   const { code, state, error, error_description: errorDesc } = parsed.data
 
   if (error) {
-    return NextResponse.redirect(`${url.origin}/?error=${encodeURIComponent(errorDesc || error)}`)
+    return NextResponse.redirect(`${origin}/?error=${encodeURIComponent(errorDesc || error)}`)
   }
   if (!state) {
-    return NextResponse.redirect(`${url.origin}/?error=missing_state`)
+    return NextResponse.redirect(`${origin}/?error=missing_state`)
   }
 
   const pending = authStatesRepo.getByState(state)
   if (!pending) {
-    return NextResponse.redirect(`${url.origin}/?error=unknown_state`)
+    return NextResponse.redirect(`${origin}/?error=unknown_state`)
   }
 
   // The auth state row carries its own userId from /api/auth/start, but
@@ -40,7 +45,7 @@ export async function GET(req: Request) {
   const householdUser = usersRepo.getDefault()
   if (!householdUser || householdUser.id !== pending.userId) {
     authStatesRepo.deleteByState(state)
-    return NextResponse.redirect(`${url.origin}/?error=unknown_state`)
+    return NextResponse.redirect(`${origin}/?error=unknown_state`)
   }
 
   try {
@@ -48,7 +53,7 @@ export async function GET(req: Request) {
     if (!provider.completeAuth) {
       authStatesRepo.deleteByState(state)
       return NextResponse.redirect(
-        `${url.origin}/?error=${encodeURIComponent(`${provider.name} has no callback flow`)}`,
+        `${origin}/?error=${encodeURIComponent(`${provider.name} has no callback flow`)}`,
       )
     }
     const completed = await provider.completeAuth({ state, code: code ?? undefined })
@@ -95,12 +100,12 @@ export async function GET(req: Request) {
       recordInitialSyncError(connectionId, e, 'callback')
     }
 
-    return NextResponse.redirect(`${url.origin}/?connected=${connectionId}`)
+    return NextResponse.redirect(`${origin}/?connected=${connectionId}`)
   } catch (e) {
     // Anything that throws here is recoverable on retry, so leave the
     // auth state row in place. (Stale rows time out on `expiresAt`.)
     return NextResponse.redirect(
-      `${url.origin}/?error=${encodeURIComponent(errorMessage(e))}`,
+      `${origin}/?error=${encodeURIComponent(errorMessage(e))}`,
     )
   }
 }
