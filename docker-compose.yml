@@ -24,3 +24,13 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # Join the shared `proxy` network so Caddy can reach this container
+    # by its service name (`banking:3000`). The default network is kept
+    # so `docker compose` still wires things up sensibly.
+    networks:
+      - default
+      - proxy
+
+networks:
+  proxy:
+    external: true
