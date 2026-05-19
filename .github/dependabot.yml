@@ -1,0 +1,16 @@
+version: 2
+updates:
+  # Bump versions of GitHub Actions used in workflows under .github/workflows/.
+  # Catches things like the Node 20 -> Node 24 deprecation: when docker/* and
+  # actions/* ship majors that run on Node 24, dependabot opens a PR to bump.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      docker:
+        patterns:
+          - "docker/*"
+      actions:
+        patterns:
+          - "actions/*"
