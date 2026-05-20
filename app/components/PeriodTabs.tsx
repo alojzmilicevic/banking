@@ -1,6 +1,7 @@
 import { SegmentedControl, type SegmentedControlItem } from './SegmentedControl'
 
-export type Period = '1W' | '1M' | '3M' | '1Y' | 'ALL'
+export const PERIODS = ['1W', '1M', '3M', '1Y', 'ALL'] as const
+export type Period = (typeof PERIODS)[number]
 
 const ITEMS: readonly SegmentedControlItem<Period>[] = [
   { id: '1W', label: '1W' },
