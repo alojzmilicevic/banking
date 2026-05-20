@@ -10,17 +10,19 @@ import type { DashboardAccount } from '@/lib/api/dashboard'
 type AccountLabelable = {
   id: string
   name: string | null
+  alias: string | null
   details: string | null
   product: string | null
   iban: string | null
 }
 
-// What to show in a row's primary line. Falls back through the most
-// human-friendly fields first; if none are set, the optional `fallback`
-// is used (e.g. "Account" on the detail page) before giving up and
-// returning the raw id so empty rows never render blank.
+// What to show in a row's primary line. A user-supplied alias always wins
+// so renames in the detail view propagate everywhere; otherwise we fall
+// back through the most human-friendly provider fields. `fallback` (e.g.
+// "Account" on the detail page) catches accounts with nothing useful set
+// before we give up and return the raw id so rows never render blank.
 export function accountLabel(a: AccountLabelable, fallback?: string): string {
-  return a.details || a.product || a.name || a.iban || fallback || a.id
+  return a.alias || a.details || a.product || a.name || a.iban || fallback || a.id
 }
 
 export interface AccountPartition {

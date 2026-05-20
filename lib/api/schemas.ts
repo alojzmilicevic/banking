@@ -50,6 +50,15 @@ export const PeriodQuerySchema = z.object({
 })
 export type Period = (typeof PERIODS)[number]
 
+// Single fallback for any place that pulls a period out of an untrusted
+// source (URL query string, search params). Returns '1Y' for anything
+// that isn't one of the known values, so a hand-edited `?period=foo`
+// never throws through React Query / the timeseries service.
+export function parsePeriod(raw: string | string[] | null | undefined): Period {
+  if (typeof raw !== 'string') return '1Y'
+  return (PERIODS as readonly string[]).includes(raw) ? (raw as Period) : '1Y'
+}
+
 export const InstitutionsQuerySchema = z.object({
   country: z.string().regex(/^[A-Za-z]{2}$/, 'country must be a 2-letter code').default('SE'),
   provider: z.string().min(1).default('enable-banking'),

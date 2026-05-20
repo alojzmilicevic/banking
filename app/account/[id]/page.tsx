@@ -51,10 +51,7 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
 
   // Provider-name label, ignoring any alias. Used as the rename input
   // placeholder + the "Bank label" affordance under the title.
-  const providerLabel = accountLabel(
-    { ...account, name: account.name },
-    'Account',
-  )
+  const providerLabel = accountLabel({ ...account, alias: null }, 'Account')
 
   const detailRows: Array<[string, string | null | undefined]> = [
     ['Account name', account.name],

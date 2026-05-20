@@ -9,6 +9,7 @@
 // re-label the topbar number/delta.
 
 import { useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocalStorage } from '@/hooks/use-local-storage'
 import { DashboardSkeleton } from './components/DashboardSkeleton'
 import { MobileDashboardSkeleton } from './components/MobileDashboardSkeleton'
@@ -19,6 +20,7 @@ import { Topbar } from './components/Topbar'
 import { type ChangeMode } from './components/ChangeModeToggle'
 import { ChangeModeProvider } from './components/change-mode-context'
 import { type Period } from './components/PeriodTabs'
+import { parsePeriod } from '@/lib/api/schemas'
 import { Alert } from '@/components/ui/alert'
 import {
   useBulkToggleExclude,
@@ -39,12 +41,37 @@ const EMPTY_SNAP: TimelineSnapshot = {
 export function HomeContent({
   initialError,
   initialSidebarWidth,
+  initialPeriod,
 }: {
   initialError: string | null
   initialSidebarWidth: number
+  // Validated by the server on first load; the client re-validates on every
+  // change so a hand-edited `?period=foo` URL falls back to '1Y' instead of
+  // throwing through React Query.
+  initialPeriod: Period
 }) {
-  const [period, setPeriod] = useState<Period>('1Y')
-  const [view, setView] = useState<ViewSelection>('all')
+  // Period + view live in the URL so reloads + shared links restore the
+  // user's view. `initialPeriod` is what the server prefetched against —
+  // we trust it for the first render to avoid a hydration mismatch, then
+  // sync from `searchParams` on subsequent renders.
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const rawPeriod = searchParams.get('period')
+  const period: Period = rawPeriod === null ? initialPeriod : parsePeriod(rawPeriod)
+  const view: ViewSelection = searchParams.get('view') ?? 'all'
+
+  function writeParam(key: string, value: string, defaultValue: string) {
+    const next = new URLSearchParams(searchParams.toString())
+    if (value === defaultValue) next.delete(key)
+    else next.set(key, value)
+    const qs = next.toString()
+    // replace (not push) — period/view toggles aren't navigation events;
+    // back button should leave the page, not cycle through prior periods.
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
+  const setPeriod = (p: Period) => writeParam('period', p, '1Y')
+  const setView = (v: ViewSelection) => writeParam('view', v, 'all')
   // Persisted via localStorage so the Settings page can flip it from
   // /settings (different route, can't share React state otherwise).
   const [showCombined, setShowCombined] = useLocalStorage<boolean>('aloma:show-combined', true)

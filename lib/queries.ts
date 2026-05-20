@@ -11,11 +11,14 @@ import {
   type QueryClient,
 } from '@tanstack/react-query'
 import type {
+  DashboardAccount,
   DashboardResponse,
   HolderListItem,
   TimeseriesResponse,
 } from '@/lib/api/dashboard'
+import { qk } from '@/lib/query-keys'
 
+export { qk }
 export type { HolderListItem }
 
 // ─── shared types ───────────────────────────────────────────────────────
@@ -46,21 +49,89 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T
 }
 
-// ─── query keys ─────────────────────────────────────────────────────────
+// ─── invalidation helpers ───────────────────────────────────────────────
 
-export const qk = {
-  dashboard: (period: string) => ['dashboard', period] as const,
-  holders: ['holders'] as const,
-  institutions: (country: string) => ['institutions', country] as const,
-  timeseries: (period: string) => ['timeseries', period] as const,
+// Anything that changes wealth (sync, disconnect, exclude toggle, alias,
+// new connection). Centralized so we don't forget one of the keys.
+function invalidateWealth(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: qk.dashboard.all })
+  qc.invalidateQueries({ queryKey: qk.timeseries.all })
 }
 
-// Anything that changes wealth (sync, disconnect, exclude toggle, new
-// connection). Centralized so we don't forget one of the keys.
-function invalidateWealth(qc: QueryClient) {
-  // Prefix-match every cached period variant of dashboard / timeseries.
-  qc.invalidateQueries({ queryKey: ['dashboard'] })
-  qc.invalidateQueries({ queryKey: ['timeseries'] })
+// Holders change names/colors that the dashboard renders (bucket tints,
+// avatar initials), so a holder mutation invalidates both. Pair with
+// `invalidateWealth` if you also mutated wealth.
+function invalidateHolders(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: qk.holders })
+  qc.invalidateQueries({ queryKey: qk.dashboard.all })
+}
+
+// ─── optimistic-update helpers ──────────────────────────────────────────
+
+// Snapshot every dashboard variant currently in the cache (one per period
+// the user has visited). Returned so onError can restore them verbatim if
+// the mutation rejects.
+type DashboardSnapshot = Array<
+  [queryKey: readonly unknown[], data: DashboardResponse | undefined]
+>
+
+function snapshotDashboards(qc: QueryClient): DashboardSnapshot {
+  return qc.getQueriesData<DashboardResponse>({ queryKey: qk.dashboard.all })
+}
+
+function restoreDashboards(qc: QueryClient, snap: DashboardSnapshot) {
+  for (const [key, data] of snap) qc.setQueryData(key, data)
+}
+
+// Patch one account in every cached DashboardResponse. Walks all three
+// bucket arrays (holders[].accounts, shared.accounts, unassigned.accounts)
+// so a single change is reflected wherever the account is rendered.
+function patchAccountInDashboards(
+  qc: QueryClient,
+  accountId: string,
+  patch: Partial<DashboardAccount>,
+) {
+  qc.setQueriesData<DashboardResponse>(
+    { queryKey: qk.dashboard.all },
+    (old) => {
+      if (!old) return old
+      const mapAcc = (a: DashboardAccount): DashboardAccount =>
+        a.id === accountId ? { ...a, ...patch } : a
+      return {
+        ...old,
+        holders: old.holders.map((h) => ({
+          ...h,
+          accounts: h.accounts.map(mapAcc),
+        })),
+        shared: { ...old.shared, accounts: old.shared.accounts.map(mapAcc) },
+        unassigned: old.unassigned
+          ? { ...old.unassigned, accounts: old.unassigned.accounts.map(mapAcc) }
+          : null,
+      }
+    },
+  )
+}
+
+// Find the canonical copy of an account in the cache so optimistic updates
+// can read fields they don't have on the mutation input — e.g. the alias
+// rename needs `providerName` to compute the display name when alias is
+// cleared. Returns null if no cached dashboard has it yet.
+function findAccountInDashboards(
+  qc: QueryClient,
+  accountId: string,
+): DashboardAccount | null {
+  const snaps = snapshotDashboards(qc)
+  for (const [, data] of snaps) {
+    if (!data) continue
+    for (const h of data.holders) {
+      for (const a of h.accounts) if (a.id === accountId) return a
+    }
+    for (const a of data.shared.accounts) if (a.id === accountId) return a
+    if (data.unassigned) {
+      for (const a of data.unassigned.accounts) if (a.id === accountId) return a
+    }
+  }
+  return null
 }
 
 // ─── queries ────────────────────────────────────────────────────────────
@@ -76,7 +147,7 @@ export function useInstitutions(country: string) {
 
 export function useDashboard(period: string) {
   return useQuery({
-    queryKey: qk.dashboard(period),
+    queryKey: qk.dashboard.byPeriod(period),
     queryFn: () => fetchJson<DashboardResponse>(`/api/dashboard?period=${period}`),
     // Keep the previous period's data on screen while a new period fetches —
     // otherwise `data` flips to undefined and the whole layout falls back to
@@ -108,19 +179,15 @@ export function useAddHolder() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.holders })
-      // Holders show up in dashboard buckets too, so refresh those.
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
-    },
+    onSuccess: () => invalidateHolders(qc),
   })
 }
 
 // Patch one holder. Today only color is mutable from the UI; expand the
 // input shape if rename/initials land here later. The dashboard cache
-// owns the rendered color, so we invalidate it (alongside qk.holders)
-// to flip the four tinted elements (card bg/border, header avatar,
-// per-account product badge).
+// owns the rendered color, so `invalidateHolders` refreshes both the
+// holder list and the dashboard's tinted elements (card bg/border,
+// header avatar, per-account product badge).
 export function useUpdateHolder() {
   const qc = useQueryClient()
   return useMutation({
@@ -137,16 +204,45 @@ export function useUpdateHolder() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.holders })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    // Optimistic: paint the new color through every cached dashboard
+    // (tints flip immediately) and the holders list. Color is the only
+    // user-facing patch field that affects render — personnummer is only
+    // read by the Handelsbanken scraper, no UI binding.
+    onMutate: async ({ id, color }) => {
+      if (!color) return { dashSnap: [], holdersSnap: undefined }
+      await qc.cancelQueries({ queryKey: qk.dashboard.all })
+      await qc.cancelQueries({ queryKey: qk.holders })
+      const dashSnap = snapshotDashboards(qc)
+      const holdersSnap = qc.getQueryData<HolderListItem[]>(qk.holders)
+      qc.setQueriesData<DashboardResponse>(
+        { queryKey: qk.dashboard.all },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            holders: old.holders.map((h) => (h.id === id ? { ...h, color } : h)),
+          }
+        },
+      )
+      if (holdersSnap) {
+        qc.setQueryData<HolderListItem[]>(
+          qk.holders,
+          holdersSnap.map((h) => (h.id === id ? { ...h, color } : h)),
+        )
+      }
+      return { dashSnap, holdersSnap }
     },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.dashSnap) restoreDashboards(qc, ctx.dashSnap)
+      if (ctx?.holdersSnap) qc.setQueryData(qk.holders, ctx.holdersSnap)
+    },
+    onSettled: () => invalidateHolders(qc),
   })
 }
 
 export function useTimeseries(period: string) {
   return useQuery({
-    queryKey: qk.timeseries(period),
+    queryKey: qk.timeseries.byPeriod(period),
     queryFn: () => fetchJson<TimeseriesResponse>(`/api/timeseries?period=${period}`),
     // Keep the previous period's series on screen while the new one fetches —
     // otherwise the chart drops into its skeleton on every period click.
@@ -223,7 +319,7 @@ export type SyncProgressUpdate =
 
 export function useSyncProgress(connectionId: string | null, enabled: boolean) {
   return useQuery({
-    queryKey: ['sync-progress', connectionId],
+    queryKey: qk.syncProgress(connectionId),
     queryFn: () =>
       fetchJson<SyncProgressUpdate>(
         `/api/sync/progress?id=${encodeURIComponent(connectionId!)}`,
@@ -254,7 +350,19 @@ export function useToggleExclude() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ excludedFromTotal: exclude }),
       }),
-    onSuccess: () => invalidateWealth(qc),
+    // Optimistic: flip the checkbox immediately. Totals are server-computed
+    // (deposit-adjusted change math), so we don't try to recalculate them
+    // here — onSettled refetches and the real totals catch up.
+    onMutate: async ({ id, exclude }) => {
+      await qc.cancelQueries({ queryKey: qk.dashboard.all })
+      const snapshot = snapshotDashboards(qc)
+      patchAccountInDashboards(qc, id, { excludedFromTotal: exclude })
+      return { snapshot }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) restoreDashboards(qc, ctx.snapshot)
+    },
+    onSettled: () => invalidateWealth(qc),
   })
 }
 
@@ -269,7 +377,23 @@ export function useSetAccountAlias() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ alias }),
       }),
-    onSuccess: () => invalidateWealth(qc),
+    // Optimistic: patch both `alias` and the derived `name` so every list
+    // that calls `accountLabel` sees the new label without waiting for
+    // the server roundtrip. When alias is cleared, fall back to the
+    // account's `providerName` so the bank's label is restored.
+    onMutate: async ({ id, alias }) => {
+      await qc.cancelQueries({ queryKey: qk.dashboard.all })
+      const snapshot = snapshotDashboards(qc)
+      const existing = findAccountInDashboards(qc, id)
+      const nextAlias = alias.length === 0 ? null : alias
+      const nextName = nextAlias ?? existing?.providerName ?? existing?.name ?? null
+      patchAccountInDashboards(qc, id, { alias: nextAlias, name: nextName })
+      return { snapshot }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) restoreDashboards(qc, ctx.snapshot)
+    },
+    onSettled: () => invalidateWealth(qc),
   })
 }
 
@@ -292,7 +416,19 @@ export function useBulkToggleExclude() {
         ),
       )
     },
-    onSuccess: () => invalidateWealth(qc),
+    onMutate: async (items) => {
+      if (items.length === 0) return { snapshot: [] }
+      await qc.cancelQueries({ queryKey: qk.dashboard.all })
+      const snapshot = snapshotDashboards(qc)
+      for (const { id, exclude } of items) {
+        patchAccountInDashboards(qc, id, { excludedFromTotal: exclude })
+      }
+      return { snapshot }
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) restoreDashboards(qc, ctx.snapshot)
+    },
+    onSettled: () => invalidateWealth(qc),
   })
 }
 
