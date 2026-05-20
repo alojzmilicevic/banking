@@ -19,7 +19,8 @@ import { Timeline, type TimelineSnapshot } from './components/Timeline'
 import { Topbar } from './components/Topbar'
 import { type ChangeMode } from './components/ChangeModeToggle'
 import { ChangeModeProvider } from './components/change-mode-context'
-import { PERIODS, type Period } from './components/PeriodTabs'
+import { type Period } from './components/PeriodTabs'
+import { parsePeriod } from '@/lib/api/schemas'
 import { Alert } from '@/components/ui/alert'
 import {
   useBulkToggleExclude,
@@ -35,10 +36,6 @@ const EMPTY_SNAP: TimelineSnapshot = {
   shared: null,
   byHolder: {},
   currency: null,
-}
-
-function isPeriod(s: string | null): s is Period {
-  return s !== null && (PERIODS as readonly string[]).includes(s)
 }
 
 export function HomeContent({
@@ -61,7 +58,7 @@ export function HomeContent({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const rawPeriod = searchParams.get('period')
-  const period: Period = isPeriod(rawPeriod) ? rawPeriod : initialPeriod
+  const period: Period = rawPeriod === null ? initialPeriod : parsePeriod(rawPeriod)
   const view: ViewSelection = searchParams.get('view') ?? 'all'
 
   function writeParam(key: string, value: string, defaultValue: string) {

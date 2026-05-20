@@ -13,7 +13,7 @@ import { getDashboard, getEmptyDashboard } from '@/lib/services/dashboard'
 import { getTimeseries, getEmptyTimeseries } from '@/lib/services/timeseries'
 import * as holdersRepo from '@/lib/repositories/holders'
 import * as usersRepo from '@/lib/repositories/users'
-import { PERIODS, type Period } from '@/lib/api/schemas'
+import { parsePeriod } from '@/lib/api/schemas'
 
 // Server component shell. Reads ?error= and the persisted sidebar width
 // (cookie) on the server so the SSR'd HTML already carries the right
@@ -21,11 +21,6 @@ import { PERIODS, type Period } from '@/lib/api/schemas'
 // timeseries, and holders into a per-request QueryClient and hands the
 // dehydrated cache to <HydrationBoundary> so the client hydrates with
 // real data on first paint instead of flashing the skeleton.
-
-function parsePeriod(raw: string | string[] | undefined): Period {
-  if (typeof raw !== 'string') return '1Y'
-  return (PERIODS as readonly string[]).includes(raw) ? (raw as Period) : '1Y'
-}
 
 export default async function Home(props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
